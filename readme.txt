@@ -1,0 +1,39 @@
+
+
+BACKEND
+SETUP
+    Open git bash
+    cd backend
+    pip install -r requirements.txt
+    uvicorn app.main:app --reload
+    Visit:
+
+    API docs: http://127.0.0.1:8000/docs
+
+    Root endpoint: http://127.0.0.1:8000
+----------------------------------------------------------------------------
+FRONTEND
+SETUP
+    open powershell
+    cd frontend
+    npm install
+    npm run dev
+
+    Local:   http://localhost:5173/
+
+
+PHARMACY CONSOLE (http://localhost:5173/)
+    type in one of the several commands listed.
+
+----------------------------------------------------------------------------
+ DATABASE
+    postgresql password: 6789
+
+    User
+    user: pharmacy_user
+    password: motrin
+
+To add temp values:
+    cd backend
+    python -m app.seed
+

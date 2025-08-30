@@ -1,0 +1,18 @@
+:root { --bg: #0b132b; --card: #1c2541; --muted: #3a506b; --text: #e0e1dd; --accent: #5bc0be; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: Inter, system-ui, Arial; background: var(--bg); color: var(--text); }
+.container { max-width: 1100px; margin: 24px auto; padding: 0 12px; }
+.card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.hstack { display: flex; gap: 8px; align-items: center; }
+.vstack { display: flex; gap: 16px; flex-direction: column; }
+.input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--muted); background: #0f1b3d; color: var(--text); }
+.btn { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--muted); background: #0f1b3d; color: var(--text); cursor: pointer; }
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { padding: 10px; border-bottom: 1px solid #2e3b68; }
+.badge { padding: 3px 8px; border-radius: 999px; background: var(--muted); color: #fff; font-size: 12px; }
+.state-QT { background: #ff7675; }
+.state-QV1 { background: #fdcb6e; }
+.state-QP { background: #74b9ff; }
+.state-QV2 { background: #a29bfe; }
+.state-DONE { background: #55efc4; color: #0b132b; }
+footer { opacity: .7; font-size: 12px; }
