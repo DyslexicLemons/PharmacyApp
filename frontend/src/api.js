@@ -2,15 +2,15 @@ const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 
 export async function fetchQueue(state) {
-    const url = state ? `${API}/prescriptions?state=${encodeURIComponent(state)}` : `${API}/prescriptions`;
+    const url = state ? `${API}/refills?state=${encodeURIComponent(state)}` : `${API}/refills`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to fetch prescriptions');
+    if (!res.ok) throw new Error('Failed to fetch refills');
     return res.json();
 }
 
 
 export async function advanceRx(id) {
-    const res = await fetch(`${API}/prescriptions/${id}/advance`, {
+    const res = await fetch(`${API}/refills/${id}/advance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})

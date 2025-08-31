@@ -16,37 +16,56 @@ class RxState(str, enum.Enum):
     QV1 = "QV1" # Verify 1
     QP = "QP" # Prep/Fill
     QV2 = "QV2" # Final Verify
-    DONE = "DONE"
+    DONE = "DONE" # Ready to be sold
+    SOLD = "SOLD"
 
 
 class Patient(Base):
     __tablename__ = "patients"
-
-
     id = Column(Integer, primary_key=True, index=True)
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
     dob = Column(Date)
     address = Column(String)
 
-
-    prescriptions = relationship("Prescription", back_populates="patient")
+    prescriptions = relationship("Prescription", back_populates="patient", lazy="selectin")
+    refills = relationship("Refill", back_populates="patient", lazy="selectin")
 
 
 class Prescription(Base):
     __tablename__ = "prescriptions"
 
-
     id = Column(Integer, primary_key=True, index=True)
     drug_name = Column(String, index=True)
-    quantity = Column(Integer)
-    due_date = Column(Date)
-    priority = Column(Enum(Priority), default=Priority.normal)
-    state = Column(Enum(RxState), default=RxState.QT, index=True)
-    
-    
+    original_quantity = Column(Integer)
+    remaining_quantity = Column(Integer)
+    date_received = Column(Date)
+
     patient_id = Column(Integer, ForeignKey("patients.id"))
     patient = relationship("Patient", back_populates="prescriptions")
+    prescriber_id = Column(Integer, ForeignKey("prescribers.id"))
+    prescriber = relationship("Prescriber", back_populates="prescriptions")
+    refills = relationship("Refill", back_populates="prescription", lazy="selectin")
+
+
+class Refill(Base):
+    __tablename__ = "refills"
+
+    id = Column(Integer, primary_key=True, index=True)
+    prescription_id = Column(Integer, ForeignKey("prescriptions.id"))
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    drug_id = Column(Integer, ForeignKey("drugs.id"))
+    due_date = Column(Date)
+    quantity = Column(Integer)
+    priority = Column(Enum(Priority), default=Priority.normal)
+    state = Column(Enum(RxState), default=RxState.QT, index=True)
+    completed_date = Column(Date)
+
+    # relationships
+    prescription = relationship("Prescription", back_populates="refills", lazy="joined")
+    patient = relationship("Patient", back_populates="refills", lazy="joined")
+    drug = relationship("Drug", back_populates="refills", lazy="joined")
+
 
 
 class Prescriber(Base):
@@ -55,14 +74,15 @@ class Prescriber(Base):
     id = Column(Integer, primary_key=True, index=True)
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
+    prescriptions = relationship("Prescription", back_populates="prescriber", lazy="selectin")
+
 
 class Drug(Base):
     __tablename__ = "drugs"
-
-    
     id = Column(Integer, primary_key=True, index=True)
     drug_name = Column(String, index=True)
     manufacturer = Column(String)
     niosh = Column(Boolean, default=False)
 
+    refills = relationship("Refill", back_populates="drug", lazy="selectin")
 
