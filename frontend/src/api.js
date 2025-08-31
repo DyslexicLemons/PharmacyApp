@@ -50,3 +50,9 @@ export async function getStock() {
     if (!res.ok) throw new Error('Unable to get Stock :(');
     return res.json();
 }
+
+export async function getRefillHist() {
+    const res = await fetch(`${API}/refill_hist`);
+    if (!res.ok) throw new Error('Unable to get refill Hist :(');
+    return res.json();
+}

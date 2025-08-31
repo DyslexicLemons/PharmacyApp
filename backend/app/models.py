@@ -30,6 +30,7 @@ class Patient(Base):
 
     prescriptions = relationship("Prescription", back_populates="patient", lazy="selectin")
     refills = relationship("Refill", back_populates="patient", lazy="selectin")
+    refill_history = relationship("RefillHist", back_populates="patient", lazy="selectin")
 
 
 class Prescription(Base):
@@ -46,6 +47,7 @@ class Prescription(Base):
     prescriber_id = Column(Integer, ForeignKey("prescribers.id"))
     prescriber = relationship("Prescriber", back_populates="prescriptions")
     refills = relationship("Refill", back_populates="prescription", lazy="selectin")
+    refill_history = relationship("RefillHist", back_populates="prescription", lazy="selectin")
 
 
 class Refill(Base):
@@ -65,6 +67,23 @@ class Refill(Base):
     prescription = relationship("Prescription", back_populates="refills", lazy="joined")
     patient = relationship("Patient", back_populates="refills", lazy="joined")
     drug = relationship("Drug", back_populates="refills", lazy="joined")
+
+
+class RefillHist(Base):
+    __tablename__ = "refill_hist"
+
+    id = Column(Integer, primary_key=True, index=True)
+    prescription_id = Column(Integer, ForeignKey("prescriptions.id"))
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    drug_id = Column(Integer, ForeignKey("drugs.id"))
+    quantity = Column(Integer)
+    completed_date = Column(Date)
+    sold_date = Column(Date)
+
+    # relationships
+    prescription = relationship("Prescription", back_populates="refill_history", lazy="joined")
+    patient = relationship("Patient", back_populates="refill_history", lazy="joined")
+    drug = relationship("Drug", back_populates="refill_history", lazy="joined")
 
 
 
@@ -87,6 +106,7 @@ class Drug(Base):
 
     refills = relationship("Refill", back_populates="drug", lazy="selectin")
     stock = relationship("Stock", back_populates="drug", uselist=False)  # 1:1
+    refill_history = relationship("RefillHist", back_populates="drug", lazy="selectin")
 
 
 class Stock(Base):

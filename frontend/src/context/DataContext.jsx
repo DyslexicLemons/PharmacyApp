@@ -1,5 +1,5 @@
 import React, { createContext, useState, useEffect } from "react";
-import { getPatients, getDrugs, getStock } from "@/api";
+import { getPatients, getDrugs, getStock, getRefillHist} from "@/api";
 
 export const DataContext = createContext();
 
@@ -7,12 +7,15 @@ export const DataProvider = ({ children }) => {
   const [patients, setPatients] = useState([]);
   const [drugs, setDrugs] = useState([]);
   const [stock, setStock] = useState([]);
+  const [refillHist, setRefillHist] = useState([]);
   const [loadingPatients, setLoadingPatients] = useState(true);
   const [loadingDrugs, setLoadingDrugs] = useState(true);
   const [loadingStock, setLoadingStock] = useState(true);
+  const [LoadingRefillHist, setLoadingRefillHist] = useState(true);
   const [errorPatients, setErrorPatients] = useState("");
   const [errorDrugs, setErrorDrugs] = useState("");
   const [errorStock, setErrorStock] = useState("");
+  const [errorRefillHist, setErrorRefillHist] = useState("");
 
   useEffect(() => {
     let mounted = true;
@@ -32,6 +35,11 @@ export const DataProvider = ({ children }) => {
       .catch((err) => mounted && setErrorStock(err.message))
       .finally(() => mounted && setLoadingStock(false));
 
+    getRefillHist()
+      .then((data) => mounted && setRefillHist(data))
+      .catch((err) => mounted && setErrorRefillHist(err.message))
+      .finally(() => mounted && setLoadingRefillHist(false));
+
     return () => {
       mounted = false;
     };
@@ -43,12 +51,15 @@ export const DataProvider = ({ children }) => {
         patients,
         drugs,
         stock,
+        refillHist,
         loadingPatients,
         loadingDrugs,
         loadingStock,
+        LoadingRefillHist,
         errorPatients,
         errorDrugs,
-        errorStock
+        errorStock,
+        errorRefillHist
       }}
     >
       {children}

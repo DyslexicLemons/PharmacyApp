@@ -101,6 +101,27 @@ class RefillOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RefillHistBase(BaseModel):
+    prescription_id: int
+    patient_id: int
+    drug_id: int
+    quantity: int
+    completed_date: date
+    sold_date: date
+
+class RefillHistOut(BaseModel):
+    id: int
+    prescription_id: int
+    patient: PatientOut
+    drug: DrugOut
+    quantity: int
+    completed_date: date
+    sold_date: Optional[date] = None
+
+    class Config:
+        from_attributes = True
     
 
 class PatientWithRxs(PatientOut):

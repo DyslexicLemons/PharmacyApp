@@ -9,6 +9,8 @@ import QueueView from "@/components/QueueView";
 import Home from "@/components/Home";
 import CommandBar from "@/components/CommandBar";
 import StockView from "./components/StockView";
+import RefillHistView from "@/components/RefillHistView";
+
 
 const NEXT = { QT: "QV1", QV1: "QP", QP: "QV2", QV2: "DONE" };
 
@@ -48,6 +50,7 @@ export default function App() {
     else if (cmd === "patients") setRoute({ view: "PATIENTS" });
     else if (cmd === "home") setRoute({ view: "HOME" });
     else if (cmd === "stock") setRoute({ view: "STOCK" });
+    else if (cmd === "refill_hist") setRoute({ view: "REFILL_HIST" });
     else alert("Unknown command");
   }
 
@@ -61,6 +64,7 @@ export default function App() {
         {route.view === "DRUGS" && <DrugsView />}
         {route.view === "PATIENTS" && <PatientsView />}
         {route.view === "STOCK" && <StockView />}
+        {route.view === "REFILL_HIST" && <RefillHistView />}
       </div>
       <footer>API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}</footer>
     </div>
