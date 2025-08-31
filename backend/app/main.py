@@ -6,7 +6,7 @@ from datetime import datetime
 from .schemas import RefillOut
 from sqlalchemy.orm import joinedload
 from .database import Base, engine, get_db
-from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill
+from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill, Stock
 from . import schemas
 
 
@@ -110,6 +110,10 @@ def get_patient(pid: int, db: Session = Depends(get_db)):
 @app.get("/drugs", response_model=List[schemas.DrugOut])
 def get_drugs(db: Session = Depends(get_db)):
     return db.query(Drug).all()
+
+@app.get("/stock", response_model=List[schemas.StockOut])
+def get_stock(db: Session = Depends(get_db)):
+    return db.query(Stock).all()
 
 # Healthcheck
 @app.get("/health")

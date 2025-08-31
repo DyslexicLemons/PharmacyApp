@@ -34,15 +34,31 @@ class DrugBase(BaseModel):
     drug_name: str
     manufacturer: str
     niosh: bool = False
+    drug_class: int
 
 class DrugOut(BaseModel):
     id: int
     drug_name: str
     manufacturer: str
     niosh: bool
+    drug_class: int
 
     class Config:
         from_attributes = True
+
+
+class StockBase(BaseModel):
+    drug_id: int
+    quantity: int
+
+class StockOut(BaseModel):
+    drug_id: int
+    quantity: int
+    drug: DrugOut
+
+    class Config:
+        from_attributes = True
+
 
 class PrescriptionBase(BaseModel):
     drug_name: str

@@ -8,6 +8,7 @@ import PatientsView from "@/components/PatientsView";
 import QueueView from "@/components/QueueView";
 import Home from "@/components/Home";
 import CommandBar from "@/components/CommandBar";
+import StockView from "./components/StockView";
 
 const NEXT = { QT: "QV1", QV1: "QP", QP: "QV2", QV2: "DONE" };
 
@@ -46,6 +47,7 @@ export default function App() {
     if (cmd === "drugs") setRoute({ view: "DRUGS" });
     else if (cmd === "patients") setRoute({ view: "PATIENTS" });
     else if (cmd === "home") setRoute({ view: "HOME" });
+    else if (cmd === "stock") setRoute({ view: "STOCK" });
     else alert("Unknown command");
   }
 
@@ -58,6 +60,7 @@ export default function App() {
         {route.view === "PATIENT" && <PatientProfile pid={route.pid} />}
         {route.view === "DRUGS" && <DrugsView />}
         {route.view === "PATIENTS" && <PatientsView />}
+        {route.view === "STOCK" && <StockView />}
       </div>
       <footer>API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}</footer>
     </div>

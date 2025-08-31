@@ -1,6 +1,6 @@
 # backend/app/seed.py
 from .database import SessionLocal
-from .models import Patient, Prescription, Drug, Prescriber, Refill, Priority, RxState, Prescriber
+from .models import Patient, Prescription, Drug, Prescriber, Refill, Priority, RxState, Prescriber, Stock
 from datetime import date
 
 db = SessionLocal()
@@ -22,13 +22,23 @@ db.commit()
 
 
 # Add drugs
-drug1 = Drug(drug_name="Tylenol", manufacturer="Reddy", niosh=False)
-drug2 = Drug(drug_name="Amoxicillin", manufacturer="Pfizer", niosh=False)
-drug3 = Drug(drug_name="Cisplatin", manufacturer="Teva", niosh=True)  # hazardous drug
-drug4 = Drug(drug_name="Metformin", manufacturer="Sun Pharma", niosh=False)
+drug1 = Drug(drug_name="Tylenol", manufacturer="Reddy", niosh=False, drug_class=1)
+drug2 = Drug(drug_name="Amoxicillin", manufacturer="Pfizer", niosh=False, drug_class=2)
+drug3 = Drug(drug_name="Cisplatin", manufacturer="Teva", niosh=True, drug_class=3)  # hazardous drug
+drug4 = Drug(drug_name="Metformin", manufacturer="Sun Pharma", niosh=False, drug_class=5)
 
 db.add_all([drug1, drug2, drug3, drug4])
 db.commit()
+
+# Add Stock
+stock1 = Stock(drug_id=1,quantity=1000)
+stock2 = Stock(drug_id=2,quantity=988)
+stock3 = Stock(drug_id=3,quantity=100)
+stock4 = Stock(drug_id=4,quantity=20)
+
+db.add_all([stock1, stock2, stock3, stock4])
+db.commit()
+
 
 # Add prescriptions
 prescription1 = Prescription(
