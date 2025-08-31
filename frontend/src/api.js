@@ -44,3 +44,9 @@ export async function getDrugs() {
     if (!res.ok) throw new Error('Unable to get Drugs :(');
     return res.json();
 }
+
+export async function getStock() {
+    const res = await fetch(`${API}/stock`);
+    if (!res.ok) throw new Error('Unable to get Stock :(');
+    return res.json();
+}

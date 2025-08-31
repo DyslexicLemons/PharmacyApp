@@ -38,3 +38,4 @@ To add temp values:
     python -m app.create_tables
     python -m app.seed
 
+Steps To add new table

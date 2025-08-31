@@ -83,6 +83,17 @@ class Drug(Base):
     drug_name = Column(String, index=True)
     manufacturer = Column(String)
     niosh = Column(Boolean, default=False)
+    drug_class = Column(Integer)
 
     refills = relationship("Refill", back_populates="drug", lazy="selectin")
+    stock = relationship("Stock", back_populates="drug", uselist=False)  # 1:1
+
+
+class Stock(Base):
+    __tablename__ = "stock"
+
+    drug_id = Column(Integer, ForeignKey("drugs.id"), primary_key=True)  # enforce 1:1 mapping
+    quantity = Column(Integer, default=0)
+
+    drug = relationship("Drug", lazy="joined")  # fetch full drug info
 
