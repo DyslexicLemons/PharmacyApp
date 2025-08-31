@@ -32,3 +32,15 @@ export async function getPatient(id) {
     if (!res.ok) throw new Error('Patient fetch failed');
     return res.json();
 }
+
+export async function getPatients() {
+    const res = await fetch(`${API}/patients`);
+    if (!res.ok) throw new Error('Patient fetch failed');
+    return res.json();
+}
+
+export async function getDrugs() {
+    const res = await fetch(`${API}/drugs`);
+    if (!res.ok) throw new Error('Unable to get Drugs :(');
+    return res.json();
+}

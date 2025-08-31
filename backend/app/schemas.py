@@ -23,7 +23,7 @@ class DrugBase(BaseModel):
 class DrugOut(BaseModel):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PrescriptionBase(BaseModel):
     drug_name: str

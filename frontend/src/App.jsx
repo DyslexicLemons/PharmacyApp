@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { advanceRx, fetchQueue, getPatient, searchPatients } from "./api";
+import { advanceRx, fetchQueue, getDrugs, getPatients, getPatient, searchPatients } from "./api";
 
 const NEXT = { QT: "QV1", QV1: "QP", QP: "QV2", QV2: "DONE" };
 
@@ -20,7 +20,7 @@ function CommandBar({ onSubmit }) {
     >
       <input
         className="input"
-        placeholder="Type command: qt | qp | qv1 | qv2 | all | lastname,firstname"
+        placeholder="Type command:"
         value={cmd}
         onChange={(e) => setCmd(e.target.value)}
       />
@@ -38,6 +38,9 @@ function Home({ onCommand }) {
       <p>Type a command to navigate queues or open a patient profile.</p>
       <ul>
         <li>
+          <code>Home</code> – Go back Home
+        </li>
+        <li>
           <code>qt</code> – Queue Triage
         </li>
         <li>
@@ -53,11 +56,129 @@ function Home({ onCommand }) {
           <code>all</code> – All active prescriptions
         </li>
         <li>
+          <code>drugs</code> – All drugs
+        </li>
+        <li>
+          <code>patients</code> – All patients
+        </li>
+        <li>
           <code>lastname,firstname</code> – Open patient profile (e.g.,{" "}
           <code>smith,john</code>)
         </li>
       </ul>
       <CommandBar onSubmit={onCommand} />
+    </div>
+  );
+}
+
+function DrugsView() {
+  const [drugs, setDrugs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    getDrugs()
+      .then((data) => {
+        if (mounted) {
+          setDrugs(data);
+          setError("");
+        }
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <div className="vstack">
+      <h2>Drug Catalog</h2>
+      {loading ? (
+        <p>Loading…</p>
+      ) : error ? (
+        <p style={{ color: "#ff7675" }}>{error}</p>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Manufacturer</th>
+              <th>NIOSH</th>
+            </tr>
+          </thead>
+          <tbody>
+            {drugs.map((d) => (
+              <tr key={d.id}>
+                <td>{d.id}</td>
+                <td>{d.drug_name}</td>
+                <td>{d.manufacturer}</td>
+                <td>{d.niosh ? "✔️" : "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function PatientsView() {
+  const [patients, setPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    getPatients()
+      .then((data) => {
+        if (mounted) {
+          setPatients(data);
+          setError("");
+        }
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => mounted && setLoading(false));
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <div className="vstack">
+      <h2>Patients</h2>
+      {loading ? (
+        <p>Loading…</p>
+      ) : error ? (
+        <p style={{ color: "#ff7675" }}>{error}</p>
+      ) : (
+        <table className="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>LastName</th>
+              <th>FirstName</th>
+              <th>Date of Birth</th>
+              <th>address</th>
+            </tr>
+          </thead>
+          <tbody>
+            {patients.map((p) => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td>{p.last_name}</td>
+                <td>{p.first_name}</td>
+                <td>{p.dob}</td>
+                <td>{p.address}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -239,6 +360,18 @@ export default function App() {
         .catch((e) => alert(e.message));
       return;
     }
+    if (cmd === "drugs") {
+      setRoute({ view: "DRUGS" });
+      return;
+    }
+    if (cmd === "patients") {
+      setRoute({ view: "PATIENTS" });
+      return;
+    }
+    if (cmd === "home") {
+      setRoute({ view: "HOME" });
+      return;
+    }
     alert("Unknown command");
   }
 
@@ -249,6 +382,8 @@ export default function App() {
         {route.view === "HOME" && <Home onCommand={handleCommand} />}
         {route.view === "QUEUE" && <QueueView stateFilter={route.state} />}
         {route.view === "PATIENT" && <PatientProfile pid={route.pid} />}
+        {route.view === "DRUGS" && <DrugsView />}
+        {route.view === "PATIENTS" && <PatientsView />}
       </div>
       <footer>
         API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}
