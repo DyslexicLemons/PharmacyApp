@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Date, Enum, ForeignKey
 from sqlalchemy.orm import relationship
 from .database import Base
 import enum
@@ -47,3 +47,22 @@ class Prescription(Base):
     
     patient_id = Column(Integer, ForeignKey("patients.id"))
     patient = relationship("Patient", back_populates="prescriptions")
+
+
+class Prescriber(Base):
+    __tablename__ = "prescribers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    first_name = Column(String, index=True)
+    last_name = Column(String, index=True)
+
+class Drug(Base):
+    __tablename__ = "drugs"
+
+    
+    id = Column(Integer, primary_key=True, index=True)
+    drug_name = Column(String, index=True)
+    manufacturer = Column(String)
+    niosh = Column(Boolean, default=False)
+
+

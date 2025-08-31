@@ -6,7 +6,7 @@ from datetime import datetime
 
 
 from .database import Base, engine, get_db
-from .models import Patient, Prescription, RxState, Priority
+from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority
 from . import schemas
 
 
@@ -91,6 +91,12 @@ def search_patient(name: str, db: Session = Depends(get_db)):
         q = q.filter(Patient.first_name.ilike(f"{first}%"))
     return q.order_by(Patient.last_name.asc(), Patient.first_name.asc()).all()
 
+# ----- Drugs -----
+
+
+@app.get("/drugs", response_model=List[schemas.DrugOut])
+def get_drugs(db: Session = Depends(get_db)):
+    return db.query(Drug).all()
 
 # Healthcheck
 @app.get("/health")
