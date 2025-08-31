@@ -15,6 +15,15 @@ class PatientOut(PatientBase):
     class Config:
         from_attributes = True
 
+class DrugBase(BaseModel):
+    drug_name: str
+    manufacturer: str
+    niosh: bool = False
+
+class DrugOut(BaseModel):
+    id: int
+    class Config:
+        orm_mode = True
 
 class PrescriptionBase(BaseModel):
     drug_name: str

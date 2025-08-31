@@ -1,6 +1,6 @@
 # backend/app/seed.py
 from .database import SessionLocal, engine
-from .models import Patient, Prescription
+from .models import Patient, Prescription, Drug, Prescriber
 from datetime import date
 
 db = SessionLocal()
@@ -20,6 +20,16 @@ prescription1 = Prescription(
     state="QT",
     patient_id=patient1.id
 )
+
+# Add Drugs
+
+drug1 = Drug(
+    drug_name = "Tylenol",
+    manufacturer = "Reddy",
+    niosh = False
+)
+
+db.add(drug1)
 db.add(prescription1)
 db.commit()
 db.close()
