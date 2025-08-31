@@ -67,14 +67,6 @@ def advance_prescription(rx_id: int, payload: schemas.AdvanceRequest, db: Sessio
 def get_patients(db: Session = Depends(get_db)):
     return db.query(Patient).all()
 
-@app.get("/patients/{pid}", response_model=schemas.PatientWithRxs)
-def get_patient(pid: int, db: Session = Depends(get_db)):
-    p = db.query(Patient).get(pid)
-    if not p:
-        raise HTTPException(status_code=404, detail="Patient not found")
-    return p
-
-
 @app.get("/patients/search", response_model=List[schemas.PatientOut])
 def search_patient(name: str, db: Session = Depends(get_db)):
     """
@@ -90,6 +82,16 @@ def search_patient(name: str, db: Session = Depends(get_db)):
     if first:
         q = q.filter(Patient.first_name.ilike(f"{first}%"))
     return q.order_by(Patient.last_name.asc(), Patient.first_name.asc()).all()
+
+@app.get("/patients/{pid}", response_model=schemas.PatientWithRxs)
+def get_patient(pid: int, db: Session = Depends(get_db)):
+    p = db.query(Patient).get(pid)
+    if not p:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    return p
+
+
+
 
 # ----- Drugs -----
 
