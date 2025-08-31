@@ -1,6 +1,6 @@
 # backend/app/seed.py
 from .database import SessionLocal
-from .models import Patient, Prescription, Drug, Prescriber, Refill, Priority, RxState, Prescriber, Stock
+from .models import Patient, Prescription, Drug, Prescriber, Refill, Priority, RxState, Prescriber, Stock, RefillHist
 from datetime import date
 
 db = SessionLocal()
@@ -67,6 +67,36 @@ prescription3 = Prescription(
 )
 
 db.add_all([prescription1, prescription2, prescription3])
+db.commit()
+
+refill_hist1 = RefillHist(
+    prescription_id=prescription1.id,
+    patient_id=patient1.id,
+    drug_id=drug1.id,
+    quantity=10,
+    completed_date=date(2025, 9, 1),
+    sold_date=date(2025, 9, 2)
+)
+
+refill_hist2 = RefillHist(
+    prescription_id=prescription2.id,
+    patient_id=patient2.id,
+    drug_id=drug2.id,
+    quantity=10,
+    completed_date=date(2025, 9, 15),
+    sold_date=date(2025, 9, 16)
+)
+
+refill_hist3 = RefillHist(
+    prescription_id=prescription3.id,
+    patient_id=patient3.id,
+    drug_id=drug4.id,
+    quantity=30,
+    completed_date=date(2025, 9, 30),
+    sold_date=date(2025, 10, 1)
+)
+
+db.add_all([refill_hist1, refill_hist2, refill_hist3])
 db.commit()
 
 # Add refills

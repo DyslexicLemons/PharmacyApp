@@ -6,7 +6,7 @@ from datetime import datetime
 from .schemas import RefillOut
 from sqlalchemy.orm import joinedload
 from .database import Base, engine, get_db
-from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill, Stock
+from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill, Stock, RefillHist
 from . import schemas
 
 
@@ -44,6 +44,8 @@ def read_root():
 
 # ----- Refills -----
 
+
+
 @app.get("/refills", response_model=List[RefillOut])
 def get_refills(state: Optional[RxState] = None, db: Session = Depends(get_db)):
     query = db.query(Refill)
@@ -72,6 +74,18 @@ def advance_refill(rx_id: int, payload: schemas.AdvanceRequest, db: Session = De
     db.commit()
     db.refresh(rx)
     return rx
+
+@app.get("/refill_hist", response_model=List[schemas.RefillHistOut])
+def get_refill_hist(db: Session = Depends(get_db)):
+    query = db.query(RefillHist)
+    refill_hists = query.all()
+
+    # Ensure relationships are loaded (optional with selectinload)
+    for r in refill_hists:
+        _ = r.patient
+        _ = r.drug
+
+    return refill_hists
 
 
 # ----- Patients -----
