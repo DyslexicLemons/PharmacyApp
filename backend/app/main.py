@@ -3,10 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-
-
+from .schemas import RefillOut
+from sqlalchemy.orm import joinedload
 from .database import Base, engine, get_db
-from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority
+from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill
 from . import schemas
 
 
@@ -38,18 +38,31 @@ TRANSITIONS = {
 def read_root():
     return {"message": "Pharmacy API running. Visit /docs for Swagger UI."}
 
+
 # ----- Prescriptions -----
-@app.get("/prescriptions")
-def get_prescriptions(state: Optional[RxState] = None, db: Session = Depends(get_db)):
-    query = db.query(Prescription)
+
+
+# ----- Refills -----
+
+@app.get("/refills", response_model=List[RefillOut])
+def get_refills(state: Optional[RxState] = None, db: Session = Depends(get_db)):
+    query = db.query(Refill)
     if state:
-        query = query.filter(Prescription.state == state)
-    return query.all()
+        query = query.filter(Refill.state == state)
+    refills = query.all()
+
+    # Ensure relationships are loaded (optional with selectinload)
+    for r in refills:
+        _ = r.patient
+        _ = r.drug
+        _ = r.prescription.prescriber
+
+    return refills
 
 
-@app.post("/prescriptions/{rx_id}/advance", response_model=schemas.PrescriptionOut)
-def advance_prescription(rx_id: int, payload: schemas.AdvanceRequest, db: Session = Depends(get_db)):
-    rx = db.query(Prescription).get(rx_id)
+@app.post("/refills/{rx_id}/advance", response_model=schemas.RefillOut)
+def advance_refill(rx_id: int, payload: schemas.AdvanceRequest, db: Session = Depends(get_db)):
+    rx = db.query(Refill).get(rx_id)
     if not rx:
         raise HTTPException(status_code=404, detail="Prescription not found")
     if rx.state not in TRANSITIONS:
@@ -63,7 +76,7 @@ def advance_prescription(rx_id: int, payload: schemas.AdvanceRequest, db: Sessio
 
 # ----- Patients -----
 
-@app.get("/patients")
+@app.get("/patients", response_model=List[schemas.PatientOut])
 def get_patients(db: Session = Depends(get_db)):
     return db.query(Patient).all()
 
@@ -89,8 +102,6 @@ def get_patient(pid: int, db: Session = Depends(get_db)):
     if not p:
         raise HTTPException(status_code=404, detail="Patient not found")
     return p
-
-
 
 
 # ----- Drugs -----

@@ -35,5 +35,6 @@ PHARMACY CONSOLE (http://localhost:5173/)
 
 To add temp values:
     cd backend
+    python -m app.create_tables
     python -m app.seed
 
