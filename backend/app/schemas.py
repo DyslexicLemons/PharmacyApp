@@ -33,6 +33,7 @@ class PrescriberOut(PrescriberBase):
 class DrugBase(BaseModel):
     drug_name: str
     manufacturer: str
+    cost: float
     niosh: bool = False
     drug_class: int
 
@@ -40,6 +41,7 @@ class DrugOut(BaseModel):
     id: int
     drug_name: str
     manufacturer: str
+    cost: float
     niosh: bool
     drug_class: int
 

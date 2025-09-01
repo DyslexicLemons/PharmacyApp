@@ -123,25 +123,30 @@ def get_latest_refill_for_prescription(
         .first()
     )
 
-    # If no active refill, fall back to historical refills
-    if not refill:
-        refill = (
-            db.query(RefillHist)
-            .filter(RefillHist.prescription_id == prescription_id)
-            .order_by(desc(RefillHist.completed_date))
-            .first()
-        )
+    # Also check historical refills
+    refill_latest = (
+        db.query(RefillHist)
+        .filter(RefillHist.prescription_id == prescription_id)
+        .order_by(desc(RefillHist.completed_date))
+        .first()
+    )
 
-    if not refill:
+    # If nothing exists at all
+    if not refill and not refill_latest:
         return None
 
-    # Safely get attributes or use defaults
-    quantity = getattr(refill, "quantity", 0) or 0
-    days_supply = getattr(refill, "days_supply", 0) or 0
-    sold_date = getattr(refill, "sold_date", None)
-    completed_date = getattr(refill, "completed_date",  None)
-    state = getattr(refill, "state", None)  # None if historical refill
+    # Prefer refill for quantity/days/state if it exists
+    base_refill = refill or refill_latest
 
+    quantity = getattr(base_refill, "quantity", 0) or 0
+    days_supply = getattr(base_refill, "days_supply", 0) or 0
+    state = getattr(refill, "state", None) if refill else None
+
+    # Override dates with refill_latest if available
+    sold_date = getattr(refill_latest, "sold_date", None) if refill_latest else getattr(refill, "sold_date", None)
+    completed_date = getattr(refill_latest, "completed_date", None) if refill_latest else getattr(refill, "completed_date", None)
+
+    # Only compute next pickup if active refill (not historical)
     next_pickup = sold_date + timedelta(days=days_supply) if sold_date and state is None else None
 
     return schemas.LatestRefillOut(

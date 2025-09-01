@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, Enum, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, Date, Enum, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from .database import Base
 import enum
@@ -105,6 +105,7 @@ class Drug(Base):
     id = Column(Integer, primary_key=True, index=True)
     drug_name = Column(String, index=True)
     manufacturer = Column(String)
+    cost = Column(Float)
     niosh = Column(Boolean, default=False)
     drug_class = Column(Integer)
 
