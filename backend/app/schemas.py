@@ -19,14 +19,19 @@ class PatientOut(PatientBase):
 
 
 class PrescriberBase(BaseModel):
+    npi: int
     first_name: str
     last_name: str
-
+    address: str
+    phone_number: str
 
 class PrescriberOut(PrescriberBase):
     id: int
+    npi: int
     first_name: str
     last_name: str
+    address: str
+    phone_number: str
     class Config:
         from_attributes = True
 

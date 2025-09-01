@@ -33,15 +33,17 @@ db.add_all(patients)
 db.commit()
 
 # Add prescribers
-prescriber1 = Prescriber(first_name="Emily", last_name="Brown")
-prescriber2 = Prescriber(first_name="James", last_name="Wilson")
-prescriber3 = Prescriber(first_name="Laura", last_name="Johnson")
-prescriber4 = Prescriber(first_name="Michael", last_name="Lee")
-prescriber5 = Prescriber(first_name="Sarah", last_name="Davis")
-prescriber6 = Prescriber(first_name="Daniel", last_name="Miller")
-prescriber7 = Prescriber(first_name="Sophia", last_name="Taylor")
+prescribers = [
+    Prescriber(npi=123456789, first_name="Emily", last_name="Brown", phone_number="(555) 123-4567", address="123 Main St"),
+    Prescriber(npi=987654321, first_name="James", last_name="Wilson", phone_number="(555) 987-6543", address="456 Oak Ave"),
+    Prescriber(npi=555444333, first_name="Laura", last_name="Johnson", phone_number="(555) 555-4443", address="789 Pine Rd"),
+    Prescriber(npi=111222333, first_name="Michael", last_name="Lee", phone_number="(555) 111-2223", address="345 Birch Ln"),
+    Prescriber(npi=666777888, first_name="Sarah", last_name="Davis", phone_number="(555) 666-7778", address="456 Elm St"),
+    Prescriber(npi=333444555, first_name="Daniel", last_name="Miller", phone_number="(555) 333-4445", address="789 Oak Ave"),
+    Prescriber(npi=888999000, first_name="Sophia", last_name="Taylor", phone_number="(555) 888-9990", address="123 Maple Rd")
+]
 
-db.add_all([prescriber1, prescriber2, prescriber3, prescriber4, prescriber5, prescriber6, prescriber7])
+db.add_all(prescribers)
 db.commit()
 
 
@@ -102,16 +104,16 @@ db.commit()
 
 
 # Add prescriptions
-prescription1 = Prescription(drug_id=3, original_quantity=30, remaining_quantity=20, patient_id=1, date_received=date(2025, 9, 30), prescriber_id=prescriber1.id)
-prescription2 = Prescription(drug_id=1, original_quantity=20, remaining_quantity=10, patient_id=2, date_received=date(2025, 9, 28), prescriber_id=prescriber2.id)
-prescription3 = Prescription(drug_id=4, original_quantity=90, remaining_quantity=90, patient_id=3, date_received=date(2025, 9, 29), prescriber_id=prescriber1.id)
-prescription4 = Prescription(drug_id=4, original_quantity=60, remaining_quantity=60, patient_id=4, date_received=date(2025, 8, 5), prescriber_id=prescriber1.id)
-prescription5 = Prescription(drug_id=2, original_quantity=15, remaining_quantity=15, patient_id=1, date_received=date(2025, 8, 10), prescriber_id=prescriber3.id)
-prescription6 = Prescription(drug_id=5, original_quantity=50, remaining_quantity=50, patient_id=2, date_received=date(2025, 9, 2), prescriber_id=prescriber4.id)
-prescription7 = Prescription(drug_id=6, original_quantity=25, remaining_quantity=25, patient_id=3, date_received=date(2025, 9, 5), prescriber_id=prescriber5.id)
-prescription8 = Prescription(drug_id=7, original_quantity=10, remaining_quantity=10, patient_id=4, date_received=date(2025, 9, 10), prescriber_id=prescriber6.id)
-prescription9 = Prescription(drug_id=8, original_quantity=40, remaining_quantity=40, patient_id=1, date_received=date(2025, 9, 12), prescriber_id=prescriber7.id)
-prescription10 = Prescription(drug_id=9, original_quantity=30, remaining_quantity=30, patient_id=2, date_received=date(2025, 9, 15), prescriber_id=prescriber4.id)
+prescription1 = Prescription(drug_id=3, original_quantity=30, remaining_quantity=20, patient_id=1, date_received=date(2025, 9, 30), prescriber_id=1)
+prescription2 = Prescription(drug_id=1, original_quantity=20, remaining_quantity=10, patient_id=2, date_received=date(2025, 9, 28), prescriber_id=2)
+prescription3 = Prescription(drug_id=4, original_quantity=90, remaining_quantity=90, patient_id=3, date_received=date(2025, 9, 29), prescriber_id=1)
+prescription4 = Prescription(drug_id=4, original_quantity=60, remaining_quantity=60, patient_id=4, date_received=date(2025, 8, 5), prescriber_id=1)
+prescription5 = Prescription(drug_id=2, original_quantity=15, remaining_quantity=15, patient_id=1, date_received=date(2025, 8, 10), prescriber_id=3)
+prescription6 = Prescription(drug_id=5, original_quantity=50, remaining_quantity=50, patient_id=2, date_received=date(2025, 9, 2), prescriber_id=4)
+prescription7 = Prescription(drug_id=6, original_quantity=25, remaining_quantity=25, patient_id=3, date_received=date(2025, 9, 5), prescriber_id=5)
+prescription8 = Prescription(drug_id=7, original_quantity=10, remaining_quantity=10, patient_id=4, date_received=date(2025, 9, 10), prescriber_id=6)
+prescription9 = Prescription(drug_id=8, original_quantity=40, remaining_quantity=40, patient_id=1, date_received=date(2025, 9, 12), prescriber_id=7)
+prescription10 =Prescription(drug_id=9, original_quantity=30, remaining_quantity=30, patient_id=2, date_received=date(2025, 9, 15), prescriber_id=4)
 
 db.add_all([prescription1, prescription2, prescription3, prescription4, prescription5, prescription6, prescription7, prescription8, prescription9, prescription10])
 db.commit()

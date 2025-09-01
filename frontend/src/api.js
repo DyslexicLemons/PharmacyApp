@@ -51,6 +51,12 @@ export async function getStock() {
     return res.json();
 }
 
+export async function getPrescribers() {
+    const res = await fetch(`${API}/prescribers`);
+    if (!res.ok) throw new Error('Unable to get Prescribers :(');
+    return res.json();
+}
+
 export async function getRefillHist() {
     const res = await fetch(`${API}/refill_hist`);
     if (!res.ok) throw new Error('Unable to get refill Hist :(');
