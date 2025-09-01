@@ -47,27 +47,28 @@ db.commit()
 
 # Add drugs
 drugs = [
-    Drug(drug_name="Tylenol", manufacturer="Reddy", niosh=False, drug_class=1),
-    Drug(drug_name="Amoxicillin", manufacturer="Pfizer", niosh=False, drug_class=2),
-    Drug(drug_name="Cisplatin", manufacturer="Teva", niosh=True, drug_class=3),
-    Drug(drug_name="Metformin", manufacturer="Sun Pharma", niosh=False, drug_class=5),
-    Drug(drug_name="Ibuprofen", manufacturer="Bayer", niosh=False, drug_class=1),
-    Drug(drug_name="Aspirin", manufacturer="Bayer", niosh=False, drug_class=1),
-    Drug(drug_name="Lisinopril", manufacturer="Merck", niosh=False, drug_class=4),
-    Drug(drug_name="Hydrochlorothiazide", manufacturer="Pfizer", niosh=False, drug_class=4),
-    Drug(drug_name="Warfarin", manufacturer="BMS", niosh=True, drug_class=6),
-    Drug(drug_name="Atorvastatin", manufacturer="Pfizer", niosh=False, drug_class=4),
-    Drug(drug_name="Omeprazole", manufacturer="AstraZeneca", niosh=False, drug_class=4),
-    Drug(drug_name="Prednisone", manufacturer="Teva", niosh=False, drug_class=4),
-    Drug(drug_name="Insulin", manufacturer="Novo Nordisk", niosh=False, drug_class=5),
-    Drug(drug_name="Methotrexate", manufacturer="Teva", niosh=True, drug_class=3),
-    Drug(drug_name="Alprazolam", manufacturer="Pfizer", niosh=False, drug_class=7),
-    Drug(drug_name="Morphine", manufacturer="Purdue", niosh=False, drug_class=6),
-    Drug(drug_name="Cyclophosphamide", manufacturer="Teva", niosh=True, drug_class=3),
-    Drug(drug_name="Ceftriaxone", manufacturer="Roche", niosh=False, drug_class=2),
-    Drug(drug_name="Azithromycin", manufacturer="Pfizer", niosh=False, drug_class=2),
-    Drug(drug_name="Furosemide", manufacturer="Novartis", niosh=False, drug_class=4),
+    Drug(drug_name="Tylenol", manufacturer="Reddy", cost=0.20, niosh=False, drug_class=1),
+    Drug(drug_name="Amoxicillin", manufacturer="Pfizer", cost=0.50, niosh=False, drug_class=2),
+    Drug(drug_name="Cisplatin", manufacturer="Teva", cost=25.00, niosh=True, drug_class=3),  # chemo
+    Drug(drug_name="Metformin", manufacturer="Sun Pharma", cost=0.15, niosh=False, drug_class=5),
+    Drug(drug_name="Ibuprofen", manufacturer="Bayer", cost=0.10, niosh=False, drug_class=1),
+    Drug(drug_name="Aspirin", manufacturer="Bayer", cost=0.05, niosh=False, drug_class=1),
+    Drug(drug_name="Lisinopril", manufacturer="Merck", cost=0.12, niosh=False, drug_class=4),
+    Drug(drug_name="Hydrochlorothiazide", manufacturer="Pfizer", cost=0.08, niosh=False, drug_class=4),
+    Drug(drug_name="Warfarin", manufacturer="BMS", cost=0.25, niosh=True, drug_class=6),
+    Drug(drug_name="Atorvastatin", manufacturer="Pfizer", cost=0.30, niosh=False, drug_class=4),
+    Drug(drug_name="Omeprazole", manufacturer="AstraZeneca", cost=0.40, niosh=False, drug_class=4),
+    Drug(drug_name="Prednisone", manufacturer="Teva", cost=0.10, niosh=False, drug_class=4),
+    Drug(drug_name="Insulin", manufacturer="Novo Nordisk", cost=8.00, niosh=False, drug_class=5),  # expensive biologic
+    Drug(drug_name="Methotrexate", manufacturer="Teva", cost=5.00, niosh=True, drug_class=3),
+    Drug(drug_name="Alprazolam", manufacturer="Pfizer", cost=0.50, niosh=False, drug_class=7),
+    Drug(drug_name="Morphine", manufacturer="Purdue", cost=1.50, niosh=False, drug_class=6),
+    Drug(drug_name="Cyclophosphamide", manufacturer="Teva", cost=18.00, niosh=True, drug_class=3),  # chemo
+    Drug(drug_name="Ceftriaxone", manufacturer="Roche", cost=2.00, niosh=False, drug_class=2),
+    Drug(drug_name="Azithromycin", manufacturer="Pfizer", cost=1.00, niosh=False, drug_class=2),
+    Drug(drug_name="Furosemide", manufacturer="Novartis", cost=0.20, niosh=False, drug_class=4),
 ]
+
 
 db.add_all(drugs)
 db.commit()

@@ -16,6 +16,7 @@ export default function DrugsView() {
             <th>ID</th>
             <th>Name</th>
             <th>Manufacturer</th>
+            <th>Cost per Pill</th>
             <th>NIOSH</th>
           </tr>
         </thead>
@@ -25,6 +26,7 @@ export default function DrugsView() {
               <td>{d.id}</td>
               <td>{d.drug_name}</td>
               <td>{d.manufacturer}</td>
+              <td>{"$" + d.cost}</td>
               <td>{d.niosh ? "✔️" : "—"}</td>
             </tr>
           ))}
