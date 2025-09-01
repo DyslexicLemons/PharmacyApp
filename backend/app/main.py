@@ -192,6 +192,12 @@ def get_drugs(db: Session = Depends(get_db)):
 def get_stock(db: Session = Depends(get_db)):
     return db.query(Stock).all()
 
+# ----- Prescribers -----
+
+@app.get("/prescribers", response_model=List[schemas.PrescriberOut])
+def get_prescribers(db: Session = Depends(get_db)):
+    return db.query(Prescriber).all()
+
 # Healthcheck
 @app.get("/health")
 def health():
