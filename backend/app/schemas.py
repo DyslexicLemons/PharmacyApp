@@ -1,3 +1,4 @@
+from decimal import Decimal
 from pydantic import BaseModel
 from datetime import date
 from typing import List, Optional
@@ -38,7 +39,7 @@ class PrescriberOut(PrescriberBase):
 class DrugBase(BaseModel):
     drug_name: str
     manufacturer: str
-    cost: float
+    cost: Decimal
     niosh: bool = False
     drug_class: int
 
@@ -46,7 +47,7 @@ class DrugOut(BaseModel):
     id: int
     drug_name: str
     manufacturer: str
-    cost: float
+    cost: Decimal
     niosh: bool
     drug_class: int
 
@@ -71,6 +72,7 @@ class LatestRefillOut(BaseModel):
     quantity: int
     days_supply: int
     sold_date: Optional[date] = None
+    total_cost: Decimal
     completed_date: Optional[date] = None
     next_pickup: Optional[date] = None
     state: Optional[str] = None
@@ -115,6 +117,7 @@ class RefillBase(BaseModel):
     due_date: date
     quantity: int
     days_supply: int
+    total_cost: Decimal
     priority: str
     state: str
     completed_date: date
@@ -128,6 +131,7 @@ class RefillOut(BaseModel):
     due_date: date
     quantity: int
     days_supply: int
+    total_cost: Decimal
     priority: str
     state: str
     completed_date: Optional[date] = None
@@ -142,6 +146,7 @@ class RefillHistBase(BaseModel):
     drug_id: int
     quantity: int
     days_supply: int
+    total_cost: Decimal
     completed_date: date
     sold_date: date
 
@@ -152,6 +157,7 @@ class RefillHistOut(BaseModel):
     drug: DrugOut
     quantity: int
     days_supply: int
+    total_cost: Decimal
     completed_date: date
     sold_date: Optional[date] = None
 
