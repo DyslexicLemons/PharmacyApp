@@ -26,7 +26,8 @@ export default function DrugsView() {
               <td>{d.id}</td>
               <td>{d.drug_name}</td>
               <td>{d.manufacturer}</td>
-              <td>{"$" + d.cost}</td>
+              {/* ✅ ensure always two decimals */}
+              <td>{"$" + Number(d.cost).toFixed(2)}</td>
               <td>{d.niosh ? "✔️" : "—"}</td>
             </tr>
           ))}

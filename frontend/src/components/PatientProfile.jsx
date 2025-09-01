@@ -38,10 +38,11 @@ export default function PatientProfile({ pid }) {
             <th>ID</th>
             <th>Drug</th>
             <th>Qty Remaining</th>
-            <th>Date Received</th>
+            <th>Received</th>
             <th>Last Qty Dispensed</th>
             <th>Days Supply</th>
             <th>Last Sold</th>
+            <th>Last cost</th>
             <th>Last filled</th>
             <th>Next Pickup</th>
           </tr>
@@ -65,6 +66,11 @@ export default function PatientProfile({ pid }) {
                     : "—"}
                 </td>
                 <td>
+                  {r.latest_refill.total_cost 
+                    ? "$" + Number(r.total_cost).toFixed(2) 
+                    : "—"}
+                </td>
+                <td>
                   {r.latest_refill.completed_date 
                     ? new Date(r.latest_refill.completed_date).toLocaleDateString() 
                     : "—"}
@@ -72,8 +78,8 @@ export default function PatientProfile({ pid }) {
                 <td>
                   {r.latest_refill.state 
                     ? <Badge state={r.latest_refill.state} />
-                    : r.latest_refill.next_fill_date
-                      ? new Date(r.latest_refill.next_fill_date).toLocaleDateString()
+                    : r.latest_refill.next_pickup
+                      ? new Date(r.latest_refill.next_pickup).toLocaleDateString()
                       : "—"}
                 </td>
                 </>

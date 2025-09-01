@@ -2,6 +2,7 @@
 from .database import SessionLocal
 from .models import Patient, Prescription, Drug, Prescriber, Refill, Priority, RxState, Prescriber, Stock, RefillHist
 from datetime import date
+from decimal import Decimal
 
 db = SessionLocal()
 
@@ -49,26 +50,26 @@ db.commit()
 
 # Add drugs
 drugs = [
-    Drug(drug_name="Tylenol", manufacturer="Reddy", cost=0.20, niosh=False, drug_class=1),
-    Drug(drug_name="Amoxicillin", manufacturer="Pfizer", cost=0.50, niosh=False, drug_class=2),
-    Drug(drug_name="Cisplatin", manufacturer="Teva", cost=25.00, niosh=True, drug_class=3),  # chemo
-    Drug(drug_name="Metformin", manufacturer="Sun Pharma", cost=0.15, niosh=False, drug_class=5),
-    Drug(drug_name="Ibuprofen", manufacturer="Bayer", cost=0.10, niosh=False, drug_class=1),
-    Drug(drug_name="Aspirin", manufacturer="Bayer", cost=0.05, niosh=False, drug_class=1),
-    Drug(drug_name="Lisinopril", manufacturer="Merck", cost=0.12, niosh=False, drug_class=4),
-    Drug(drug_name="Hydrochlorothiazide", manufacturer="Pfizer", cost=0.08, niosh=False, drug_class=4),
-    Drug(drug_name="Warfarin", manufacturer="BMS", cost=0.25, niosh=True, drug_class=6),
-    Drug(drug_name="Atorvastatin", manufacturer="Pfizer", cost=0.30, niosh=False, drug_class=4),
-    Drug(drug_name="Omeprazole", manufacturer="AstraZeneca", cost=0.40, niosh=False, drug_class=4),
-    Drug(drug_name="Prednisone", manufacturer="Teva", cost=0.10, niosh=False, drug_class=4),
-    Drug(drug_name="Insulin", manufacturer="Novo Nordisk", cost=8.00, niosh=False, drug_class=5),  # expensive biologic
-    Drug(drug_name="Methotrexate", manufacturer="Teva", cost=5.00, niosh=True, drug_class=3),
-    Drug(drug_name="Alprazolam", manufacturer="Pfizer", cost=0.50, niosh=False, drug_class=7),
-    Drug(drug_name="Morphine", manufacturer="Purdue", cost=1.50, niosh=False, drug_class=6),
-    Drug(drug_name="Cyclophosphamide", manufacturer="Teva", cost=18.00, niosh=True, drug_class=3),  # chemo
-    Drug(drug_name="Ceftriaxone", manufacturer="Roche", cost=2.00, niosh=False, drug_class=2),
-    Drug(drug_name="Azithromycin", manufacturer="Pfizer", cost=1.00, niosh=False, drug_class=2),
-    Drug(drug_name="Furosemide", manufacturer="Novartis", cost=0.20, niosh=False, drug_class=4),
+    Drug(drug_name="Tylenol", manufacturer="Reddy", cost=Decimal("0.20"), niosh=False, drug_class=1),
+    Drug(drug_name="Amoxicillin", manufacturer="Pfizer", cost=Decimal("0.50"), niosh=False, drug_class=2),
+    Drug(drug_name="Cisplatin", manufacturer="Teva", cost=Decimal("25.00"), niosh=True, drug_class=3),  # chemo
+    Drug(drug_name="Metformin", manufacturer="Sun Pharma", cost=Decimal("0.15"), niosh=False, drug_class=5),
+    Drug(drug_name="Ibuprofen", manufacturer="Bayer", cost=Decimal("0.10"), niosh=False, drug_class=1),
+    Drug(drug_name="Aspirin", manufacturer="Bayer", cost=Decimal("0.05"), niosh=False, drug_class=1),
+    Drug(drug_name="Lisinopril", manufacturer="Merck", cost=Decimal("0.12"), niosh=False, drug_class=4),
+    Drug(drug_name="Hydrochlorothiazide", manufacturer="Pfizer", cost=Decimal("0.08"), niosh=False, drug_class=4),
+    Drug(drug_name="Warfarin", manufacturer="BMS", cost=Decimal("0.25"), niosh=True, drug_class=6),
+    Drug(drug_name="Atorvastatin", manufacturer="Pfizer", cost=Decimal("0.30"), niosh=False, drug_class=4),
+    Drug(drug_name="Omeprazole", manufacturer="AstraZeneca", cost=Decimal("0.40"), niosh=False, drug_class=4),
+    Drug(drug_name="Prednisone", manufacturer="Teva", cost=Decimal("0.10"), niosh=False, drug_class=4),
+    Drug(drug_name="Insulin", manufacturer="Novo Nordisk", cost=Decimal("8.00"), niosh=False, drug_class=5),  # expensive biologic
+    Drug(drug_name="Methotrexate", manufacturer="Teva", cost=Decimal("5.00"), niosh=True, drug_class=3),
+    Drug(drug_name="Alprazolam", manufacturer="Pfizer", cost=Decimal("0.50"), niosh=False, drug_class=7),
+    Drug(drug_name="Morphine", manufacturer="Purdue", cost=Decimal("1.50"), niosh=False, drug_class=6),
+    Drug(drug_name="Cyclophosphamide", manufacturer="Teva", cost=Decimal("18.00"), niosh=True, drug_class=3),  # chemo
+    Drug(drug_name="Ceftriaxone", manufacturer="Roche", cost=Decimal("2.00"), niosh=False, drug_class=2),
+    Drug(drug_name="Azithromycin", manufacturer="Pfizer", cost=Decimal("1.00"), niosh=False, drug_class=2),
+    Drug(drug_name="Furosemide", manufacturer="Novartis", cost=Decimal("0.20"), niosh=False, drug_class=4),
 ]
 
 
@@ -104,33 +105,95 @@ db.commit()
 
 
 # Add prescriptions
-prescription1 = Prescription(drug_id=3, original_quantity=30, remaining_quantity=20, patient_id=1, date_received=date(2025, 9, 30), prescriber_id=1)
-prescription2 = Prescription(drug_id=1, original_quantity=20, remaining_quantity=10, patient_id=2, date_received=date(2025, 9, 28), prescriber_id=2)
-prescription3 = Prescription(drug_id=4, original_quantity=90, remaining_quantity=90, patient_id=3, date_received=date(2025, 9, 29), prescriber_id=1)
-prescription4 = Prescription(drug_id=4, original_quantity=60, remaining_quantity=60, patient_id=4, date_received=date(2025, 8, 5), prescriber_id=1)
-prescription5 = Prescription(drug_id=2, original_quantity=15, remaining_quantity=15, patient_id=1, date_received=date(2025, 8, 10), prescriber_id=3)
-prescription6 = Prescription(drug_id=5, original_quantity=50, remaining_quantity=50, patient_id=2, date_received=date(2025, 9, 2), prescriber_id=4)
-prescription7 = Prescription(drug_id=6, original_quantity=25, remaining_quantity=25, patient_id=3, date_received=date(2025, 9, 5), prescriber_id=5)
-prescription8 = Prescription(drug_id=7, original_quantity=10, remaining_quantity=10, patient_id=4, date_received=date(2025, 9, 10), prescriber_id=6)
-prescription9 = Prescription(drug_id=8, original_quantity=40, remaining_quantity=40, patient_id=1, date_received=date(2025, 9, 12), prescriber_id=7)
-prescription10 =Prescription(drug_id=9, original_quantity=30, remaining_quantity=30, patient_id=2, date_received=date(2025, 9, 15), prescriber_id=4)
+# Add prescriptions
+prescription1 = Prescription(drug_id=3, original_quantity=30, remaining_quantity=20,
+                             patient_id=1, date_received=date(2025, 8, 25), prescriber_id=1)  # Cisplatin
+prescription2 = Prescription(drug_id=1, original_quantity=20, remaining_quantity=10,
+                             patient_id=2, date_received=date(2025, 9, 1), prescriber_id=2)   # Tylenol
+prescription3 = Prescription(drug_id=4, original_quantity=90, remaining_quantity=90,
+                             patient_id=3, date_received=date(2025, 9, 5), prescriber_id=1)   # Metformin
+prescription4 = Prescription(drug_id=4, original_quantity=60, remaining_quantity=60,
+                             patient_id=4, date_received=date(2025, 8, 5), prescriber_id=1)   # Metformin older
+prescription5 = Prescription(drug_id=2, original_quantity=15, remaining_quantity=15,
+                             patient_id=1, date_received=date(2025, 8, 10), prescriber_id=3)  # Amoxicillin
+prescription6 = Prescription(drug_id=5, original_quantity=50, remaining_quantity=50,
+                             patient_id=2, date_received=date(2025, 8, 18), prescriber_id=4)  # Ibuprofen
+prescription7 = Prescription(drug_id=6, original_quantity=25, remaining_quantity=25,
+                             patient_id=3, date_received=date(2025, 9, 10), prescriber_id=5)  # Lipitor
+prescription8 = Prescription(drug_id=7, original_quantity=10, remaining_quantity=10,
+                             patient_id=4, date_received=date(2025, 9, 12), prescriber_id=6)  # Warfarin
+prescription9 = Prescription(drug_id=8, original_quantity=40, remaining_quantity=40,
+                             patient_id=1, date_received=date(2025, 9, 15), prescriber_id=7)  # Hydrochlorothiazide
+prescription10 = Prescription(drug_id=9, original_quantity=30, remaining_quantity=30,
+                              patient_id=2, date_received=date(2025, 9, 20), prescriber_id=4) # Warfarin
 
 db.add_all([prescription1, prescription2, prescription3, prescription4, prescription5, prescription6, prescription7, prescription8, prescription9, prescription10])
 db.commit()
 
-refill_hist1 = RefillHist(prescription_id=prescription1.id, patient_id=1, drug_id=3, quantity=10, days_supply=5, completed_date=date(2025, 9, 1), sold_date=date(2025, 9, 2))
-refill_hist2 = RefillHist(prescription_id=prescription2.id, patient_id=2, drug_id=1, quantity=10, days_supply=10, completed_date=date(2025, 9, 15), sold_date=date(2025, 9, 16))
-refill_hist3 = RefillHist(prescription_id=prescription3.id, patient_id=3, drug_id=4, quantity=30, days_supply=30, completed_date=date(2025, 9, 30), sold_date=date(2025, 10, 1))
-refill_hist4 = RefillHist(prescription_id=prescription5.id, patient_id=1, drug_id=2, quantity=15, days_supply=15, completed_date=date(2025, 8, 25), sold_date=date(2025, 8, 26))
-refill_hist5 = RefillHist(prescription_id=prescription6.id, patient_id=2, drug_id=5, quantity=50, days_supply=50, completed_date=date(2025, 8, 20), sold_date=date(2025, 8, 21))
+refill_hist1 = RefillHist(
+    prescription_id=prescription1.id, patient_id=1, drug_id=3,
+    quantity=10, days_supply=5,
+    completed_date=date(2025, 8, 26), sold_date=date(2025, 8, 27),
+    total_cost=Decimal("250.00")
+)
 
+refill_hist2 = RefillHist(
+    prescription_id=prescription2.id, patient_id=2, drug_id=1,
+    quantity=10, days_supply=10,
+    completed_date=date(2025, 9, 5), sold_date=date(2025, 9, 6),
+    total_cost=Decimal("2.00")
+)
+
+refill_hist3 = RefillHist(
+    prescription_id=prescription3.id, patient_id=3, drug_id=4,
+    quantity=30, days_supply=30,
+    completed_date=date(2025, 9, 10), sold_date=date(2025, 9, 11),
+    total_cost=Decimal("4.50")
+)
+
+refill_hist4 = RefillHist(
+    prescription_id=prescription5.id, patient_id=1, drug_id=2,
+    quantity=15, days_supply=15,
+    completed_date=date(2025, 8, 15), sold_date=date(2025, 8, 16),
+    total_cost=Decimal("7.50")
+)
+
+refill_hist5 = RefillHist(
+    prescription_id=prescription6.id, patient_id=2, drug_id=5,
+    quantity=50, days_supply=50,
+    completed_date=date(2025, 8, 20), sold_date=date(2025, 8, 21),
+    total_cost=Decimal("5.00")
+)
 db.add_all([refill_hist1, refill_hist2, refill_hist3, refill_hist4, refill_hist5])
 db.commit()
 
-refill1 = Refill(prescription_id=prescription1.id, patient_id=1, drug_id=3, due_date=date(2025, 9, 1), quantity=10, days_supply=5, priority=Priority.high, state=RxState.QT)
-refill2 = Refill(prescription_id=prescription2.id, patient_id=2, drug_id=1, due_date=date(2025, 9, 15), quantity=10, days_supply=10, priority=Priority.normal, state=RxState.QV1)
-refill3 = Refill(prescription_id=prescription3.id, patient_id=3, drug_id=4, due_date=date(2025, 9, 30), quantity=30, days_supply=30, priority=Priority.low, state=RxState.QP)
-refill5 = Refill(prescription_id=prescription6.id, patient_id=2, drug_id=5, due_date=date(2025, 10, 10), quantity=50, days_supply=50, priority=Priority.high, state=RxState.QT)
+refill1 = Refill(
+    prescription_id=prescription1.id, patient_id=1, drug_id=3,
+    due_date=date(2025, 9, 10), quantity=10, days_supply=5,
+    priority=Priority.high, state=RxState.QT,
+    total_cost=Decimal("250.00")
+)
+
+refill2 = Refill(
+    prescription_id=prescription2.id, patient_id=2, drug_id=1,
+    due_date=date(2025, 9, 20), quantity=10, days_supply=10,
+    priority=Priority.normal, state=RxState.QV1,
+    total_cost=Decimal("2.00")
+)
+
+refill3 = Refill(
+    prescription_id=prescription3.id, patient_id=3, drug_id=4,
+    due_date=date(2025, 10, 10), quantity=30, days_supply=30,
+    priority=Priority.low, state=RxState.QP,
+    total_cost=Decimal("4.50")
+)
+
+refill5 = Refill(
+    prescription_id=prescription6.id, patient_id=2, drug_id=5,
+    due_date=date(2025, 10, 1), quantity=50, days_supply=50,
+    priority=Priority.high, state=RxState.QT,
+    total_cost=Decimal("5.00")
+)
 
 db.add_all([refill1, refill2, refill3, refill5])
 db.commit()

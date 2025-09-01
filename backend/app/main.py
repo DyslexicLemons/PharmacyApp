@@ -8,6 +8,8 @@ from sqlalchemy import desc
 from .database import Base, engine, get_db
 from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill, Stock, RefillHist
 from . import schemas
+from decimal import Decimal
+
 
 
 Base.metadata.create_all(bind=engine)
@@ -143,6 +145,7 @@ def get_latest_refill_for_prescription(
     state = getattr(refill, "state", None) if refill else None
 
     # Override dates with refill_latest if available
+    total_cost: Decimal = Decimal(getattr(refill_latest, "total_cost", None) or getattr(refill, "total_cost", Decimal("0.00")))
     sold_date = getattr(refill_latest, "sold_date", None) if refill_latest else getattr(refill, "sold_date", None)
     completed_date = getattr(refill_latest, "completed_date", None) if refill_latest else getattr(refill, "completed_date", None)
 
@@ -152,6 +155,7 @@ def get_latest_refill_for_prescription(
     return schemas.LatestRefillOut(
         quantity=quantity,
         days_supply=days_supply,
+        total_cost=total_cost,
         sold_date=sold_date,
         completed_date=completed_date,
         state=state,
@@ -172,11 +176,12 @@ def get_patient(pid: int, db: Session = Depends(get_db)):
             prescription.latest_refill = latest_refill
 
             if hasattr(latest_refill, "sold_date") and latest_refill.sold_date:
-                # Historical refill: calculate next_fill_date
-                prescription.next_fill_date = latest_refill.sold_date + timedelta(days=latest_refill.days_supply)
+                # Historical refill: calculate next_pickup
+                prescription.next_pickup = latest_refill.sold_date + timedelta(latest_refill.days_supply)
+                print
             else:
                 # Current or pending refill: show status instead of date
-                prescription.next_fill_date = latest_refill.state  # e.g., "Pending" or "In Progress"
+                prescription.next_pickup = latest_refill.state  # e.g., "Pending" or "In Progress"
 
     return patient
 

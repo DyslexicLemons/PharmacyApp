@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, Enum, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, Boolean, Date, Enum, ForeignKey, Float, Numeric
 from sqlalchemy.orm import relationship
 from .database import Base
 import enum
@@ -62,6 +62,7 @@ class Refill(Base):
     due_date = Column(Date)
     quantity = Column(Integer)
     days_supply = Column(Integer)
+    total_cost = Column(Numeric(10, 2), nullable=False)
     priority = Column(Enum(Priority), default=Priority.normal)
     state = Column(Enum(RxState), default=RxState.QT, index=True)
     completed_date = Column(Date)
@@ -83,6 +84,7 @@ class RefillHist(Base):
     days_supply = Column(Integer)
     completed_date = Column(Date)
     sold_date = Column(Date)
+    total_cost = Column(Numeric(10, 2), nullable=False)
 
     # relationships
     prescription = relationship("Prescription", back_populates="refill_history", lazy="joined")
@@ -108,7 +110,7 @@ class Drug(Base):
     id = Column(Integer, primary_key=True, index=True)
     drug_name = Column(String, index=True)
     manufacturer = Column(String)
-    cost = Column(Float)
+    cost = Column(Numeric(10, 2), nullable=False)
     niosh = Column(Boolean, default=False)
     drug_class = Column(Integer)
 
