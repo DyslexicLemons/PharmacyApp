@@ -49,6 +49,7 @@ export default function QueueView({ stateFilter }) {
               <th>Drug</th>
               <th>Patient</th>
               <th>Qty</th>
+              <th>Days Supply</th>
               <th>Due</th>
               <th>Priority</th>
               <th>State</th>
@@ -62,6 +63,7 @@ export default function QueueView({ stateFilter }) {
                   <td>{r.drug.drug_name}</td>
                   <td>{r.patient.first_name} {r.patient.last_name}</td>
                   <td>{r.quantity}</td>
+                  <td>{r.days_supply}</td>
                   <td>{new Date(r.due_date).toLocaleDateString()}</td>
                   <td>{r.priority}</td>
                   <td><Badge state={r.state} /></td>

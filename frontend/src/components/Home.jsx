@@ -33,6 +33,12 @@ export default function Home({ onCommand }) {
           <code>patients</code> – All patients
         </li>
         <li>
+          <code>stock</code> – Current inventory
+        </li>
+        <li>
+          <code>refill_hist</code> – All fill history
+        </li>
+        <li>
           <code>lastname,firstname</code> – Open patient profile (e.g.,{" "}
           <code>smith,john</code>)
         </li>

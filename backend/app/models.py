@@ -37,7 +37,7 @@ class Prescription(Base):
     __tablename__ = "prescriptions"
 
     id = Column(Integer, primary_key=True, index=True)
-    drug_name = Column(String, index=True)
+    drug_id = Column(Integer, ForeignKey("drugs.id"))
     original_quantity = Column(Integer)
     remaining_quantity = Column(Integer)
     date_received = Column(Date)
@@ -48,6 +48,8 @@ class Prescription(Base):
     prescriber = relationship("Prescriber", back_populates="prescriptions")
     refills = relationship("Refill", back_populates="prescription", lazy="selectin")
     refill_history = relationship("RefillHist", back_populates="prescription", lazy="selectin")
+    drug = relationship("Drug", back_populates="prescriptions")
+
 
 
 class Refill(Base):
@@ -59,6 +61,7 @@ class Refill(Base):
     drug_id = Column(Integer, ForeignKey("drugs.id"))
     due_date = Column(Date)
     quantity = Column(Integer)
+    days_supply = Column(Integer)
     priority = Column(Enum(Priority), default=Priority.normal)
     state = Column(Enum(RxState), default=RxState.QT, index=True)
     completed_date = Column(Date)
@@ -77,6 +80,7 @@ class RefillHist(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"))
     drug_id = Column(Integer, ForeignKey("drugs.id"))
     quantity = Column(Integer)
+    days_supply = Column(Integer)
     completed_date = Column(Date)
     sold_date = Column(Date)
 
@@ -107,6 +111,7 @@ class Drug(Base):
     refills = relationship("Refill", back_populates="drug", lazy="selectin")
     stock = relationship("Stock", back_populates="drug", uselist=False)  # 1:1
     refill_history = relationship("RefillHist", back_populates="drug", lazy="selectin")
+    prescriptions = relationship("Prescription", back_populates="drug")
 
 
 class Stock(Base):
