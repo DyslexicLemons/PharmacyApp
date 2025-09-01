@@ -41,6 +41,7 @@ export default function App() {
             const pick = prompt(`Multiple matches. Enter ID to open:\n${names}`);
             const chosen = list.find((p) => String(p.id) === String(pick));
             if (chosen) setRoute({ view: "PATIENT", pid: chosen.id });
+            console.log("What")
           }
         })
         .catch((e) => alert(e.message));

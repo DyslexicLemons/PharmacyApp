@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-from .schemas import RefillOut
+from .schemas import RefillOut, PrescriptionOut
 from sqlalchemy.orm import joinedload
 from .database import Base, engine, get_db
 from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill, Stock, RefillHist
@@ -40,7 +40,9 @@ def read_root():
 
 
 # ----- Prescriptions -----
-
+@app.get("/prescriptions", response_model=List[PrescriptionOut])
+def get_prescriptions(db: Session = Depends(get_db)):
+    return db.query(Prescription).all()
 
 # ----- Refills -----
 

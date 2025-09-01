@@ -42,7 +42,7 @@ db.commit()
 
 # Add prescriptions
 prescription1 = Prescription(
-    drug_name="Ibuprofen",
+    drug_id=3,
     original_quantity=30,
     remaining_quantity=20,
     patient_id=patient1.id,
@@ -50,7 +50,7 @@ prescription1 = Prescription(
     prescriber_id = prescriber1.id
 )
 prescription2 = Prescription(
-    drug_name="Amoxicillin",
+    drug_id=1,
     original_quantity=20,
     remaining_quantity=10,
     patient_id=patient2.id,
@@ -58,7 +58,7 @@ prescription2 = Prescription(
     prescriber_id = prescriber2.id
 )
 prescription3 = Prescription(
-    drug_name="Metformin",
+    drug_id=4,
     original_quantity=90,
     remaining_quantity=90,
     patient_id=patient3.id,
@@ -72,8 +72,9 @@ db.commit()
 refill_hist1 = RefillHist(
     prescription_id=prescription1.id,
     patient_id=patient1.id,
-    drug_id=drug1.id,
+    drug_id=drug3.id,
     quantity=10,
+    days_supply=5,
     completed_date=date(2025, 9, 1),
     sold_date=date(2025, 9, 2)
 )
@@ -81,8 +82,9 @@ refill_hist1 = RefillHist(
 refill_hist2 = RefillHist(
     prescription_id=prescription2.id,
     patient_id=patient2.id,
-    drug_id=drug2.id,
+    drug_id=drug1.id,
     quantity=10,
+    days_supply=10,
     completed_date=date(2025, 9, 15),
     sold_date=date(2025, 9, 16)
 )
@@ -92,6 +94,7 @@ refill_hist3 = RefillHist(
     patient_id=patient3.id,
     drug_id=drug4.id,
     quantity=30,
+    days_supply=30,
     completed_date=date(2025, 9, 30),
     sold_date=date(2025, 10, 1)
 )
@@ -106,6 +109,7 @@ refill1 = Refill(
     drug_id=drug1.id,
     due_date=date(2025, 9, 1),
     quantity=10,
+    days_supply=5,
     priority=Priority.high,
     state=RxState.QT,
 )
@@ -115,6 +119,7 @@ refill2 = Refill(
     drug_id=drug2.id,
     due_date=date(2025, 9, 15),
     quantity=10,
+    days_supply=10,
     priority=Priority.normal,
     state=RxState.QV1,
 )
@@ -124,6 +129,7 @@ refill3 = Refill(
     drug_id=drug4.id,
     due_date=date(2025, 9, 30),
     quantity=30,
+    days_supply=30,
     priority=Priority.low,
     state=RxState.QP,
 )

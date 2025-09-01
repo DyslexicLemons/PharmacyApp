@@ -16,6 +16,7 @@ export default function RefillHistView() {
             <th>Patient</th>
             <th>Drug</th>
             <th>Quantity</th>
+            <th>Days Supply</th>
             <th>Completed Date</th>
             <th>Sold Date</th>
           </tr>
@@ -26,6 +27,7 @@ export default function RefillHistView() {
               <td>{s.patient?.first_name} {s.patient?.last_name}</td>
               <td>{s.drug?.drug_name}</td>
               <td>{s.quantity}</td>
+              <td>{s.days_supply}</td>
               <td>{s.completed_date ? new Date(s.completed_date).toLocaleDateString() : "—"}</td>
               <td>{s.sold_date ? new Date(s.sold_date).toLocaleDateString() : "—"}</td>
             </tr>
