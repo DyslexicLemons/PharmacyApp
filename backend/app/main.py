@@ -138,7 +138,8 @@ def get_latest_refill_for_prescription(
     # Safely get attributes or use defaults
     quantity = getattr(refill, "quantity", 0) or 0
     days_supply = getattr(refill, "days_supply", 0) or 0
-    sold_date = getattr(refill, "sold_date", getattr(refill, "completed_date", None))
+    sold_date = getattr(refill, "sold_date", None)
+    completed_date = getattr(refill, "completed_date",  None)
     state = getattr(refill, "state", None)  # None if historical refill
 
     next_pickup = sold_date + timedelta(days=days_supply) if sold_date and state is None else None
@@ -147,6 +148,7 @@ def get_latest_refill_for_prescription(
         quantity=quantity,
         days_supply=days_supply,
         sold_date=sold_date,
+        completed_date=completed_date,
         state=state,
         next_pickup=next_pickup
     )
