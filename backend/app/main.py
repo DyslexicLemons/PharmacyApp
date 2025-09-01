@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from .schemas import RefillOut, PrescriptionOut
-from sqlalchemy.orm import joinedload
+from sqlalchemy import desc
 from .database import Base, engine, get_db
 from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, Refill, Stock, RefillHist
 from . import schemas
@@ -112,12 +112,66 @@ def search_patient(name: str, db: Session = Depends(get_db)):
         q = q.filter(Patient.first_name.ilike(f"{first}%"))
     return q.order_by(Patient.last_name.asc(), Patient.first_name.asc()).all()
 
+def get_latest_refill_for_prescription(
+    db: Session, prescription_id: int
+) -> Optional[schemas.LatestRefillOut]:
+    # Try to get the latest active refill first
+    refill = (
+        db.query(Refill)
+        .filter(Refill.prescription_id == prescription_id)
+        .order_by(desc(Refill.completed_date))
+        .first()
+    )
+
+    # If no active refill, fall back to historical refills
+    if not refill:
+        refill = (
+            db.query(RefillHist)
+            .filter(RefillHist.prescription_id == prescription_id)
+            .order_by(desc(RefillHist.completed_date))
+            .first()
+        )
+
+    if not refill:
+        return None
+
+    # Safely get attributes or use defaults
+    quantity = getattr(refill, "quantity", 0) or 0
+    days_supply = getattr(refill, "days_supply", 0) or 0
+    sold_date = getattr(refill, "sold_date", getattr(refill, "completed_date", None))
+    state = getattr(refill, "state", None)  # None if historical refill
+
+    next_pickup = sold_date + timedelta(days=days_supply) if sold_date and state is None else None
+
+    return schemas.LatestRefillOut(
+        quantity=quantity,
+        days_supply=days_supply,
+        sold_date=sold_date,
+        state=state,
+        next_pickup=next_pickup
+    )
+
+
 @app.get("/patients/{pid}", response_model=schemas.PatientWithRxs)
 def get_patient(pid: int, db: Session = Depends(get_db)):
-    p = db.query(Patient).get(pid)
-    if not p:
+    patient = db.query(Patient).get(pid)
+    if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
-    return p
+
+    for prescription in patient.prescriptions:
+        # Get latest refill from RefillHist first
+        latest_refill = get_latest_refill_for_prescription(db, prescription.id)
+        if latest_refill:
+            prescription.latest_refill = latest_refill
+
+            if hasattr(latest_refill, "sold_date") and latest_refill.sold_date:
+                # Historical refill: calculate next_fill_date
+                prescription.next_fill_date = latest_refill.sold_date + timedelta(days=latest_refill.days_supply)
+            else:
+                # Current or pending refill: show status instead of date
+                prescription.next_fill_date = latest_refill.state  # e.g., "Pending" or "In Progress"
+
+    return patient
 
 
 # ----- Drugs -----

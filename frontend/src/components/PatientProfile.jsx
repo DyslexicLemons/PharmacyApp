@@ -37,12 +37,13 @@ export default function PatientProfile({ pid }) {
           <tr>
             <th>ID</th>
             <th>Drug</th>
-            <th>Quantity Remaining</th>
+            <th>Qty Remaining</th>
             <th>Date Received</th>
-            <th>Last Quantity Dispensed</th>
+            <th>Last Qty Dispensed</th>
             <th>Days Supply</th>
-            <th>Last Sold Date</th>
-            <th>Next Pickup Date</th>
+            <th>Last Sold</th>
+            <th>Last filled</th>
+            <th>Next Pickup</th>
           </tr>
         </thead>
         <tbody>
@@ -56,11 +57,25 @@ export default function PatientProfile({ pid }) {
               {/* refill details if available */}
               {r.latest_refill ? (
                 <>
-                  <td>{r.latest_refill.quantity_dispensed}</td>
-                  <td>{r.latest_refill.days_supply}</td>
-                  <td>{new Date(r.latest_refill.completed_date).toLocaleDateString()}</td>
-                  <td>{new Date(r.latest_refill.sold_date).toLocaleDateString()}</td>
-                  <td>{new Date(r.latest_refill.next_pickup).toLocaleDateString()}</td>
+                <td>{r.latest_refill.quantity}</td>
+                <td>{r.latest_refill.days_supply}</td>
+                <td>
+                  {r.latest_refill.sold_date 
+                    ? new Date(r.latest_refill.sold_date).toLocaleDateString() 
+                    : "—"}
+                </td>
+                <td>
+                  {r.latest_refill.completed_date 
+                    ? new Date(r.latest_refill.completed_date).toLocaleDateString() 
+                    : "—"}
+                </td>
+                <td>
+                  {r.latest_refill.state 
+                    ? <Badge state={r.latest_refill.state} />
+                    : r.latest_refill.next_fill_date
+                      ? new Date(r.latest_refill.next_fill_date).toLocaleDateString()
+                      : "—"}
+                </td>
                 </>
               ) : (
                 <>

@@ -65,6 +65,14 @@ prescription3 = Prescription(
     date_received=date(2025, 9, 29),
     prescriber_id = prescriber1.id
 )
+prescription4 = Prescription(
+    drug_id=4,
+    original_quantity=90,
+    remaining_quantity=90,
+    patient_id=patient4.id,
+    date_received=date(2025, 8, 5),
+    prescriber_id = prescriber1.id
+)
 
 db.add_all([prescription1, prescription2, prescription3])
 db.commit()
@@ -106,7 +114,7 @@ db.commit()
 refill1 = Refill(
     prescription_id=prescription1.id,
     patient_id=patient1.id,
-    drug_id=drug1.id,
+    drug_id=drug3.id,
     due_date=date(2025, 9, 1),
     quantity=10,
     days_supply=5,
@@ -116,7 +124,7 @@ refill1 = Refill(
 refill2 = Refill(
     prescription_id=prescription2.id,
     patient_id=patient2.id,
-    drug_id=drug2.id,
+    drug_id=drug1.id,
     due_date=date(2025, 9, 15),
     quantity=10,
     days_supply=10,
