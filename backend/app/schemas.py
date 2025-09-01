@@ -64,7 +64,9 @@ class LatestRefillOut(BaseModel):
     quantity: int
     days_supply: int
     sold_date: Optional[date] = None
+    completed_date: Optional[date] = None
     next_pickup: Optional[date] = None
+    state: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -79,6 +81,17 @@ class PrescriptionBase(BaseModel):
 class PrescriptionOut(PrescriptionBase):
     id: int
     patient: PatientOut
+    drug: DrugOut
+    remaining_quantity: int
+    date_received: date
+
+    class Config:
+        from_attributes = True
+        
+
+class PrescriptionOut2(PrescriptionBase):
+    id: int
+    patient_id: int
     drug: DrugOut
     remaining_quantity: int
     date_received: date
@@ -142,7 +155,7 @@ class RefillHistOut(BaseModel):
     
 
 class PatientWithRxs(PatientOut):
-    prescriptions: List[PrescriptionOut] = []
+    prescriptions: List[PrescriptionOut2] = []
 
     class Config:
         from_attributes = True
