@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, Enum, ForeignKey, Float, Numeric
+from sqlalchemy import Column, Integer, BigInteger, String, Boolean, Date, Enum, ForeignKey, Float, Numeric
 from sqlalchemy.orm import relationship
 from .database import Base
 import enum
@@ -16,7 +16,9 @@ class RxState(str, enum.Enum):
     QV1 = "QV1" # Verify 1
     QP = "QP" # Prep/Fill
     QV2 = "QV2" # Final Verify
-    DONE = "DONE" # Ready to be sold
+    READY = "READY" # Ready for Pickup (with bin assignment)
+    HOLD = "HOLD" # On Hold
+    REJECTED = "REJECTED" # Rejected/Failed Verification
     SOLD = "SOLD"
 
 
@@ -31,6 +33,7 @@ class Patient(Base):
     prescriptions = relationship("Prescription", back_populates="patient", lazy="selectin")
     refills = relationship("Refill", back_populates="patient", lazy="selectin")
     refill_history = relationship("RefillHist", back_populates="patient", lazy="selectin")
+    insurances = relationship("PatientInsurance", back_populates="patient", lazy="selectin")
 
 
 class Prescription(Base):
@@ -38,9 +41,11 @@ class Prescription(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     drug_id = Column(Integer, ForeignKey("drugs.id"))
+    brand_required = Column(Boolean)
     original_quantity = Column(Integer)
     remaining_quantity = Column(Integer)
     date_received = Column(Date)
+    instructions = Column(String, nullable=True)
 
     patient_id = Column(Integer, ForeignKey("patients.id"))
     patient = relationship("Patient", back_populates="prescriptions")
@@ -67,10 +72,23 @@ class Refill(Base):
     state = Column(Enum(RxState), default=RxState.QT, index=True)
     completed_date = Column(Date)
 
+    # Workflow fields
+    bin_number = Column(Integer, nullable=True)
+    rejected_by = Column(String, nullable=True)
+    rejection_reason = Column(String, nullable=True)
+    rejection_date = Column(Date, nullable=True)
+    source = Column(String, default="manual")
+
+    # Billing fields
+    insurance_id = Column(Integer, ForeignKey("patient_insurance.id"), nullable=True)
+    copay_amount = Column(Numeric(10, 2), nullable=True)
+    insurance_paid = Column(Numeric(10, 2), nullable=True)
+
     # relationships
     prescription = relationship("Prescription", back_populates="refills", lazy="joined")
     patient = relationship("Patient", back_populates="refills", lazy="joined")
     drug = relationship("Drug", back_populates="refills", lazy="joined")
+    insurance = relationship("PatientInsurance", lazy="joined")
 
 
 class RefillHist(Base):
@@ -86,10 +104,16 @@ class RefillHist(Base):
     sold_date = Column(Date)
     total_cost = Column(Numeric(10, 2), nullable=False)
 
+    # Billing fields
+    insurance_id = Column(Integer, ForeignKey("patient_insurance.id"), nullable=True)
+    copay_amount = Column(Numeric(10, 2), nullable=True)
+    insurance_paid = Column(Numeric(10, 2), nullable=True)
+
     # relationships
     prescription = relationship("Prescription", back_populates="refill_history", lazy="joined")
     patient = relationship("Patient", back_populates="refill_history", lazy="joined")
     drug = relationship("Drug", back_populates="refill_history", lazy="joined")
+    insurance = relationship("PatientInsurance", lazy="joined")
 
 
 
@@ -97,11 +121,12 @@ class Prescriber(Base):
     __tablename__ = "prescribers"
 
     id = Column(Integer, primary_key=True, index=True)
-    npi = Column(Integer)
+    npi = Column(BigInteger)
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
     address = Column(String)
     phone_number = Column(String)
+    specialty = Column(String, nullable=True)
     prescriptions = relationship("Prescription", back_populates="prescriber", lazy="selectin")
 
 
@@ -113,18 +138,62 @@ class Drug(Base):
     cost = Column(Numeric(10, 2), nullable=False)
     niosh = Column(Boolean, default=False)
     drug_class = Column(Integer)
+    description = Column(String, nullable=True)
 
     refills = relationship("Refill", back_populates="drug", lazy="selectin")
-    stock = relationship("Stock", back_populates="drug", uselist=False)  # 1:1
+    stock = relationship("Stock", back_populates="drug", uselist=False)
     refill_history = relationship("RefillHist", back_populates="drug", lazy="selectin")
     prescriptions = relationship("Prescription", back_populates="drug")
+    formulary_entries = relationship("Formulary", back_populates="drug")
 
 
 class Stock(Base):
     __tablename__ = "stock"
 
-    drug_id = Column(Integer, ForeignKey("drugs.id"), primary_key=True)  # enforce 1:1 mapping
+    drug_id = Column(Integer, ForeignKey("drugs.id"), primary_key=True)
     quantity = Column(Integer, default=0)
 
-    drug = relationship("Drug", lazy="joined")  # fetch full drug info
+    drug = relationship("Drug", lazy="joined")
 
+
+class InsuranceCompany(Base):
+    __tablename__ = "insurance_companies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_id = Column(String, unique=True, index=True)
+    plan_name = Column(String)
+    bin_number = Column(String, nullable=True)
+    pcn = Column(String, nullable=True)
+    phone_number = Column(String, nullable=True)
+
+    formulary = relationship("Formulary", back_populates="insurance_company", lazy="selectin")
+    patient_insurances = relationship("PatientInsurance", back_populates="insurance_company")
+
+
+class Formulary(Base):
+    __tablename__ = "formulary"
+
+    id = Column(Integer, primary_key=True, index=True)
+    insurance_company_id = Column(Integer, ForeignKey("insurance_companies.id"))
+    drug_id = Column(Integer, ForeignKey("drugs.id"))
+    tier = Column(Integer)  # 1=Preferred Generic, 2=Preferred Brand, 3=Non-Preferred, 4=Specialty
+    copay_per_30 = Column(Numeric(10, 2))  # Patient's copay for a 30-day supply
+    not_covered = Column(Boolean, default=False)
+
+    insurance_company = relationship("InsuranceCompany", back_populates="formulary")
+    drug = relationship("Drug", back_populates="formulary_entries")
+
+
+class PatientInsurance(Base):
+    __tablename__ = "patient_insurance"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"))
+    insurance_company_id = Column(Integer, ForeignKey("insurance_companies.id"))
+    member_id = Column(String)
+    group_number = Column(String, nullable=True)
+    is_primary = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=True)
+
+    patient = relationship("Patient", back_populates="insurances")
+    insurance_company = relationship("InsuranceCompany", back_populates="patient_insurances", lazy="joined")

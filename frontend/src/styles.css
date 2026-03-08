@@ -1,18 +1,235 @@
-:root { --bg: #0b132b; --card: #1c2541; --muted: #3a506b; --text: #e0e1dd; --accent: #5bc0be; }
+/* JoeMed Color Scheme - Professional Medical Brand */
+:root {
+  --bg: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+  --card: rgba(255, 255, 255, 0.95);
+  --card-hover: rgba(255, 255, 255, 1);
+  --muted: #5a7a8c;
+  --text: #1a2332;
+  --text-light: #4a5568;
+  --accent: #00b4d8;
+  --accent-dark: #0096c7;
+  --primary: #006494;
+  --primary-light: #0077b6;
+  --secondary: #48cae4;
+  --success: #06d6a0;
+  --warning: #ffd166;
+  --danger: #ef476f;
+  --border: #e2e8f0;
+}
+
 * { box-sizing: border-box; }
-body { margin:0; font-family: Inter, system-ui, Arial; background: var(--bg); color: var(--text); }
-.container { max-width: 1100px; margin: 24px auto; padding: 0 12px; }
-.card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-.hstack { display: flex; gap: 8px; align-items: center; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', system-ui, Arial, sans-serif;
+  background: var(--bg);
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+.container {
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 24px;
+  position: relative;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+}
+
+.hstack { display: flex; gap: 12px; align-items: center; }
 .vstack { display: flex; gap: 16px; flex-direction: column; }
-.input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--muted); background: #0f1b3d; color: var(--text); }
-.btn { padding: 8px 12px; border-radius: 12px; border: 1px solid var(--muted); background: #0f1b3d; color: var(--text); cursor: pointer; }
-.table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.table th, .table td { padding: 10px; border-bottom: 1px solid #2e3b68; }
-.badge { padding: 3px 8px; border-radius: 999px; background: var(--muted); color: #fff; font-size: 12px; }
-.state-QT { background: #ff7675; }
-.state-QV1 { background: #fdcb6e; }
-.state-QP { background: #74b9ff; }
-.state-QV2 { background: #a29bfe; }
-.state-DONE { background: #55efc4; color: #0b132b; }
-footer { opacity: .7; font-size: 12px; }
+
+.input {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 180, 216, 0.1);
+}
+
+.btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 2px solid var(--primary);
+  background: var(--primary);
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  background: var(--primary-light);
+  border-color: var(--primary-light);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 100, 148, 0.3);
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-secondary:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-success {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.btn-success:hover {
+  background: #05c090;
+  border-color: #05c090;
+}
+
+.btn-warning {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: var(--text);
+}
+
+.btn-warning:hover {
+  background: #f5b800;
+  border-color: #f5b800;
+}
+
+.btn-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.btn-danger:hover {
+  background: #e5395f;
+  border-color: #e5395f;
+}
+
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-primary:hover {
+  background: var(--primary-light);
+  border-color: var(--primary-light);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.table th {
+  padding: 12px;
+  border-bottom: 2px solid var(--primary);
+  background: linear-gradient(to bottom, #f7fafc, #edf2f7);
+  color: var(--primary);
+  font-weight: 700;
+  text-align: left;
+}
+
+.table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table tbody tr:hover {
+  background-color: rgba(0, 180, 216, 0.05);
+}
+
+.table tbody tr.hover-row:hover {
+  background-color: rgba(0, 180, 216, 0.12);
+  transform: scale(1.01);
+  box-shadow: 0 2px 8px rgba(0, 100, 148, 0.15);
+}
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--muted);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.state-QT { background: #fbbf24; color: var(--text); }
+.state-QV1 { background: var(--warning); color: var(--text); }
+.state-QP { background: var(--accent); }
+.state-QV2 { background: #a78bfa; }
+.state-READY { background: var(--success); color: white; }
+.state-HOLD { background: #fb923c; color: white; }
+.state-REJECTED { background: var(--danger); color: white; }
+.state-SOLD { background: #6b7280; color: white; }
+.state-DONE { background: var(--success); color: white; }
+
+footer {
+  opacity: 0.8;
+  font-size: 12px;
+  color: white;
+  text-align: center;
+  padding: 20px;
+}
+
+h1, h2, h3 {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin: 0 0 8px 0;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+code {
+  background: rgba(0, 100, 148, 0.1);
+  color: var(--primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+}
+
+.back-button-fixed {
+  position: absolute;
+  bottom: 80px;
+  left: 24px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.command-bar-container {
+  background: var(--card);
+  padding: 16px 24px;
+  border-top: 2px solid var(--border);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 0 0 12px 12px;
+  flex-shrink: 0;
+}
