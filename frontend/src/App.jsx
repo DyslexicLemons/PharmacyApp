@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import { useState, useContext, useRef, useEffect } from "react";
+import { DataContext } from "@/context/DataContext";
 
-import { advanceRx, fetchQueue, getDrugs, getPatients, searchPatients } from "@/api";
+import { searchPatients, generateTestPrescriptions } from "@/api";
 
 import PatientProfile from "@/components/PatientProfile";
 import DrugsView from "@/components/DrugsView";
@@ -11,66 +12,273 @@ import CommandBar from "@/components/CommandBar";
 import StockView from "@/components/StockView";
 import RefillHistView from "@/components/RefillHistView";
 import PrescribersView from "@/components/PrescribersView";
+import PrescriptionForm from "@/components/PrescriptionForm";
+import FillScriptView from "@/components/FillScriptView";
+import PrescriptionDetailView from "@/components/PrescriptionDetailView";
 
-
-const NEXT = { QT: "QV1", QV1: "QP", QP: "QV2", QV2: "DONE" };
+const PATIENT_PAGE_SIZE = 15;
 
 export default function App() {
   const [route, setRoute] = useState({ view: "HOME" });
+  const [history, setHistory] = useState([]);
+  const [currentPatientData, setCurrentPatientData] = useState(null);
+  const { patients, drugs, stock, prescribers } = useContext(DataContext);
+  const cmdBarRef = useRef(null);
+
+  useEffect(() => {
+    cmdBarRef.current?.focus();
+  }, [route]);
+
+  function navigateTo(newRoute) {
+    setHistory((prev) => [...prev, route]);
+    setRoute(newRoute);
+  }
+
+  function goBack() {
+    if (history.length > 0) {
+      const previous = history[history.length - 1];
+      setHistory((prev) => prev.slice(0, -1));
+      setRoute(previous);
+    }
+  }
 
   function handleCommand(input) {
-    const cmd = input.toLowerCase();
-    if (["qt", "qv1", "qp", "qv2"].includes(cmd)) {
-      setRoute({ view: "QUEUE", state: cmd.toUpperCase() });
+    const cmd = input.toLowerCase().trim();
+
+    // View prescription detail: Vx (only in PATIENT view)
+    const viewMatch = cmd.match(/^v(\d+)$/);
+    if (viewMatch && route.view === "PATIENT") {
+      const lineNum = parseInt(viewMatch[1], 10);
+      if (currentPatientData) {
+        const page = route.page || 1;
+        const idx = (page - 1) * PATIENT_PAGE_SIZE + (lineNum - 1);
+        const prescription = currentPatientData.prescriptions[idx];
+        if (prescription) {
+          navigateTo({
+            view: "VIEW_PRESCRIPTION",
+            prescription,
+            patientName: `${currentPatientData.last_name}, ${currentPatientData.first_name}`,
+            patientId: currentPatientData.id,
+          });
+        } else {
+          alert(`Row ${lineNum} not found`);
+        }
+      }
+      return;
+    }
+
+    // Check if input is a number (row selection)
+    const rowNum = parseInt(cmd, 10);
+    if (!isNaN(rowNum) && rowNum > 0) {
+      // Handle row selection based on current view
+      if (route.view === "PATIENTS") {
+        const index = rowNum - 1;
+        if (index >= 0 && index < patients.length) {
+          navigateTo({ view: "PATIENT", pid: patients[index].id });
+        } else {
+          alert(`Row ${rowNum} not found in patients list`);
+        }
+        return;
+      } else if (route.view === "DRUGS") {
+        const index = rowNum - 1;
+        if (index >= 0 && index < drugs.length) {
+          // For now, just show alert. Add drug detail view later if needed
+          alert(`Drug ${rowNum}: ${drugs[index].drug_name}`);
+        } else {
+          alert(`Row ${rowNum} not found in drugs list`);
+        }
+        return;
+      } else if (route.view === "STOCK") {
+        const index = rowNum - 1;
+        if (index >= 0 && index < stock.length) {
+          // For now, just show alert. Add stock detail view later if needed
+          alert(`Stock ${rowNum}: ${stock[index].drug.drug_name}`);
+        } else {
+          alert(`Row ${rowNum} not found in stock list`);
+        }
+        return;
+      } else if (route.view === "PRESCRIBERS") {
+        const index = rowNum - 1;
+        if (index >= 0 && index < prescribers.length) {
+          // For now, just show alert. Add prescriber detail view later if needed
+          alert(`Prescriber ${rowNum}: ${prescribers[index].first_name} ${prescribers[index].last_name}`);
+        } else {
+          alert(`Row ${rowNum} not found in prescribers list`);
+        }
+        return;
+      } else if (route.view === "QUEUE") {
+        // For Queue, update the route with the selected row number
+        navigateTo({ view: "QUEUE", state: route.state, selectRow: rowNum });
+        return;
+      }
+    }
+
+    if (cmd === "q") {
+      goBack();
+      return;
+    }
+
+    if (cmd === "n") {
+      setRoute((prev) => ({ ...prev, page: (prev.page || 1) + 1 }));
+      return;
+    }
+    if (cmd === "p") {
+      setRoute((prev) => {
+        const current = prev.page || 1;
+        return current > 1 ? { ...prev, page: current - 1 } : prev;
+      });
+      return;
+    }
+
+    // New state-specific queue commands
+    if (["qt", "qv1", "qp", "qv2", "ready", "hold", "rejected"].includes(cmd)) {
+      navigateTo({ view: "QUEUE", state: cmd.toUpperCase() });
       return;
     }
     if (cmd === "all") {
-      setRoute({ view: "QUEUE", state: "ALL" });
+      navigateTo({ view: "QUEUE", state: "ALL" });
       return;
     }
+
+    // Patient search (lastname,firstname)
     if (cmd.includes(",")) {
       searchPatients(input)
         .then((list) => {
           if (list.length === 0) {
             alert("No matching patients");
           } else if (list.length === 1) {
-            setRoute({ view: "PATIENT", pid: list[0].id });
+            navigateTo({ view: "PATIENT", pid: list[0].id });
           } else {
             const names = list
               .map((p) => `${p.id}: ${p.last_name}, ${p.first_name}`)
               .join("\n");
             const pick = prompt(`Multiple matches. Enter ID to open:\n${names}`);
             const chosen = list.find((p) => String(p.id) === String(pick));
-            if (chosen) setRoute({ view: "PATIENT", pid: chosen.id });
-            console.log("What")
+            if (chosen) navigateTo({ view: "PATIENT", pid: chosen.id });
           }
         })
         .catch((e) => alert(e.message));
       return;
     }
-    if (cmd === "drugs") setRoute({ view: "DRUGS" });
-    else if (cmd === "patients") setRoute({ view: "PATIENTS" });
-    else if (cmd === "home") setRoute({ view: "HOME" });
-    else if (cmd === "stock") setRoute({ view: "STOCK" });
-    else if (cmd === "refill_hist") setRoute({ view: "REFILL_HIST" });
-    else if (cmd === "prescribers") setRoute({ view: "PRESCRIBERS" });
+
+    // Single space = create new prescription
+    if (cmd === " ") {
+      navigateTo({ view: "CREATE_PRESCRIPTION" });
+      return;
+    }
+
+    // Command shortcuts
+    if (cmd === "drugs") navigateTo({ view: "DRUGS" });
+    else if (cmd === "pt" || cmd === "patients") navigateTo({ view: "PATIENTS" });
+    else if (cmd === "home") navigateTo({ view: "HOME" });
+    else if (cmd === "stock") navigateTo({ view: "STOCK" });
+    else if (cmd === "refill_hist") navigateTo({ view: "REFILL_HIST" });
+    else if (cmd === "prescribers") navigateTo({ view: "PRESCRIBERS" });
+    else if (cmd === "gen_test") {
+      if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
+        generateTestPrescriptions()
+          .then((result) => {
+            alert(`Success!\n\nCreated ${result.prescriptions_created} prescriptions\nActive refills: ${result.active_refills_created}\nSold refills: ${result.sold_prescriptions}`);
+            navigateTo({ view: "HOME" });
+          })
+          .catch((e) => alert(`Error: ${e.message}`));
+      }
+    }
     else alert("Unknown command");
   }
 
   return (
     <div className="container vstack">
-      <div className="card vstack">
-        <CommandBar onSubmit={handleCommand} />
-        {route.view === "HOME" && <Home onCommand={handleCommand} />}
-        {route.view === "QUEUE" && <QueueView stateFilter={route.state} />}
-        {route.view === "PATIENT" && <PatientProfile pid={route.pid} />}
-        {route.view === "DRUGS" && <DrugsView />}
-        {route.view === "PATIENTS" && <PatientsView />}
-        {route.view === "STOCK" && <StockView />}
-        {route.view === "REFILL_HIST" && <RefillHistView />}
-        {route.view === "PRESCRIBERS" && <PrescribersView />}
+      <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", height: "calc(100vh - 120px)" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "24px", minHeight: 0 }}>
+          {route.view === "HOME" && <Home onCommand={handleCommand} />}
+          {route.view === "QUEUE" && (
+            <QueueView
+              stateFilter={route.state}
+              onBack={goBack}
+              onSelectRow={route.selectRow}
+              page={route.page || 1}
+            />
+          )}
+          {route.view === "PATIENT" && (
+            <PatientProfile
+              pid={route.pid}
+              onBack={goBack}
+              page={route.page || 1}
+              onDataLoaded={(d) => setCurrentPatientData(d)}
+              onFill={(prescription, patient) =>
+                navigateTo({
+                  view: "FILL_SCRIPT",
+                  prescription,
+                  patientName: `${patient.last_name}, ${patient.first_name}`,
+                  fromPid: route.pid,
+                })
+              }
+            />
+          )}
+          {route.view === "VIEW_PRESCRIPTION" && (
+            <PrescriptionDetailView
+              prescription={route.prescription}
+              patientName={route.patientName}
+              patientId={route.patientId}
+              onBack={goBack}
+            />
+          )}
+          {route.view === "FILL_SCRIPT" && (
+            <FillScriptView
+              prescription={route.prescription}
+              patientName={route.patientName}
+              patientId={route.fromPid}
+              onBack={goBack}
+            />
+          )}
+          {route.view === "DRUGS" && (
+            <DrugsView
+              onBack={goBack}
+              page={route.page || 1}
+              onSelectDrug={(drugId) => {
+                // Future: navigate to drug detail view
+                alert(`Drug ID: ${drugId}`);
+              }}
+            />
+          )}
+          {route.view === "PATIENTS" && (
+            <PatientsView
+              onBack={goBack}
+              page={route.page || 1}
+              onSelectPatient={(patientId) => {
+                navigateTo({ view: "PATIENT", pid: patientId });
+              }}
+            />
+          )}
+          {route.view === "STOCK" && (
+            <StockView
+              onBack={goBack}
+              page={route.page || 1}
+              onSelectStock={(drugId) => {
+                // Future: navigate to stock detail view
+                alert(`Drug ID: ${drugId}`);
+              }}
+            />
+          )}
+          {route.view === "REFILL_HIST" && <RefillHistView onBack={goBack} page={route.page || 1} />}
+          {route.view === "PRESCRIBERS" && (
+            <PrescribersView
+              onBack={goBack}
+              page={route.page || 1}
+              onSelectPrescriber={(prescriberId) => {
+                // Future: navigate to prescriber detail view
+                alert(`Prescriber ID: ${prescriberId}`);
+              }}
+            />
+          )}
+          {route.view === "CREATE_PRESCRIPTION" && <PrescriptionForm onBack={goBack} />}
+        </div>
+        <CommandBar ref={cmdBarRef} onSubmit={handleCommand} />
       </div>
-      <footer>API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}</footer>
+      <footer>
+        <strong>JoeMed</strong> Pharmacy Management System | API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}
+      </footer>
     </div>
   );
 }

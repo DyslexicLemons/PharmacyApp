@@ -1,11 +1,17 @@
 import { useContext } from "react";
 import { DataContext } from "@/context/DataContext";
+const PAGE_SIZE = 15;
 
-export default function RefillHistView() {
+export default function RefillHistView({ onBack, page = 1 }) {
   const { refillHist, loadingRefillHist, errorRefillHist } = useContext(DataContext);
 
   if (loadingRefillHist) return <p>Loading…</p>;
   if (errorRefillHist) return <p style={{ color: "#ff7675" }}>{errorRefillHist}</p>;
+
+  const total = refillHist.length;
+  const startIdx = (page - 1) * PAGE_SIZE;
+  const endIdx = Math.min(startIdx + PAGE_SIZE, total);
+  const pageItems = refillHist.slice(startIdx, endIdx);
 
   return (
     <div className="vstack">
@@ -13,6 +19,7 @@ export default function RefillHistView() {
       <table className="table">
         <thead>
           <tr>
+            <th>#</th>
             <th>Patient</th>
             <th>Drug</th>
             <th>Quantity</th>
@@ -23,8 +30,9 @@ export default function RefillHistView() {
           </tr>
         </thead>
         <tbody>
-          {refillHist.map((s) => (
+          {pageItems.map((s, index) => (
             <tr key={s.id}>
+              <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
               <td>{s.patient?.first_name} {s.patient?.last_name}</td>
               <td>{s.drug?.drug_name}</td>
               <td>{s.quantity}</td>
@@ -36,6 +44,13 @@ export default function RefillHistView() {
           ))}
         </tbody>
       </table>
+      {total > PAGE_SIZE && (
+        <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
+          Showing {startIdx + 1}–{endIdx} of {total}
+          {page > 1 && <span> | [p] prev</span>}
+          {endIdx < total && <span> | [n] next</span>}
+        </div>
+      )}
     </div>
   );
 }

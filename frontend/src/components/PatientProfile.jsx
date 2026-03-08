@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from "react";
 import {getPatient } from "@/api";
 import Badge from "@/components/Badge"
+const PAGE_SIZE = 15;
 
-export default function PatientProfile({ pid }) {
+export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1 }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
     getPatient(pid)
-      .then((d) => mounted && setData(d))
+      .then((d) => {
+        if (!mounted) return;
+        setData(d);
+        onDataLoaded?.(d);
+      })
       .catch((e) => setError(e.message));
     return () => {
       mounted = false;
@@ -18,6 +23,12 @@ export default function PatientProfile({ pid }) {
 
   if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
   if (!data) return <p>Loading…</p>;
+
+  const prescriptions = data.prescriptions;
+  const total = prescriptions.length;
+  const startIdx = (page - 1) * PAGE_SIZE;
+  const endIdx = Math.min(startIdx + PAGE_SIZE, total);
+  const pageItems = prescriptions.slice(startIdx, endIdx);
 
   return (
     <div className="vstack">
@@ -35,7 +46,7 @@ export default function PatientProfile({ pid }) {
       <table className="table">
         <thead>
           <tr>
-            <th>ID</th>
+            <th>#</th>
             <th>Drug</th>
             <th>Qty Remaining</th>
             <th>Received</th>
@@ -44,13 +55,17 @@ export default function PatientProfile({ pid }) {
             <th>Last Sold</th>
             <th>Last cost</th>
             <th>Last filled</th>
-            <th>Next Pickup</th>
+            <th>Current Status</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {data.prescriptions.map((r) => (
+          {pageItems.map((r, index) => {
+            const BLOCKING_STATES = ["QT", "QV1", "QP", "QV2", "READY"];
+            const fillBlocked = r.latest_refill && BLOCKING_STATES.includes(r.latest_refill.state);
+            return (
             <tr key={r.id}>
-              <td>{r.id}</td>
+              <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
               <td>{r.drug.drug_name}</td>
               <td>{r.remaining_quantity}</td>
               <td>{new Date(r.date_received).toLocaleDateString()}</td>
@@ -61,25 +76,25 @@ export default function PatientProfile({ pid }) {
                 <td>{r.latest_refill.quantity}</td>
                 <td>{r.latest_refill.days_supply}</td>
                 <td>
-                  {r.latest_refill.sold_date 
-                    ? new Date(r.latest_refill.sold_date).toLocaleDateString() 
+                  {r.latest_refill.sold_date
+                    ? new Date(r.latest_refill.sold_date).toLocaleDateString()
                     : "—"}
                 </td>
                 <td>
-                  {r.latest_refill.total_cost 
-                    ? "$" + Number(r.total_cost).toFixed(2) 
+                  {r.latest_refill.total_cost
+                    ? "$" + Number(r.latest_refill.total_cost).toFixed(2)
                     : "—"}
                 </td>
                 <td>
-                  {r.latest_refill.completed_date 
-                    ? new Date(r.latest_refill.completed_date).toLocaleDateString() 
+                  {r.latest_refill.completed_date
+                    ? new Date(r.latest_refill.completed_date).toLocaleDateString()
                     : "—"}
                 </td>
                 <td>
-                  {r.latest_refill.state 
-                    ? <Badge state={r.latest_refill.state} />
-                    : r.latest_refill.next_pickup
-                      ? new Date(r.latest_refill.next_pickup).toLocaleDateString()
+                  {r.latest_refill.next_pickup
+                    ? new Date(r.latest_refill.next_pickup).toLocaleDateString()
+                    : r.latest_refill.state
+                      ? <Badge state={r.latest_refill.state} />
                       : "—"}
                 </td>
                 </>
@@ -90,10 +105,29 @@ export default function PatientProfile({ pid }) {
                   </td>
                 </>
               )}
+              <td>
+                {onFill && !fillBlocked && (
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: "2px 10px", fontSize: "0.8rem" }}
+                    onClick={() => onFill(r, data)}
+                  >
+                    Fill
+                  </button>
+                )}
+              </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
+      {total > PAGE_SIZE && (
+        <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
+          Showing {startIdx + 1}–{endIdx} of {total}
+          {page > 1 && <span> | [p] prev</span>}
+          {endIdx < total && <span> | [n] next</span>}
+        </div>
+      )}
     </div>
   );
 }
