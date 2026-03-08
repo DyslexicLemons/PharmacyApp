@@ -11,6 +11,9 @@ class PatientBase(BaseModel):
     address: str
 
 
+class PatientCreate(PatientBase):
+    pass
+
 class PatientOut(PatientBase):
     id: int
     first_name: str
@@ -151,13 +154,28 @@ class LatestRefillOut(BaseModel):
         from_attributes = True
 
 
+class RefillHistSimpleOut(BaseModel):
+    id: int
+    quantity: int
+    days_supply: int
+    completed_date: Optional[date] = None
+    sold_date: Optional[date] = None
+    total_cost: Decimal
+    copay_amount: Optional[Decimal] = None
+    insurance_paid: Optional[Decimal] = None
+    insurance: Optional["PatientInsuranceOut"] = None
+
+    class Config:
+        from_attributes = True
+
+
 class PrescriptionBase(BaseModel):
     drug_id: int
     brand_required: bool
     original_quantity: int
     remaining_quantity: int
     date_received: date
-    instructions: Optional[str] = None
+    instructions: str
 
 class PrescriptionOut(PrescriptionBase):
     id: int
@@ -181,6 +199,14 @@ class PrescriptionOut2(PrescriptionBase):
     remaining_quantity: int
     date_received: date
     latest_refill: Optional[LatestRefillOut] = None
+    refill_history: List[RefillHistSimpleOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class PrescriptionDetailOut(PrescriptionOut2):
+    patient: PatientOut
 
     class Config:
         from_attributes = True
@@ -257,6 +283,7 @@ class RefillHistOut(BaseModel):
     sold_date: Optional[date] = None
     copay_amount: Optional[Decimal] = None
     insurance_paid: Optional[Decimal] = None
+    insurance: Optional[PatientInsuranceOut] = None
 
     class Config:
         from_attributes = True
@@ -275,6 +302,7 @@ class AdvanceRequest(BaseModel):
     action: Optional[str] = None
     rejection_reason: Optional[str] = None
     rejected_by: Optional[str] = None
+    schedule_next_fill: bool = False
 
 
 class JSONPrescriptionUpload(BaseModel):
@@ -291,7 +319,7 @@ class JSONPrescriptionUpload(BaseModel):
 
 
 class ManualPrescriptionCreate(BaseModel):
-    """Schema for manual prescription entry that goes to QP or HOLD"""
+    """Schema for manual prescription entry that goes to QP, HOLD, or SCHEDULED"""
     patient_id: int
     drug_id: int
     prescriber_id: int
@@ -300,8 +328,9 @@ class ManualPrescriptionCreate(BaseModel):
     total_refills: int
     brand_required: bool = False
     priority: str = "normal"
-    initial_state: str = "QP"  # "QP" or "HOLD"
+    initial_state: str = "QP"  # "QP", "HOLD", or "SCHEDULED"
     due_date: Optional[date] = None
+    instructions: str
 
 
 class ConflictCheckResponse(BaseModel):
@@ -317,6 +346,6 @@ class FillScriptRequest(BaseModel):
     quantity: int
     days_supply: int
     priority: str = "normal"
-    initial_state: str = "QP"  # "QP" or "HOLD"
+    scheduled: bool = False  # True → SCHEDULED state; False → auto-determine (QT/QV1/QP)
     due_date: Optional[date] = None
     insurance_id: Optional[int] = None  # PatientInsurance.id for billing

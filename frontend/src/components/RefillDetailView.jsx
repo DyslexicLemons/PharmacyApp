@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import Badge from "@/components/Badge";
-import { advanceRx } from "@/api";
+import { advanceRx, getStock } from "@/api";
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
@@ -8,6 +8,9 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   const [refill, setRefill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showSellConfirm, setShowSellConfirm] = useState(false);
+  const [scheduleNextFill, setScheduleNextFill] = useState(false);
+  const [stockQty, setStockQty] = useState(null);
 
   useEffect(() => {
     fetchRefillDetails();
@@ -36,9 +39,32 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   };
 
   const handleApprove = async () => {
+    if (refill.state === "READY") {
+      try {
+        const stocks = await getStock();
+        const entry = stocks.find(s => s.drug_id === refill.drug_id);
+        setStockQty(entry ? entry.quantity : 0);
+        setScheduleNextFill(false);
+        setShowSellConfirm(true);
+      } catch (e) {
+        alert(`Error fetching stock: ${e.message}`);
+      }
+      return;
+    }
     try {
       const updated = await advanceRx(refillId, {});
       alert(`Prescription advanced to ${updated.state}`);
+      if (onUpdate) onUpdate(updated);
+      if (onBack) onBack();
+    } catch (e) {
+      alert(`Error: ${e.message}`);
+    }
+  };
+
+  const handleConfirmSell = async () => {
+    try {
+      const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill });
+      alert(`Prescription marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`);
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
@@ -67,12 +93,20 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   };
 
   const handleHold = async () => {
-    const confirm = window.confirm("Move this prescription to HOLD?");
-    if (!confirm) return;
+    const isQV2 = refill.state === "QV2";
+    const confirmMessage = isQV2
+      ? "This script has already been filled. Placing it on hold means you will need to return the medication to stock. Proceed?"
+      : "Move this prescription to HOLD?";
+
+    if (!window.confirm(confirmMessage)) return;
 
     try {
       const updated = await advanceRx(refillId, { action: "hold" });
-      alert("Prescription moved to HOLD");
+      if (isQV2) {
+        alert("Prescription placed on HOLD.\n\nThis script has been filled — please return the medication to stock.");
+      } else {
+        alert("Prescription moved to HOLD");
+      }
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
@@ -84,9 +118,9 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   if (error) return <div className="vstack"><p style={{ color: "var(--danger)" }}>{error}</p></div>;
   if (!refill) return <div className="vstack"><p>Refill not found</p></div>;
 
-  const canApprove = ["QT", "QV1", "QP", "QV2", "READY", "HOLD"].includes(refill.state);
+  const canApprove = ["QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED"].includes(refill.state);
   const canReject = ["QV1", "HOLD"].includes(refill.state);
-  const canHold = refill.state === "QV1";
+  const canHold = ["QT", "QV1", "QP", "QV2"].includes(refill.state);
 
   return (
     <div className="vstack">
@@ -185,6 +219,15 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
           <div>
             <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription</h3>
             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.5rem", fontSize: "0.95rem" }}>
+              <strong>Rx #:</strong>
+              <span>{refill.prescription.id}</span>
+
+              <strong>Orig. Qty:</strong>
+              <span>{refill.prescription.original_quantity}</span>
+
+              <strong>Remaining:</strong>
+              <span>{refill.prescription.remaining_quantity}</span>
+
               <strong>Quantity:</strong>
               <span>{refill.quantity}</span>
 
@@ -209,6 +252,12 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
               <strong>Brand Req:</strong>
               <span>{refill.prescription.brand_required ? "Yes" : "No"}</span>
             </div>
+            {refill.prescription.instructions && (
+              <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", background: "var(--bg-light)", borderRadius: "6px", fontSize: "0.9rem" }}>
+                <strong>Instructions:</strong>
+                <div style={{ marginTop: "0.25rem" }}>{refill.prescription.instructions}</div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -241,6 +290,75 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
           </div>
         )}
       </div>
+
+      {showSellConfirm && (() => {
+        const nextFillDate = new Date();
+        nextFillDate.setDate(nextFillDate.getDate() + refill.days_supply);
+        const insufficient = stockQty !== null && stockQty < refill.quantity;
+        return (
+          <div style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(0,0,0,0.55)", display: "flex",
+            alignItems: "center", justifyContent: "center", zIndex: 1000
+          }}>
+            <div className="card" style={{ padding: "2rem", maxWidth: "480px", width: "90%" }}>
+              <h3 style={{ marginTop: 0 }}>Confirm Sale</h3>
+              <p style={{ marginBottom: "1.25rem" }}>
+                Mark <strong>{refill.drug.drug_name}</strong> for{" "}
+                <strong>{refill.patient.first_name} {refill.patient.last_name}</strong> as sold?
+              </p>
+
+              <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "1rem", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={scheduleNextFill}
+                  onChange={e => setScheduleNextFill(e.target.checked)}
+                  style={{ width: "1.1rem", height: "1.1rem" }}
+                />
+                Schedule next fill
+              </label>
+
+              {scheduleNextFill && (
+                <div style={{
+                  marginTop: "1rem", padding: "0.85rem 1rem",
+                  background: "var(--bg-light)", borderRadius: "8px",
+                  border: "1px solid var(--border)", fontSize: "0.95rem"
+                }}>
+                  <div style={{ marginBottom: "0.4rem" }}>
+                    <strong>Next fill date:</strong>{" "}
+                    {nextFillDate.toLocaleDateString()}{" "}
+                    <span style={{ color: "var(--text-light)" }}>
+                      ({refill.days_supply} days from today)
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <strong>Stock:</strong>{" "}
+                    {stockQty ?? "?"} available &nbsp;|&nbsp; {refill.quantity} needed
+                    {insufficient && (
+                      <span style={{
+                        color: "var(--danger)", fontWeight: "bold",
+                        background: "rgba(239,71,111,0.1)", padding: "0.15rem 0.5rem",
+                        borderRadius: "4px"
+                      }}>
+                        ⚠ Insufficient stock
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "1rem", justifyContent: "flex-end", marginTop: "1.75rem" }}>
+                <button className="btn" onClick={() => setShowSellConfirm(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-success" onClick={handleConfirmSell}>
+                  Confirm Sale
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{
         position: "sticky",

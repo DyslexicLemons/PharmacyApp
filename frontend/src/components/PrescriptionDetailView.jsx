@@ -141,6 +141,10 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
 
   const lr = prescription.latest_refill;
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
+
+  // Build fill count map: sort refill_history by id asc, assign sequential fill numbers
+  const sortedHistory = [...(prescription.refill_history ?? [])].sort((a, b) => a.id - b.id);
+  const fillCountMap = Object.fromEntries(sortedHistory.map((h, i) => [h.id, i + 1]));
   const activeInsurance = patientInsurance.filter((i) => i.is_active);
 
   const handleInsuranceAdded = (newIns) => {
@@ -170,6 +174,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
       <div className="card vstack" style={{ gap: "0.5rem" }}>
         <h3 style={{ margin: 0 }}>Script Info</h3>
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
+          <div><strong>Rx #:</strong> {prescription.id}</div>
           <div><strong>Patient:</strong> {patientName}</div>
           <div>
             <strong>Drug:</strong> {prescription.drug.drug_name} ({prescription.drug.manufacturer})
@@ -206,7 +211,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         {lr ? (
           <>
             <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-              <div><strong>Refill ID:</strong> {lr.id}</div>
+              <div><strong>Fill #:</strong> {fillCountMap[lr.id] ?? "—"}</div>
               <div><strong>State:</strong> <Badge state={lr.state} /></div>
               <div><strong>Priority:</strong> {lr.priority ?? "—"}</div>
             </div>
@@ -276,6 +281,45 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
           </>
         ) : (
           <div style={{ color: "var(--text-light)" }}>No refills on file.</div>
+        )}
+      </div>
+
+      {/* Refill History */}
+      <div className="card vstack" style={{ gap: "0.5rem" }}>
+        <h3 style={{ margin: 0 }}>Refill History</h3>
+        {prescription.refill_history && prescription.refill_history.length > 0 ? (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Refill #</th>
+                <th>Qty</th>
+                <th>Days Supply</th>
+                <th>Filled</th>
+                <th>Sold</th>
+                <th>Cash Price</th>
+                <th>Insurance Billed</th>
+                <th>Ins. Paid</th>
+                <th>Copay</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prescription.refill_history.map((h) => (
+                <tr key={h.id}>
+                  <td><strong style={{ color: "var(--primary)" }}>{fillCountMap[h.id]}</strong></td>
+                  <td>{h.quantity}</td>
+                  <td>{h.days_supply}</td>
+                  <td>{h.completed_date ? new Date(h.completed_date).toLocaleDateString() : "—"}</td>
+                  <td>{h.sold_date ? new Date(h.sold_date).toLocaleDateString() : "—"}</td>
+                  <td>${Number(h.total_cost).toFixed(2)}</td>
+                  <td>{h.insurance?.insurance_company?.plan_name ?? "—"}</td>
+                  <td>{h.insurance_paid != null ? "$" + Number(h.insurance_paid).toFixed(2) : "—"}</td>
+                  <td>{h.copay_amount != null ? "$" + Number(h.copay_amount).toFixed(2) : "Cash"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div style={{ color: "var(--text-light)" }}>No refill history on file.</div>
         )}
       </div>
 

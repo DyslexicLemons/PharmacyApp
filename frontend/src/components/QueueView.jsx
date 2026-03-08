@@ -79,6 +79,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
           <thead>
             <tr>
               <th>#</th>
+              <th>Rx #</th>
               <th>Drug</th>
               <th>Patient</th>
               <th>Qty</th>
@@ -102,6 +103,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
                 <td>
                   <strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong>
                 </td>
+                <td><strong>{r.prescription?.id}</strong></td>
                 <td>
                   <div>
                     <strong>{r.drug.drug_name}</strong>
