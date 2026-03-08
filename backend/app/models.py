@@ -18,6 +18,7 @@ class RxState(str, enum.Enum):
     QV2 = "QV2" # Final Verify
     READY = "READY" # Ready for Pickup (with bin assignment)
     HOLD = "HOLD" # On Hold
+    SCHEDULED = "SCHEDULED" # Scheduled for future fill
     REJECTED = "REJECTED" # Rejected/Failed Verification
     SOLD = "SOLD"
 
@@ -45,7 +46,7 @@ class Prescription(Base):
     original_quantity = Column(Integer)
     remaining_quantity = Column(Integer)
     date_received = Column(Date)
-    instructions = Column(String, nullable=True)
+    instructions = Column(String, nullable=False)
 
     patient_id = Column(Integer, ForeignKey("patients.id"))
     patient = relationship("Patient", back_populates="prescriptions")

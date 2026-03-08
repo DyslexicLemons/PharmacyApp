@@ -1,17 +1,24 @@
 import { useState, useEffect } from "react";
-import { getPatients, getDrugs, getPrescribers } from "@/api";
+import { getDrugs, getPrescribers, searchPatients, getPatient } from "@/api";
+import NewPatientForm from "./NewPatientForm";
 
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
-export default function PrescriptionForm({ onBack }) {
-  const [step, setStep] = useState(1); // Multi-step form
-  const [patients, setPatients] = useState([]);
+export default function PrescriptionForm({ onBack, patientId }) {
+  const [step, setStep] = useState(1);
   const [drugs, setDrugs] = useState([]);
   const [prescribers, setPrescribers] = useState([]);
   const [conflict, setConflict] = useState(null);
 
+  // Patient search state (used when no patientId prop)
+  const [patientQuery, setPatientQuery] = useState("");
+  const [patientSearchResults, setPatientSearchResults] = useState([]);
+  const [patientSearchError, setPatientSearchError] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [showNewPatientForm, setShowNewPatientForm] = useState(false);
+  const [newPatientPrefill, setNewPatientPrefill] = useState({ last: "", first: "" });
+
   const [form, setForm] = useState({
-    patient_id: "",
     drug_id: "",
     prescriber_id: "",
     quantity: "",
@@ -19,16 +26,37 @@ export default function PrescriptionForm({ onBack }) {
     total_refills: "1",
     brand_required: false,
     priority: "normal",
-    initial_state: "QP",
     due_date: "",
+    instructions: "",
   });
 
   useEffect(() => {
-    // Load patients, drugs, prescribers
-    getPatients().then(setPatients).catch(console.error);
     getDrugs().then(setDrugs).catch(console.error);
     getPrescribers().then(setPrescribers).catch(console.error);
-  }, []);
+    if (patientId) {
+      getPatient(patientId).then(setSelectedPatient).catch(console.error);
+    }
+  }, [patientId]);
+
+  const handlePatientSearch = async (e) => {
+    e.preventDefault();
+    setPatientSearchError("");
+    setPatientSearchResults([]);
+    try {
+      const results = await searchPatients(patientQuery);
+      if (results.length === 0) {
+        const [last = "", first = ""] = patientQuery.split(",").map((s) => s.trim());
+        setNewPatientPrefill({ last, first });
+        setPatientSearchError("no_match");
+      } else if (results.length === 1) {
+        setSelectedPatient(results[0]);
+      } else {
+        setPatientSearchResults(results);
+      }
+    } catch (e) {
+      setPatientSearchError(e.message);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -36,39 +64,36 @@ export default function PrescriptionForm({ onBack }) {
   };
 
   const checkConflict = async () => {
-    if (!form.patient_id || !form.drug_id) {
+    if (!selectedPatient || !form.drug_id) {
       alert("Please select patient and drug first");
       return;
     }
-
     try {
       const res = await fetch(
-        `${API}/refills/check_conflict?patient_id=${form.patient_id}&drug_id=${form.drug_id}`
+        `${API}/refills/check_conflict?patient_id=${selectedPatient.id}&drug_id=${form.drug_id}`
       );
       if (!res.ok) throw new Error("Conflict check failed");
       const data = await res.json();
       setConflict(data);
-
       if (data.has_conflict) {
         const proceed = confirm(
           `${data.message}\n\nActive refills: ${data.active_refills.length}\nDo you want to continue anyway?`
         );
         if (!proceed) return;
       }
-
       setStep(2);
     } catch (e) {
       alert(e.message);
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (initialState) => {
     try {
       const res = await fetch(`${API}/refills/create_manual`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patient_id: parseInt(form.patient_id),
+          patient_id: selectedPatient.id,
           drug_id: parseInt(form.drug_id),
           prescriber_id: parseInt(form.prescriber_id),
           quantity: parseInt(form.quantity),
@@ -76,8 +101,9 @@ export default function PrescriptionForm({ onBack }) {
           total_refills: parseInt(form.total_refills),
           brand_required: form.brand_required,
           priority: form.priority,
-          initial_state: form.initial_state,
+          initial_state: initialState,
           due_date: form.due_date || null,
+          instructions: form.instructions,
         }),
       });
 
@@ -88,72 +114,126 @@ export default function PrescriptionForm({ onBack }) {
 
       const result = await res.json();
       alert(`Prescription created successfully!\nRefill ID: ${result.refill_id}\nState: ${result.state}`);
-
-      // Reset form
-      setForm({
-        patient_id: "",
-        drug_id: "",
-        prescriber_id: "",
-        quantity: "",
-        days_supply: "",
-        total_refills: "1",
-        brand_required: false,
-        priority: "normal",
-        initial_state: "QP",
-        due_date: "",
-      });
-      setStep(1);
-      setConflict(null);
-
       if (onBack) onBack();
     } catch (e) {
       alert(e.message);
     }
   };
 
-  const selectedPatient = patients.find(p => p.id === parseInt(form.patient_id));
   const selectedDrug = drugs.find(d => d.id === parseInt(form.drug_id));
   const selectedPrescriber = prescribers.find(p => p.id === parseInt(form.prescriber_id));
 
   return (
     <div className="vstack">
-      <h2>Create Manual Prescription</h2>
+      <h2>Create New Prescription</h2>
       <p style={{ color: "var(--text-light)", marginBottom: "1rem" }}>
-        Manual prescriptions bypass QT triage and go directly to {form.initial_state}
+        Manual prescriptions bypass QT triage. Choose how to proceed after entry.
       </p>
 
       {step === 1 && (
         <div className="vstack" style={{ gap: "1rem" }}>
           <h3>Step 1: Select Patient & Drug</h3>
 
+          {/* Patient section */}
           <div className="card" style={{ padding: "1rem" }}>
-            <label>
-              <strong>Patient</strong>
-              <select
-                name="patient_id"
-                value={form.patient_id}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              >
-                <option value="">-- Select Patient --</option>
-                {patients.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.last_name}, {p.first_name} (DOB: {p.dob})
-                  </option>
-                ))}
-              </select>
-            </label>
+            <strong>Patient</strong>
 
-            {selectedPatient && (
-              <div style={{ marginTop: "0.5rem", padding: "0.5rem", background: "var(--bg-light)", borderRadius: "4px" }}>
-                <strong>{selectedPatient.first_name} {selectedPatient.last_name}</strong>
-                <div style={{ fontSize: "0.9rem", color: "var(--text-light)" }}>
-                  DOB: {selectedPatient.dob} | {selectedPatient.address}
+            {showNewPatientForm ? (
+              <div style={{ marginTop: "0.5rem" }}>
+                <NewPatientForm
+                  prefillLast={newPatientPrefill.last}
+                  prefillFirst={newPatientPrefill.first}
+                  onBack={() => { setShowNewPatientForm(false); setPatientSearchError(""); }}
+                  onCreated={(patient) => {
+                    setSelectedPatient(patient);
+                    setShowNewPatientForm(false);
+                    setPatientSearchError("");
+                    setPatientQuery("");
+                  }}
+                />
+              </div>
+            ) : selectedPatient ? (
+              <div style={{ marginTop: "0.5rem" }}>
+                <div style={{ padding: "0.5rem", background: "var(--bg-light)", borderRadius: "4px" }}>
+                  <strong>{selectedPatient.last_name}, {selectedPatient.first_name}</strong>
+                  <div style={{ fontSize: "0.9rem", color: "var(--text-light)" }}>
+                    DOB: {selectedPatient.dob} | {selectedPatient.address}
+                  </div>
                 </div>
+                {!patientId && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ marginTop: "0.5rem" }}
+                    onClick={() => { setSelectedPatient(null); setPatientSearchResults([]); setPatientQuery(""); }}
+                  >
+                    Change Patient
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ marginTop: "0.5rem" }}>
+                <form onSubmit={handlePatientSearch} style={{ display: "flex", gap: "0.5rem" }}>
+                  <input
+                    autoFocus
+                    className="input"
+                    placeholder="Search: Last, First"
+                    value={patientQuery}
+                    onChange={(e) => setPatientQuery(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <button className="btn btn-primary" type="submit">Search</button>
+                </form>
+
+                {patientSearchError === "no_match" && (
+                  <div style={{ marginTop: "0.75rem" }}>
+                    <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+                      No matches for <strong>"{patientQuery}"</strong>. Create a new patient?
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => setShowNewPatientForm(true)}
+                      >
+                        Yes, Create Patient
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => { setPatientSearchError(""); setPatientQuery(""); }}
+                      >
+                        No
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {patientSearchError && patientSearchError !== "no_match" && (
+                  <div style={{ color: "var(--danger)", marginTop: "0.5rem", fontSize: "0.9rem" }}>
+                    {patientSearchError}
+                  </div>
+                )}
+
+                {patientSearchResults.length > 1 && (
+                  <div style={{ marginTop: "0.5rem" }}>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-light)", marginBottom: "0.25rem" }}>
+                      Multiple matches — select one:
+                    </div>
+                    {patientSearchResults.map(p => (
+                      <button
+                        key={p.id}
+                        className="btn btn-secondary"
+                        style={{ display: "block", width: "100%", textAlign: "left", marginBottom: "0.25rem" }}
+                        onClick={() => { setSelectedPatient(p); setPatientSearchResults([]); }}
+                      >
+                        {p.last_name}, {p.first_name} — DOB: {p.dob}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
+          {/* Drug section */}
           <div className="card" style={{ padding: "1rem" }}>
             <label>
               <strong>Drug</strong>
@@ -215,7 +295,7 @@ export default function PrescriptionForm({ onBack }) {
           <button
             className="btn btn-primary"
             onClick={checkConflict}
-            disabled={!form.patient_id || !form.drug_id}
+            disabled={!selectedPatient || !form.drug_id}
           >
             Check for Conflicts & Continue →
           </button>
@@ -225,6 +305,12 @@ export default function PrescriptionForm({ onBack }) {
       {step === 2 && (
         <div className="vstack" style={{ gap: "1rem" }}>
           <h3>Step 2: Prescription Details</h3>
+
+          {selectedPatient && (
+            <div style={{ padding: "0.5rem 1rem", background: "var(--bg-light)", borderRadius: "4px", fontSize: "0.9rem" }}>
+              Patient: <strong>{selectedPatient.last_name}, {selectedPatient.first_name}</strong> | Drug: <strong>{selectedDrug?.drug_name}</strong>
+            </div>
+          )}
 
           <div className="card" style={{ padding: "1rem" }}>
             <label>
@@ -318,19 +404,6 @@ export default function PrescriptionForm({ onBack }) {
               </select>
             </label>
 
-            <label>
-              <strong>Initial State</strong>
-              <select
-                name="initial_state"
-                value={form.initial_state}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              >
-                <option value="QP">QP (Prep/Fill)</option>
-                <option value="HOLD">HOLD (On Hold)</option>
-              </select>
-            </label>
-
             <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <input
                 type="checkbox"
@@ -342,19 +415,45 @@ export default function PrescriptionForm({ onBack }) {
             </label>
           </div>
 
-          <div style={{ display: "flex", gap: "1rem" }}>
-            <button
-              className="btn btn-secondary"
-              onClick={() => setStep(1)}
-            >
+          <div className="card" style={{ padding: "1rem" }}>
+            <label>
+              <strong>Instructions <span style={{ color: "var(--danger)" }}>*</span></strong>
+              <textarea
+                name="instructions"
+                value={form.instructions}
+                onChange={handleChange}
+                required
+                rows={3}
+                placeholder="e.g. Take 1 tablet by mouth once daily with food"
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem", resize: "vertical" }}
+              />
+            </label>
+          </div>
+
+          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+            <button className="btn btn-secondary" onClick={() => setStep(1)}>
               ← Back
             </button>
             <button
               className="btn btn-success"
-              onClick={handleSubmit}
-              disabled={!form.prescriber_id || !form.quantity || !form.days_supply}
+              onClick={() => handleSubmit("QP")}
+              disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
             >
-              Create Prescription
+              Fill Now
+            </button>
+            <button
+              className="btn btn-warning"
+              onClick={() => handleSubmit("HOLD")}
+              disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
+            >
+              Put on Hold
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => handleSubmit("SCHEDULED")}
+              disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
+            >
+              Schedule
             </button>
           </div>
         </div>

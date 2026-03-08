@@ -43,10 +43,14 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
         <div>{data.address}</div>
       </div>
       <h3>Prescriptions</h3>
+      {total === 0 ? (
+        <p style={{ color: "var(--text-light)", textAlign: "center", fontSize: "1.4rem", marginTop: "2rem" }}>No prescriptions</p>
+      ) : (
       <table className="table">
         <thead>
           <tr>
             <th>#</th>
+            <th>Rx #</th>
             <th>Drug</th>
             <th>Qty Remaining</th>
             <th>Received</th>
@@ -66,6 +70,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
             return (
             <tr key={r.id}>
               <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
+              <td><strong>{r.id}</strong></td>
               <td>{r.drug.drug_name}</td>
               <td>{r.remaining_quantity}</td>
               <td>{new Date(r.date_received).toLocaleDateString()}</td>
@@ -121,6 +126,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
           })}
         </tbody>
       </table>
+      )}
       {total > PAGE_SIZE && (
         <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
           Showing {startIdx + 1}–{endIdx} of {total}

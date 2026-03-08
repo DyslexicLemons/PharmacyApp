@@ -56,7 +56,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
     quantity: lr?.quantity ?? "",
     days_supply: lr?.days_supply ?? "",
     priority: "normal",
-    initial_state: isScheduled ? "HOLD" : "QP",
+    scheduled: isScheduled,
     due_date: isScheduled ? nextPickupDate(prescription) : "",
   });
 
@@ -95,7 +95,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
   const handleSchedule = () => setShowEarlyModal(false);
 
   const handleFillNow = () => {
-    setForm((f) => ({ ...f, initial_state: "QP", due_date: "" }));
+    setForm((f) => ({ ...f, scheduled: false, due_date: "" }));
     setShowEarlyModal(false);
   };
 
@@ -107,7 +107,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
         quantity: parseInt(form.quantity),
         days_supply: parseInt(form.days_supply),
         priority: form.priority,
-        initial_state: form.initial_state,
+        scheduled: form.scheduled,
         due_date: form.due_date || null,
         insurance_id: selectedInsuranceId ? parseInt(selectedInsuranceId) : null,
       });
@@ -182,6 +182,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
       <div className="card vstack" style={{ gap: "0.5rem" }}>
         <h3 style={{ margin: 0 }}>Script Details</h3>
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
+          <div><strong>Rx #:</strong> {prescription.id}</div>
           <div><strong>Patient:</strong> {patientName}</div>
           <div>
             <strong>Drug:</strong> {prescription.drug.drug_name} ({prescription.drug.manufacturer})
@@ -200,6 +201,10 @@ export default function FillScriptView({ prescription, patientName, patientId, o
           <div><strong>Remaining Qty on Script:</strong> {prescription.remaining_quantity}</div>
           <div><strong>Brand Required:</strong> {prescription.brand_required ? "Yes" : "No"}</div>
         </div>
+
+        {prescription.instructions && (
+          <div><strong>Instructions:</strong> {prescription.instructions}</div>
+        )}
 
         {lr && (
           <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap", color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.25rem" }}>
@@ -272,19 +277,6 @@ export default function FillScriptView({ prescription, patientName, patientId, o
               <option value="normal">Normal</option>
               <option value="high">High</option>
               <option value="stat">Stat</option>
-            </select>
-          </label>
-
-          <label>
-            <strong>Initial State</strong>
-            <select
-              name="initial_state"
-              value={form.initial_state}
-              onChange={handleChange}
-              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-            >
-              <option value="QP">QP (Prep/Fill)</option>
-              <option value="HOLD">HOLD (On Hold)</option>
             </select>
           </label>
 
