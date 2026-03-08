@@ -1,7 +1,22 @@
 from decimal import Decimal
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import date
 from typing import List, Optional
+
+# Valid priority strings accepted by the API
+VALID_PRIORITIES = {"low", "normal", "high", "stat"}
+
+
+def _validate_priority(v: str) -> str:
+    if v.lower() not in VALID_PRIORITIES:
+        raise ValueError(f"priority must be one of {sorted(VALID_PRIORITIES)}")
+    return v.lower()
+
+
+def _validate_positive_int(name: str, v: int) -> int:
+    if v <= 0:
+        raise ValueError(f"{name} must be greater than 0")
+    return v
 
 
 class PatientBase(BaseModel):
@@ -43,6 +58,7 @@ class PrescriberOut(PrescriberBase):
 
 class DrugBase(BaseModel):
     drug_name: str
+    ndc: Optional[str] = None
     manufacturer: str
     cost: Decimal
     niosh: bool = False
@@ -52,6 +68,7 @@ class DrugBase(BaseModel):
 class DrugOut(BaseModel):
     id: int
     drug_name: str
+    ndc: Optional[str] = None
     manufacturer: str
     cost: Decimal
     niosh: bool
@@ -69,6 +86,7 @@ class StockBase(BaseModel):
 class StockOut(BaseModel):
     drug_id: int
     quantity: int
+    package_size: int
     drug: DrugOut
 
     class Config:
@@ -126,6 +144,16 @@ class BillingCalculateRequest(BaseModel):
     insurance_id: int  # PatientInsurance.id
     quantity: int
     days_supply: int
+
+    @field_validator("quantity")
+    @classmethod
+    def quantity_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("quantity", v)
+
+    @field_validator("days_supply")
+    @classmethod
+    def days_supply_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("days_supply", v)
 
 
 class BillingCalculateResponse(BaseModel):
@@ -217,10 +245,20 @@ class PrescriptionCreate(BaseModel):
     patient_id: int
     drug_id: int
     brand_required: int
-    directions: str
+    directions: str  # mapped to Prescription.instructions in the endpoint
     refill_quantity: int
     total_refills: int
     npi: int
+
+    @field_validator("refill_quantity")
+    @classmethod
+    def refill_quantity_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("refill_quantity", v)
+
+    @field_validator("total_refills")
+    @classmethod
+    def total_refills_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("total_refills", v)
 
 
 class RefillBase(BaseModel):
@@ -317,6 +355,21 @@ class JSONPrescriptionUpload(BaseModel):
     brand_required: bool = False
     priority: str = "normal"
 
+    @field_validator("refill_quantity")
+    @classmethod
+    def refill_quantity_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("refill_quantity", v)
+
+    @field_validator("total_refills")
+    @classmethod
+    def total_refills_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("total_refills", v)
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: str) -> str:
+        return _validate_priority(v)
+
 
 class ManualPrescriptionCreate(BaseModel):
     """Schema for manual prescription entry that goes to QP, HOLD, or SCHEDULED"""
@@ -331,6 +384,34 @@ class ManualPrescriptionCreate(BaseModel):
     initial_state: str = "QP"  # "QP", "HOLD", or "SCHEDULED"
     due_date: Optional[date] = None
     instructions: str
+
+    @field_validator("quantity")
+    @classmethod
+    def quantity_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("quantity", v)
+
+    @field_validator("days_supply")
+    @classmethod
+    def days_supply_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("days_supply", v)
+
+    @field_validator("total_refills")
+    @classmethod
+    def total_refills_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("total_refills", v)
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: str) -> str:
+        return _validate_priority(v)
+
+    @field_validator("initial_state")
+    @classmethod
+    def initial_state_must_be_valid(cls, v: str) -> str:
+        allowed = {"QP", "HOLD", "SCHEDULED"}
+        if v not in allowed:
+            raise ValueError(f"initial_state must be one of {sorted(allowed)}")
+        return v
 
 
 class ConflictCheckResponse(BaseModel):
@@ -349,3 +430,18 @@ class FillScriptRequest(BaseModel):
     scheduled: bool = False  # True → SCHEDULED state; False → auto-determine (QT/QV1/QP)
     due_date: Optional[date] = None
     insurance_id: Optional[int] = None  # PatientInsurance.id for billing
+
+    @field_validator("quantity")
+    @classmethod
+    def quantity_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("quantity", v)
+
+    @field_validator("days_supply")
+    @classmethod
+    def days_supply_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("days_supply", v)
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: str) -> str:
+        return _validate_priority(v)

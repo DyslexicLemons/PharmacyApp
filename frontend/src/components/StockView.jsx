@@ -21,8 +21,11 @@ export default function StockView({ onBack, onSelectStock, page = 1 }) {
           <tr>
             <th>#</th>
             <th>Name</th>
+            <th>NDC</th>
             <th>Manufacturer</th>
             <th>Quantity</th>
+            <th>Full Containers</th>
+            <th>Partial Container</th>
             <th>NIOSH</th>
           </tr>
         </thead>
@@ -36,8 +39,11 @@ export default function StockView({ onBack, onSelectStock, page = 1 }) {
             >
                 <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
                 <td>{s.drug.drug_name}</td>
+                <td style={{ fontFamily: "monospace", fontSize: "0.9rem" }}>{s.drug.ndc ?? "—"}</td>
                 <td>{s.drug.manufacturer}</td>
                 <td>{s.quantity}</td>
+                <td>{Math.floor(s.quantity / s.package_size)}</td>
+                <td>{s.quantity % s.package_size > 0 ? `${s.quantity % s.package_size} / ${s.package_size}` : "—"}</td>
                 <td>{s.drug.niosh ? "✔️" : "—"}</td>
             </tr>
             ))}

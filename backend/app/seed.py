@@ -52,45 +52,45 @@ db.commit()
 
 # Add drugs
 drugs = [
-    Drug(drug_name="Tylenol", manufacturer="Reddy", cost=Decimal("0.20"), niosh=False, drug_class=1,
+    Drug(drug_name="Tylenol", ndc="00536-3231-01", manufacturer="Reddy", cost=Decimal("0.20"), niosh=False, drug_class=1,
          description="White round tablet, imprint '325'"),
-    Drug(drug_name="Amoxicillin", manufacturer="Pfizer", cost=Decimal("0.50"), niosh=False, drug_class=2,
+    Drug(drug_name="Amoxicillin", ndc="00069-3060-20", manufacturer="Pfizer", cost=Decimal("0.50"), niosh=False, drug_class=2,
          description="Pink oval capsule, imprint 'AMOX 500'"),
-    Drug(drug_name="Cisplatin", manufacturer="Teva", cost=Decimal("25.00"), niosh=True, drug_class=3,
+    Drug(drug_name="Cisplatin", ndc="00703-5747-11", manufacturer="Teva", cost=Decimal("25.00"), niosh=True, drug_class=3,
          description="Clear solution in vial - NIOSH HAZARDOUS"),
-    Drug(drug_name="Metformin", manufacturer="Sun Pharma", cost=Decimal("0.15"), niosh=False, drug_class=5,
+    Drug(drug_name="Metformin", ndc="62756-0045-83", manufacturer="Sun Pharma", cost=Decimal("0.15"), niosh=False, drug_class=5,
          description="White round tablet, imprint 'M 500'"),
-    Drug(drug_name="Ibuprofen", manufacturer="Bayer", cost=Decimal("0.10"), niosh=False, drug_class=1,
+    Drug(drug_name="Ibuprofen", ndc="00280-0401-10", manufacturer="Bayer", cost=Decimal("0.10"), niosh=False, drug_class=1,
          description="Brown oval tablet, imprint 'IBU 200'"),
-    Drug(drug_name="Aspirin", manufacturer="Bayer", cost=Decimal("0.05"), niosh=False, drug_class=1,
+    Drug(drug_name="Aspirin", ndc="00280-0113-10", manufacturer="Bayer", cost=Decimal("0.05"), niosh=False, drug_class=1,
          description="White round tablet, imprint 'BAYER'"),
-    Drug(drug_name="Lisinopril", manufacturer="Merck", cost=Decimal("0.12"), niosh=False, drug_class=4,
+    Drug(drug_name="Lisinopril", ndc="00006-0207-54", manufacturer="Merck", cost=Decimal("0.12"), niosh=False, drug_class=4,
          description="Pink round tablet, imprint 'L 10'"),
-    Drug(drug_name="Hydrochlorothiazide", manufacturer="Pfizer", cost=Decimal("0.08"), niosh=False, drug_class=4,
+    Drug(drug_name="Hydrochlorothiazide", ndc="00069-2470-66", manufacturer="Pfizer", cost=Decimal("0.08"), niosh=False, drug_class=4,
          description="White round tablet, imprint 'H 25'"),
-    Drug(drug_name="Warfarin", manufacturer="BMS", cost=Decimal("0.25"), niosh=True, drug_class=6,
+    Drug(drug_name="Warfarin", ndc="00087-0137-02", manufacturer="BMS", cost=Decimal("0.25"), niosh=True, drug_class=6,
          description="Tan round tablet, imprint 'W 5' - BLOOD THINNER"),
-    Drug(drug_name="Atorvastatin", manufacturer="Pfizer", cost=Decimal("0.30"), niosh=False, drug_class=4,
+    Drug(drug_name="Atorvastatin", ndc="00069-0156-66", manufacturer="Pfizer", cost=Decimal("0.30"), niosh=False, drug_class=4,
          description="White oval tablet, imprint 'PD 155'"),
-    Drug(drug_name="Omeprazole", manufacturer="AstraZeneca", cost=Decimal("0.40"), niosh=False, drug_class=4,
+    Drug(drug_name="Omeprazole", ndc="00310-0607-30", manufacturer="AstraZeneca", cost=Decimal("0.40"), niosh=False, drug_class=4,
          description="Purple and pink capsule, imprint 'A/OM 20'"),
-    Drug(drug_name="Prednisone", manufacturer="Teva", cost=Decimal("0.10"), niosh=False, drug_class=4,
+    Drug(drug_name="Prednisone", ndc="00093-5052-05", manufacturer="Teva", cost=Decimal("0.10"), niosh=False, drug_class=4,
          description="White round tablet, imprint 'P 5'"),
-    Drug(drug_name="Insulin", manufacturer="Novo Nordisk", cost=Decimal("8.00"), niosh=False, drug_class=5,
+    Drug(drug_name="Insulin", ndc="00169-7501-11", manufacturer="Novo Nordisk", cost=Decimal("8.00"), niosh=False, drug_class=5,
          description="Clear solution in pen injector - REFRIGERATE"),
-    Drug(drug_name="Methotrexate", manufacturer="Teva", cost=Decimal("5.00"), niosh=True, drug_class=3,
+    Drug(drug_name="Methotrexate", ndc="00093-7502-56", manufacturer="Teva", cost=Decimal("5.00"), niosh=True, drug_class=3,
          description="Yellow round tablet, imprint 'MTX' - NIOSH HAZARDOUS"),
-    Drug(drug_name="Alprazolam", manufacturer="Pfizer", cost=Decimal("0.50"), niosh=False, drug_class=7,
+    Drug(drug_name="Alprazolam", ndc="00069-1620-66", manufacturer="Pfizer", cost=Decimal("0.50"), niosh=False, drug_class=7,
          description="White oval tablet, imprint 'X 2' - CONTROLLED SUBSTANCE"),
-    Drug(drug_name="Morphine", manufacturer="Purdue", cost=Decimal("1.50"), niosh=False, drug_class=6,
+    Drug(drug_name="Morphine", ndc="59011-0453-10", manufacturer="Purdue", cost=Decimal("1.50"), niosh=False, drug_class=6,
          description="White round tablet, imprint 'M 15' - CONTROLLED SUBSTANCE"),
-    Drug(drug_name="Cyclophosphamide", manufacturer="Teva", cost=Decimal("18.00"), niosh=True, drug_class=3,
+    Drug(drug_name="Cyclophosphamide", ndc="00703-4297-01", manufacturer="Teva", cost=Decimal("18.00"), niosh=True, drug_class=3,
          description="White round tablet in blister pack - NIOSH HAZARDOUS"),
-    Drug(drug_name="Ceftriaxone", manufacturer="Roche", cost=Decimal("2.00"), niosh=False, drug_class=2,
+    Drug(drug_name="Ceftriaxone", ndc="00004-1962-06", manufacturer="Roche", cost=Decimal("2.00"), niosh=False, drug_class=2,
          description="White powder in vial for injection"),
-    Drug(drug_name="Azithromycin", manufacturer="Pfizer", cost=Decimal("1.00"), niosh=False, drug_class=2,
+    Drug(drug_name="Azithromycin", ndc="00069-3060-30", manufacturer="Pfizer", cost=Decimal("1.00"), niosh=False, drug_class=2,
          description="Pink oval tablet, imprint 'ZITH 250'"),
-    Drug(drug_name="Furosemide", manufacturer="Novartis", cost=Decimal("0.20"), niosh=False, drug_class=4,
+    Drug(drug_name="Furosemide", ndc="00078-0161-05", manufacturer="Novartis", cost=Decimal("0.20"), niosh=False, drug_class=4,
          description="White round tablet, imprint 'F 40'"),
 ]
 
@@ -100,26 +100,26 @@ db.commit()
 
 # Add Stock
 stock_entries = [
-    Stock(drug_id=1, quantity=1000),   # Tylenol
-    Stock(drug_id=2, quantity=988),    # Amoxicillin
-    Stock(drug_id=3, quantity=100),    # Cisplatin (hazardous)
-    Stock(drug_id=4, quantity=20),     # Metformin
-    Stock(drug_id=5, quantity=500),    # Ibuprofen
-    Stock(drug_id=6, quantity=750),    # Lipitor
-    Stock(drug_id=7, quantity=200),    # Warfarin
-    Stock(drug_id=8, quantity=300),    # Levothyroxine
-    Stock(drug_id=9, quantity=400),    # Omeprazole
-    Stock(drug_id=10, quantity=150),   # Albuterol
-    Stock(drug_id=11, quantity=600),   # Simvastatin
-    Stock(drug_id=12, quantity=50),    # Methotrexate (hazardous)
-    Stock(drug_id=13, quantity=250),   # Furosemide
-    Stock(drug_id=14, quantity=350),   # Gabapentin
-    Stock(drug_id=15, quantity=80),    # Cyclophosphamide (hazardous)
-    Stock(drug_id=16, quantity=400),   # Lisinopril
-    Stock(drug_id=17, quantity=450),   # Prednisone
-    Stock(drug_id=18, quantity=100),   # Doxorubicin (hazardous)
-    Stock(drug_id=19, quantity=500),   # Amlodipine
-    Stock(drug_id=20, quantity=300),   # Metoprolol
+    Stock(drug_id=1, quantity=1000, package_size=500),   # Tylenol
+    Stock(drug_id=2, quantity=988,  package_size=500),   # Amoxicillin
+    Stock(drug_id=3, quantity=100,  package_size=50),    # Cisplatin (hazardous)
+    Stock(drug_id=4, quantity=20,   package_size=100),   # Metformin
+    Stock(drug_id=5, quantity=500,  package_size=250),   # Ibuprofen
+    Stock(drug_id=6, quantity=750,  package_size=500),   # Lipitor
+    Stock(drug_id=7, quantity=200,  package_size=100),   # Warfarin
+    Stock(drug_id=8, quantity=300,  package_size=100),   # Levothyroxine
+    Stock(drug_id=9, quantity=400,  package_size=100),   # Omeprazole
+    Stock(drug_id=10, quantity=150, package_size=200),   # Albuterol
+    Stock(drug_id=11, quantity=600, package_size=500),   # Simvastatin
+    Stock(drug_id=12, quantity=50,  package_size=25),    # Methotrexate (hazardous)
+    Stock(drug_id=13, quantity=250, package_size=100),   # Furosemide
+    Stock(drug_id=14, quantity=350, package_size=100),   # Gabapentin
+    Stock(drug_id=15, quantity=80,  package_size=50),    # Cyclophosphamide (hazardous)
+    Stock(drug_id=16, quantity=400, package_size=100),   # Lisinopril
+    Stock(drug_id=17, quantity=450, package_size=100),   # Prednisone
+    Stock(drug_id=18, quantity=100, package_size=50),    # Doxorubicin (hazardous)
+    Stock(drug_id=19, quantity=500, package_size=250),   # Amlodipine
+    Stock(drug_id=20, quantity=300, package_size=100),   # Metoprolol
 ]
 
 db.add_all(stock_entries)
