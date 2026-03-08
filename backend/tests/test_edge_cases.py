@@ -1,0 +1,560 @@
+"""
+test_edge_cases.py — Boundary conditions, edge cases, and pharmacy safety tests.
+
+Covers the "what if" scenarios that could cause silent data corruption or
+patient safety issues if not properly handled.
+"""
+import pytest
+from decimal import Decimal
+from datetime import date, timedelta
+
+from app.models import RxState, Priority, Refill, Prescription, RefillHist
+from tests.conftest import (
+    make_prescriber, make_drug, make_patient, make_prescription,
+    make_refill, make_insurance, make_formulary, make_patient_insurance,
+)
+
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def fill(client, rx_id, quantity=30, days_supply=30, **kwargs):
+    payload = {"quantity": quantity, "days_supply": days_supply, "priority": "normal"}
+    payload.update(kwargs)
+    return client.post(f"/prescriptions/{rx_id}/fill", json=payload)
+
+
+def advance(client, refill_id, **kwargs):
+    payload = {"schedule_next_fill": False}
+    payload.update(kwargs)
+    return client.post(f"/refills/{refill_id}/advance", json=payload)
+
+
+# ===========================================================================
+# QUANTITY BOUNDARY TESTS
+# ===========================================================================
+
+class TestQuantityBoundaries:
+    def test_fill_quantity_of_one_succeeds(self, client, base_data):
+        """Minimum non-zero fill quantity (1 unit) is valid."""
+        rx_id = base_data["prescription"].id
+        resp = fill(client, rx_id, quantity=1)
+        assert resp.status_code == 200
+
+    def test_fill_quantity_zero_rejected_by_schema(self, client, base_data):
+        rx_id = base_data["prescription"].id
+        resp = fill(client, rx_id, quantity=0)
+        assert resp.status_code == 422
+
+    def test_fill_quantity_negative_rejected_by_schema(self, client, base_data):
+        rx_id = base_data["prescription"].id
+        resp = fill(client, rx_id, quantity=-1)
+        assert resp.status_code == 422
+
+    def test_fill_exactly_remaining_sets_remaining_to_zero(self, client, db_session):
+        """After filling the exact remaining, remaining_quantity == 0."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 30, 30)
+        db.commit()
+
+        fill(client, prescription.id, quantity=30)
+        db.refresh(prescription)
+        assert prescription.remaining_quantity == 0
+
+    def test_prescription_with_one_remaining_can_fill_one(self, client, db_session):
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 1)
+        db.commit()
+
+        resp = fill(client, prescription.id, quantity=1)
+        assert resp.status_code == 200
+
+    def test_prescription_with_one_remaining_cannot_fill_two(self, client, db_session):
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 1)
+        db.commit()
+
+        resp = fill(client, prescription.id, quantity=2)
+        assert resp.status_code == 422
+
+    def test_remaining_quantity_never_goes_negative(self, client, db_session):
+        """Guards against quantity going negative under any valid code path."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 30, 30)
+        db.commit()
+
+        fill(client, prescription.id, quantity=30)
+        db.refresh(prescription)
+        assert prescription.remaining_quantity >= 0
+
+    def test_days_supply_of_one_is_valid(self, client, base_data):
+        rx_id = base_data["prescription"].id
+        resp = fill(client, rx_id, quantity=1, days_supply=1)
+        assert resp.status_code == 200
+
+    def test_days_supply_of_90_is_valid(self, client, base_data):
+        rx_id = base_data["prescription"].id
+        resp = fill(client, rx_id, quantity=30, days_supply=90)
+        assert resp.status_code == 200
+
+
+# ===========================================================================
+# PRESCRIPTION QUANTITY CALCULATION
+# ===========================================================================
+
+class TestPrescriptionQuantityCalculation:
+    def test_original_quantity_equals_refill_qty_times_total_refills(self, client, db_session):
+        """POST /prescriptions: original_qty = refill_quantity × total_refills."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        db.commit()
+
+        payload = {
+            "date": str(date.today()),
+            "patient_id": patient.id,
+            "drug_id": drug.id,
+            "brand_required": 0,
+            "directions": "Take 1 tablet daily",
+            "refill_quantity": 30,
+            "total_refills": 3,
+            "npi": prescriber.npi,
+        }
+        resp = client.post("/prescriptions", json=payload)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["original_quantity"] == 90   # 30 × 3
+        assert body["remaining_quantity"] == 90
+
+    def test_remaining_quantity_decrements_correctly_across_multiple_fills(self, client, db_session):
+        """
+        Sequential fills from the same prescription each decrement correctly:
+        90 → 60 (after 1st fill SOLD) → 30 (after 2nd fill SOLD)
+        """
+        from app.models import Refill as RefillModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        db.commit()
+
+        # First fill: QT → QV1 → QP → QV2 → READY → SOLD
+        fill(client, prescription.id, quantity=30)
+        rx1 = db.query(RefillModel).order_by(RefillModel.id.desc()).first()
+        for _ in range(4):  # QT→QV1→QP→QV2→READY then SOLD
+            advance(client, rx1.id)
+        advance(client, rx1.id)  # READY → SOLD
+
+        db.refresh(prescription)
+        assert prescription.remaining_quantity == 60
+
+        # Second fill
+        fill(client, prescription.id, quantity=30)
+        rx2 = db.query(RefillModel).filter(RefillModel.state != RxState.SOLD).order_by(RefillModel.id.desc()).first()
+        for _ in range(5):
+            advance(client, rx2.id)
+
+        db.refresh(prescription)
+        assert prescription.remaining_quantity == 30
+
+
+# ===========================================================================
+# PATIENT EDGE CASES
+# ===========================================================================
+
+class TestPatientEdgeCases:
+    def test_create_patient_with_minimum_data(self, client, db_session):
+        resp = client.post("/patients", json={
+            "first_name": "A",
+            "last_name": "B",
+            "dob": "2000-01-01",
+            "address": "1 X St",
+        })
+        assert resp.status_code == 200
+        assert resp.json()["first_name"] == "A"
+
+    def test_get_nonexistent_patient_returns_404(self, client, db_session):
+        resp = client.get("/patients/99999")
+        assert resp.status_code == 404
+
+    def test_patient_with_no_prescriptions_returns_empty_list(self, client, db_session):
+        db = db_session
+        patient = make_patient(db)
+        db.commit()
+
+        resp = client.get(f"/patients/{patient.id}")
+        assert resp.status_code == 200
+        assert resp.json()["prescriptions"] == []
+
+    def test_search_patient_by_name(self, client, db_session):
+        db = db_session
+        make_patient(db, first="Zara", last="Zebra")
+        db.commit()
+
+        resp = client.get("/patients", params={"q": "Zebra,Zara"})
+        assert resp.status_code == 200
+
+    def test_get_patient_returns_correct_fields(self, client, db_session):
+        db = db_session
+        patient = make_patient(db, first="Jane", last="Smith", dob=date(1985, 6, 15))
+        db.commit()
+
+        resp = client.get(f"/patients/{patient.id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["first_name"] == "Jane"
+        assert body["last_name"] == "Smith"
+
+
+# ===========================================================================
+# PRESCRIPTION CREATION EDGE CASES
+# ===========================================================================
+
+class TestPrescriptionCreationEdgeCases:
+    def test_create_prescription_with_nonexistent_patient_returns_404(self, client, db_session):
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        db.commit()
+
+        payload = {
+            "date": str(date.today()),
+            "patient_id": 99999,  # Does not exist
+            "drug_id": drug.id,
+            "brand_required": 0,
+            "directions": "Take daily",
+            "refill_quantity": 30,
+            "total_refills": 3,
+            "npi": prescriber.npi,
+        }
+        resp = client.post("/prescriptions", json=payload)
+        assert resp.status_code == 404
+
+    def test_create_prescription_with_nonexistent_prescriber_returns_404(self, client, db_session):
+        db = db_session
+        drug = make_drug(db)
+        patient = make_patient(db)
+        db.commit()
+
+        payload = {
+            "date": str(date.today()),
+            "patient_id": patient.id,
+            "drug_id": drug.id,
+            "brand_required": 0,
+            "directions": "Take daily",
+            "refill_quantity": 30,
+            "total_refills": 3,
+            "npi": 9999999999,  # Does not exist
+        }
+        resp = client.post("/prescriptions", json=payload)
+        assert resp.status_code == 404
+
+    def test_create_prescription_writes_audit_log(self, client, db_session):
+        from app.models import AuditLog
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        db.commit()
+
+        client.post("/prescriptions", json={
+            "date": str(date.today()),
+            "patient_id": patient.id,
+            "drug_id": drug.id,
+            "brand_required": 0,
+            "directions": "Take daily",
+            "refill_quantity": 30,
+            "total_refills": 3,
+            "npi": prescriber.npi,
+        })
+        log = db.query(AuditLog).filter(AuditLog.action == "PRESCRIPTION_CREATED").first()
+        assert log is not None
+
+
+# ===========================================================================
+# COST CALCULATION EDGE CASES
+# ===========================================================================
+
+class TestCostCalculationEdgeCases:
+    def test_total_cost_equals_drug_cost_times_quantity(self, client, db_session):
+        """total_cost = drug.cost × quantity, verified via the refill record."""
+        from app.models import Refill as RefillModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("2.50"))
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        db.commit()
+
+        fill(client, prescription.id, quantity=30)
+        refill = db.query(RefillModel).first()
+        assert Decimal(str(refill.total_cost)) == Decimal("75.00")  # 2.50 × 30
+
+    def test_low_cost_drug_fills_correctly(self, client, db_session):
+        """Drugs with very small costs (e.g., $0.01 per unit) calculate correctly."""
+        from app.models import Refill as RefillModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("0.01"))
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        db.commit()
+
+        fill(client, prescription.id, quantity=30)
+        refill = db.query(RefillModel).first()
+        assert Decimal(str(refill.total_cost)) == Decimal("0.30")
+
+    def test_high_cost_specialty_drug_fills_correctly(self, client, db_session):
+        """High-cost specialty drugs (e.g., $500/unit) calculate correctly."""
+        from app.models import Refill as RefillModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("500.00"))
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        db.commit()
+
+        fill(client, prescription.id, quantity=30)
+        refill = db.query(RefillModel).first()
+        assert Decimal(str(refill.total_cost)) == Decimal("15000.00")
+
+
+# ===========================================================================
+# CONFLICT CHECK
+# ===========================================================================
+
+class TestConflictCheck:
+    def test_no_conflict_for_new_drug(self, client, db_session):
+        db = db_session
+        patient = make_patient(db)
+        drug = make_drug(db)
+        db.commit()
+
+        resp = client.get(
+            "/refills/check_conflict",
+            params={"patient_id": patient.id, "drug_id": drug.id}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["has_conflict"] is False
+        assert body["active_refills"] == []
+
+    def test_conflict_detected_when_active_refill_exists(self, client, db_session):
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        make_refill(db, prescription, drug, patient, state=RxState.QT)
+        db.commit()
+
+        resp = client.get(
+            "/refills/check_conflict",
+            params={"patient_id": patient.id, "drug_id": drug.id}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["has_conflict"] is True
+        assert len(body["active_refills"]) == 1
+
+    def test_no_conflict_after_sold_refill(self, client, db_session):
+        """A SOLD refill should not show as a conflict."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        make_refill(db, prescription, drug, patient, state=RxState.SOLD)
+        db.commit()
+
+        resp = client.get(
+            "/refills/check_conflict",
+            params={"patient_id": patient.id, "drug_id": drug.id}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["has_conflict"] is False
+
+    def test_recent_fill_message_shown(self, client, db_session):
+        """A RefillHist entry within 90 days populates recent_fills."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        hist = RefillHist(
+            prescription_id=prescription.id,
+            patient_id=patient.id,
+            drug_id=drug.id,
+            quantity=30,
+            days_supply=30,
+            completed_date=date.today() - timedelta(days=10),
+            sold_date=date.today() - timedelta(days=10),
+            total_cost=Decimal("15.00"),
+        )
+        db.add(hist)
+        db.commit()
+
+        resp = client.get(
+            "/refills/check_conflict",
+            params={"patient_id": patient.id, "drug_id": drug.id}
+        )
+        body = resp.json()
+        assert body["has_conflict"] is False
+        assert len(body["recent_fills"]) == 1
+        assert "Next due" in body["message"]
+
+    def test_old_fill_beyond_90_days_not_shown(self, client, db_session):
+        """Fills older than 90 days should NOT appear in recent_fills."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        old_hist = RefillHist(
+            prescription_id=prescription.id,
+            patient_id=patient.id,
+            drug_id=drug.id,
+            quantity=30,
+            days_supply=30,
+            completed_date=date.today() - timedelta(days=100),
+            sold_date=date.today() - timedelta(days=100),
+            total_cost=Decimal("15.00"),
+        )
+        db.add(old_hist)
+        db.commit()
+
+        resp = client.get(
+            "/refills/check_conflict",
+            params={"patient_id": patient.id, "drug_id": drug.id}
+        )
+        assert resp.json()["recent_fills"] == []
+
+
+# ===========================================================================
+# NIOSH HAZARDOUS DRUG FLAG
+# ===========================================================================
+
+class TestNioshHazardousFlag:
+    def test_niosh_drug_can_still_be_filled(self, client, db_session):
+        """
+        NIOSH flag is informational — it triggers a UI warning but does NOT
+        block the fill in the API.
+        """
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, niosh=True)  # Hazardous drug
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        db.commit()
+
+        resp = fill(client, prescription.id, quantity=30)
+        assert resp.status_code == 200
+
+    def test_drug_niosh_flag_reflected_in_drug_data(self, client, db_session):
+        db = db_session
+        drug = make_drug(db, niosh=True)
+        db.commit()
+
+        resp = client.get("/drugs")
+        assert resp.status_code == 200
+        drugs = resp.json()
+        niosh_drugs = [d for d in drugs if d["niosh"] is True]
+        assert len(niosh_drugs) >= 1
+
+
+# ===========================================================================
+# REFILL GET ENDPOINTS
+# ===========================================================================
+
+class TestRefillGetEndpoints:
+    def test_get_refills_no_filter_returns_all(self, client, db_session):
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 30)
+        make_refill(db, prescription, drug, patient, state=RxState.QT)
+        make_refill(db, prescription, drug, patient, state=RxState.HOLD)
+        db.commit()
+
+        resp = client.get("/refills")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 2
+
+    def test_get_refills_filter_by_state(self, client, db_session):
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 30)
+        make_refill(db, prescription, drug, patient, state=RxState.QT)
+        make_refill(db, prescription, drug, patient, state=RxState.HOLD)
+        db.commit()
+
+        resp = client.get("/refills", params={"state": "QT"})
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert resp.json()[0]["state"] == "QT"
+
+    def test_get_refills_invalid_state_returns_400(self, client, db_session):
+        resp = client.get("/refills", params={"state": "INVALID"})
+        assert resp.status_code == 400
+
+    def test_get_refill_by_id(self, client, db_session):
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient)
+        db.commit()
+
+        resp = client.get(f"/refills/{refill.id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == refill.id
+
+    def test_get_nonexistent_refill_returns_404(self, client, db_session):
+        resp = client.get("/refills/99999")
+        assert resp.status_code == 404
+
+
+# ===========================================================================
+# SCHEDULED FILL: NEXT-DUE DATE CALCULATION
+# ===========================================================================
+
+class TestAutoScheduleNextFill:
+    def test_scheduled_next_fill_due_date_equals_today_plus_days_supply(self, client, db_session):
+        """When schedule_next_fill=True, the new refill's due_date = today + days_supply."""
+        from app.models import Refill as RefillModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                              state=RxState.READY)
+        db.commit()
+
+        resp = client.post(f"/refills/{refill.id}/advance", json={"schedule_next_fill": True})
+        assert resp.status_code == 200
+
+        scheduled = db.query(RefillModel).filter(
+            RefillModel.state == RxState.SCHEDULED
+        ).first()
+        expected_due = date.today() + timedelta(days=30)
+        assert scheduled.due_date == expected_due

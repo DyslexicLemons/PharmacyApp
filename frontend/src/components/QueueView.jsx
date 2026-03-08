@@ -6,11 +6,30 @@ import { fetchQueue } from "@/api";
 
 const PAGE_SIZE = 15;
 
+const PRIORITY_ORDER = { stat: 0, high: 1, normal: 2 };
+
+function getSortValue(r, key) {
+  switch (key) {
+    case "rx":       return r.prescription?.id ?? 0;
+    case "drug":     return r.drug.drug_name.toLowerCase();
+    case "patient":  return `${r.patient.last_name} ${r.patient.first_name}`.toLowerCase();
+    case "qty":      return r.quantity;
+    case "days":     return r.days_supply;
+    case "cost":     return Number(r.total_cost);
+    case "due":      return new Date(r.due_date).getTime();
+    case "priority": return PRIORITY_ORDER[r.priority] ?? 99;
+    case "state":    return r.state;
+    default:         return 0;
+  }
+}
+
 export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }) {
   const [refills, setRefills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedRefillId, setSelectedRefillId] = useState(null);
+  const [sortKey, setSortKey] = useState("due");
+  const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
     let mounted = true;
@@ -61,10 +80,42 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
     );
   }
 
-  const total = refills.length;
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedRefills = [...refills].sort((a, b) => {
+    const av = getSortValue(a, sortKey);
+    const bv = getSortValue(b, sortKey);
+    if (av < bv) return sortDir === "asc" ? -1 : 1;
+    if (av > bv) return sortDir === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const total = sortedRefills.length;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + PAGE_SIZE, total);
-  const pageItems = refills.slice(startIdx, endIdx);
+  const pageItems = sortedRefills.slice(startIdx, endIdx);
+
+  const SortTh = ({ label, colKey }) => {
+    const active = sortKey === colKey;
+    return (
+      <th
+        onClick={() => handleSort(colKey)}
+        style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
+      >
+        {label}
+        <span style={{ marginLeft: "0.3rem", opacity: active ? 1 : 0.3, fontSize: "0.8em" }}>
+          {active && sortDir === "desc" ? "▼" : "▲"}
+        </span>
+      </th>
+    );
+  };
 
   return (
     <div className="vstack">
@@ -79,15 +130,15 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
           <thead>
             <tr>
               <th>#</th>
-              <th>Rx #</th>
-              <th>Drug</th>
-              <th>Patient</th>
-              <th>Qty</th>
-              <th>Days</th>
-              <th>Cost</th>
-              <th>Due</th>
-              <th>Priority</th>
-              <th>State</th>
+              <SortTh label="Rx #" colKey="rx" />
+              <SortTh label="Drug" colKey="drug" />
+              <SortTh label="Patient" colKey="patient" />
+              <SortTh label="Qty" colKey="qty" />
+              <SortTh label="Days" colKey="days" />
+              <SortTh label="Cost" colKey="cost" />
+              <SortTh label="Due" colKey="due" />
+              <SortTh label="Priority" colKey="priority" />
+              <SortTh label="State" colKey="state" />
               {stateFilter === "READY" && <th>Bin</th>}
               {stateFilter === "REJECTED" && <th>Reason</th>}
             </tr>
@@ -103,10 +154,15 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
                 <td>
                   <strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong>
                 </td>
-                <td><strong>{r.prescription?.id}</strong></td>
+                <td><strong>{'17' + String(r.prescription?.id ?? 0).padStart(5, '0')}</strong></td>
                 <td>
                   <div>
                     <strong>{r.drug.drug_name}</strong>
+                    {r.drug.ndc && (
+                      <div style={{ fontSize: "0.8rem", color: "var(--text-light)", fontFamily: "monospace" }}>
+                        {r.drug.ndc}
+                      </div>
+                    )}
                     {r.drug.description && (
                       <div style={{ fontSize: "0.85rem", color: "var(--text-light)" }}>
                         {r.drug.description}
