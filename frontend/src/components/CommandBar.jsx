@@ -13,7 +13,7 @@ const CommandBar = forwardRef(function CommandBar({ onSubmit }, ref) {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSubmit(cmd.trim());
+          onSubmit(cmd);
           setCmd("");
           inputRef.current?.focus();
         }}

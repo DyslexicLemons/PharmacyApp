@@ -8,6 +8,15 @@ export default function RefillHistView({ onBack, page = 1 }) {
   if (loadingRefillHist) return <p>Loading…</p>;
   if (errorRefillHist) return <p style={{ color: "#ff7675" }}>{errorRefillHist}</p>;
 
+  // Compute per-prescription fill number (sorted by id so oldest fill = #1)
+  const fillNumberMap = {};
+  const rxCounter = {};
+  [...refillHist].sort((a, b) => a.id - b.id).forEach((r) => {
+    const rxId = r.prescription?.id;
+    rxCounter[rxId] = (rxCounter[rxId] || 0) + 1;
+    fillNumberMap[r.id] = rxCounter[rxId];
+  });
+
   const total = refillHist.length;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + PAGE_SIZE, total);
@@ -19,12 +28,14 @@ export default function RefillHistView({ onBack, page = 1 }) {
       <table className="table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>Fill #</th>
+            <th>Rx #</th>
             <th>Patient</th>
             <th>Drug</th>
             <th>Quantity</th>
             <th>Days Supply</th>
             <th>cost</th>
+            <th>Insurance</th>
             <th>Completed Date</th>
             <th>Sold Date</th>
           </tr>
@@ -32,12 +43,14 @@ export default function RefillHistView({ onBack, page = 1 }) {
         <tbody>
           {pageItems.map((s, index) => (
             <tr key={s.id}>
-              <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
+              <td><strong style={{ color: "var(--primary)" }}>{fillNumberMap[s.id]}</strong></td>
+              <td><strong>{s.prescription?.id}</strong></td>
               <td>{s.patient?.first_name} {s.patient?.last_name}</td>
               <td>{s.drug?.drug_name}</td>
               <td>{s.quantity}</td>
               <td>{s.days_supply}</td>
               <td>{"$" + Number(s.total_cost).toFixed(2)}</td>
+              <td>{s.insurance?.insurance_company?.plan_name ?? "—"}</td>
               <td>{s.completed_date ? new Date(s.completed_date).toLocaleDateString() : "—"}</td>
               <td>{s.sold_date ? new Date(s.sold_date).toLocaleDateString() : "—"}</td>
             </tr>
