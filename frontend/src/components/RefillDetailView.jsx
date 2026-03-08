@@ -1,8 +1,6 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Badge from "@/components/Badge";
-import { advanceRx, getStock } from "@/api";
-
-const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+import { advanceRx, getStock, getRefill } from "@/api";
 
 export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   const [refill, setRefill] = useState(null);
@@ -19,19 +17,10 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   const fetchRefillDetails = async () => {
     try {
       setLoading(true);
-      // Fetch all refills (no state filter) to get complete data
-      const res = await fetch(`${API}/refills`);
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Failed to fetch refills: ${errorText}`);
-      }
-      const data = await res.json();
-      const found = data.find(r => r.id === refillId);
-      if (!found) throw new Error("Refill not found");
+      const found = await getRefill(refillId);
       setRefill(found);
       setError("");
     } catch (e) {
-      console.error("Error fetching refill details:", e);
       setError(e.message);
     } finally {
       setLoading(false);
@@ -125,7 +114,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   return (
     <div className="vstack">
       <h2 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <span>Refill Details - ID #{refill.id}</span>
+        <span>Rx #: {'17' + String(refill.prescription.id).padStart(5, '0')}</span>
         <Badge state={refill.state} />
       </h2>
 
@@ -179,6 +168,8 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
               {refill.drug.drug_name}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.25rem 1rem", marginBottom: "1rem" }}>
+              <strong>NDC:</strong>
+              <span style={{ fontFamily: "monospace" }}>{refill.drug.ndc ?? "—"}</span>
               <strong>Manufacturer:</strong>
               <span>{refill.drug.manufacturer}</span>
               <strong>Drug Class:</strong>
@@ -220,7 +211,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
             <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription</h3>
             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.5rem", fontSize: "0.95rem" }}>
               <strong>Rx #:</strong>
-              <span>{refill.prescription.id}</span>
+              <span>{'17' + String(refill.prescription.id).padStart(5, '0')}</span>
 
               <strong>Orig. Qty:</strong>
               <span>{refill.prescription.original_quantity}</span>

@@ -174,7 +174,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
       <div className="card vstack" style={{ gap: "0.5rem" }}>
         <h3 style={{ margin: 0 }}>Script Info</h3>
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-          <div><strong>Rx #:</strong> {prescription.id}</div>
+          <div><strong>Rx #:</strong> {'17' + String(prescription.id).padStart(5, '0')}</div>
           <div><strong>Patient:</strong> {patientName}</div>
           <div>
             <strong>Drug:</strong> {prescription.drug.drug_name} ({prescription.drug.manufacturer})

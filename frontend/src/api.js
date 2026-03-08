@@ -57,13 +57,13 @@ export async function createPatient(data) {
 
 export async function getDrugs() {
     const res = await fetch(`${API}/drugs`);
-    if (!res.ok) throw new Error('Unable to get Drugs :(');
+    if (!res.ok) throw new Error(`Unable to get Drugs (HTTP ${res.status})`);
     return res.json();
 }
 
 export async function getStock() {
     const res = await fetch(`${API}/stock`);
-    if (!res.ok) throw new Error('Unable to get Stock :(');
+    if (!res.ok) throw new Error(`Unable to get Stock (HTTP ${res.status})`);
     return res.json();
 }
 
@@ -82,6 +82,12 @@ export async function getRefillHist() {
 export async function getPrescription(id) {
     const res = await fetch(`${API}/prescriptions/${id}`);
     if (!res.ok) throw new Error('Prescription not found');
+    return res.json();
+}
+
+export async function getRefill(id) {
+    const res = await fetch(`${API}/refills/${id}`);
+    if (!res.ok) throw new Error('Refill not found');
     return res.json();
 }
 
