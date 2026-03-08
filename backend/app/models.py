@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Boolean, Date, Enum, ForeignKey, Float, Numeric
+from sqlalchemy import Column, Integer, BigInteger, String, Boolean, Date, DateTime, Enum, ForeignKey, Float, Numeric
 from sqlalchemy.orm import relationship
 from .database import Base
+from datetime import datetime, timezone
 import enum
 
 
@@ -46,7 +47,7 @@ class Prescription(Base):
     original_quantity = Column(Integer)
     remaining_quantity = Column(Integer)
     date_received = Column(Date)
-    instructions = Column(String, nullable=False)
+    instructions = Column(String, nullable=True)  # sig/directions for the dispensed drug
 
     patient_id = Column(Integer, ForeignKey("patients.id"))
     patient = relationship("Patient", back_populates="prescriptions")
@@ -135,6 +136,7 @@ class Drug(Base):
     __tablename__ = "drugs"
     id = Column(Integer, primary_key=True, index=True)
     drug_name = Column(String, index=True)
+    ndc = Column(String, nullable=True)
     manufacturer = Column(String)
     cost = Column(Numeric(10, 2), nullable=False)
     niosh = Column(Boolean, default=False)
@@ -153,6 +155,7 @@ class Stock(Base):
 
     drug_id = Column(Integer, ForeignKey("drugs.id"), primary_key=True)
     quantity = Column(Integer, default=0)
+    package_size = Column(Integer, default=100)
 
     drug = relationship("Drug", lazy="joined")
 
@@ -198,3 +201,23 @@ class PatientInsurance(Base):
 
     patient = relationship("Patient", back_populates="insurances")
     insurance_company = relationship("InsuranceCompany", back_populates="patient_insurances", lazy="joined")
+
+
+class AuditLog(Base):
+    """Immutable audit trail for all significant pharmacy actions."""
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    # Human-readable action name, e.g. FILL_CREATED, STATE_TRANSITION, PATIENT_CREATED
+    action = Column(String, nullable=False, index=True)
+    # What kind of record was affected
+    entity_type = Column(String, nullable=True)   # "refill" | "prescription" | "patient"
+    entity_id = Column(Integer, nullable=True)
+    # Free-form detail string (keep short — one line describing what changed)
+    details = Column(String, nullable=True)
