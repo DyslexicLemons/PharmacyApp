@@ -9,13 +9,16 @@ export async function fetchQueue(state) {
 }
 
 
-export async function advanceRx(id) {
+export async function advanceRx(id, payload = {}) {
     const res = await fetch(`${API}/refills/${id}/advance`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify(payload)
     });
-    if (!res.ok) throw new Error('Failed to advance prescription');
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to advance prescription');
+    }
     return res.json();
 }
 
@@ -60,5 +63,65 @@ export async function getPrescribers() {
 export async function getRefillHist() {
     const res = await fetch(`${API}/refill_hist`);
     if (!res.ok) throw new Error('Unable to get refill Hist :(');
+    return res.json();
+}
+
+export async function fillScript(prescriptionId, data) {
+    const res = await fetch(`${API}/prescriptions/${prescriptionId}/fill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to create fill');
+    }
+    return res.json();
+}
+
+export async function generateTestPrescriptions() {
+    const res = await fetch(`${API}/commands/generate_test_prescriptions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    if (!res.ok) throw new Error('Failed to generate test prescriptions');
+    return res.json();
+}
+
+export async function getInsuranceCompanies() {
+    const res = await fetch(`${API}/insurance_companies`);
+    if (!res.ok) throw new Error('Unable to get insurance companies');
+    return res.json();
+}
+
+export async function getPatientInsurance(patientId) {
+    const res = await fetch(`${API}/patients/${patientId}/insurance`);
+    if (!res.ok) throw new Error('Unable to get patient insurance');
+    return res.json();
+}
+
+export async function addPatientInsurance(patientId, data) {
+    const res = await fetch(`${API}/patients/${patientId}/insurance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to add insurance');
+    }
+    return res.json();
+}
+
+export async function calculateBilling(data) {
+    const res = await fetch(`${API}/billing/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to calculate billing');
+    }
     return res.json();
 }
