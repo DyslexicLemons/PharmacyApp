@@ -10,6 +10,14 @@ from .models import Patient, Prescription, RxState, Drug, Prescriber, Priority, 
 from . import schemas
 from decimal import Decimal
 import random
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("pharmacy.rx")
 
 
 
@@ -28,14 +36,18 @@ app.add_middleware(
 )
 
 
+# States where a fill is actively being worked on (quantity is reserved)
+ACTIVE_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.READY}
+
 # Utility: state transition map
 # Maps current state to valid next states
 TRANSITIONS = {
-    RxState.QT: [RxState.QV1],  # Triage proceeds to first verify
+    RxState.QT: [RxState.QV1, RxState.HOLD],  # Triage proceeds to first verify or hold
     RxState.QV1: [RxState.QP, RxState.HOLD, RxState.REJECTED],  # Approve, hold, or reject
-    RxState.QP: [RxState.QV2],  # Prep proceeds to final verify
-    RxState.QV2: [RxState.READY, RxState.QP],  # Pass→READY or fail→back to prep
+    RxState.QP: [RxState.QV2, RxState.HOLD],  # Prep proceeds to final verify or hold
+    RxState.QV2: [RxState.READY, RxState.QP, RxState.HOLD],  # Pass→READY, fail→back to prep, or hold
     RxState.HOLD: [RxState.QP, RxState.REJECTED],  # Resume or reject from hold
+    RxState.SCHEDULED: [RxState.QP, RxState.HOLD, RxState.REJECTED],  # Activate, hold, or reject
     RxState.READY: [RxState.SOLD],  # Pickup
 }
 
@@ -49,6 +61,20 @@ def read_root():
 @app.get("/prescriptions", response_model=List[PrescriptionOut])
 def get_prescriptions(db: Session = Depends(get_db)):
     return db.query(Prescription).all()
+
+
+@app.get("/prescriptions/{prescription_id}", response_model=schemas.PrescriptionDetailOut)
+def get_prescription(prescription_id: int, db: Session = Depends(get_db)):
+    prescription = db.query(Prescription).filter(Prescription.id == prescription_id).first()
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    prescription.latest_refill = get_latest_refill_for_prescription(db, prescription_id)
+    prescription.refill_history = sorted(
+        prescription.refill_history,
+        key=lambda r: r.sold_date or r.completed_date or date_type.min,
+        reverse=True,
+    )
+    return prescription
 
 
 @app.post("/prescriptions", response_model=schemas.PrescriptionOut)
@@ -107,13 +133,17 @@ def fill_prescription(prescription_id: int, data: schemas.FillScriptRequest, db:
             detail=f"Prescription already has an active fill in state {existing.state.value}"
         )
 
-    initial_state = RxState.QP if data.initial_state == "QP" else RxState.HOLD
     cash_price = prescription.drug.cost * data.quantity
 
     # Billing: calculate copay if insurance provided
     copay_amount = None
     insurance_paid = None
     insurance_id = None
+
+    if data.scheduled:
+        initial_state = RxState.SCHEDULED
+    else:
+        initial_state = RxState.QV1  # default
 
     if data.insurance_id:
         patient_ins = db.query(PatientInsurance).filter(
@@ -125,14 +155,30 @@ def fill_prescription(prescription_id: int, data: schemas.FillScriptRequest, db:
                 Formulary.insurance_company_id == patient_ins.insurance_company_id,
                 Formulary.drug_id == prescription.drug_id
             ).first()
+            if not data.scheduled:
+                if not formulary_entry or bool(formulary_entry.not_covered):
+                    # Drug not on formulary → reject to triage
+                    initial_state = RxState.QT
+                # else stays QV1 (or may be overridden to QP below)
             if formulary_entry and not formulary_entry.not_covered:
                 raw_copay = formulary_entry.copay_per_30 * Decimal(str(data.days_supply)) / Decimal("30")
                 copay_amount = min(raw_copay, cash_price)
                 insurance_paid = cash_price - copay_amount
             insurance_id = patient_ins.id
 
+    # If no insurance issue, check if this fill matches the last fill exactly → skip to QP
+    if initial_state == RxState.QV1:
+        matching_hist = db.query(RefillHist).filter(
+            RefillHist.prescription_id == prescription_id,
+            RefillHist.quantity == data.quantity,
+            RefillHist.days_supply == data.days_supply,
+            RefillHist.insurance_id == data.insurance_id,
+        ).order_by(desc(RefillHist.completed_date)).first()
+        if matching_hist:
+            initial_state = RxState.QP
+
     refill = Refill(
-        prescription_id=prescription.id,
+        prescription_id=prescription_id,
         patient_id=prescription.patient_id,
         drug_id=prescription.drug_id,
         due_date=data.due_date or date_type.today(),
@@ -148,6 +194,16 @@ def fill_prescription(prescription_id: int, data: schemas.FillScriptRequest, db:
     )
 
     db.add(refill)
+
+    # Decrement remaining quantity immediately when entering an active fill state
+    if initial_state in ACTIVE_STATES:
+        old_qty = prescription.remaining_quantity or 0
+        prescription.remaining_quantity = max(0, old_qty - (data.quantity or 0))  # type: ignore[assignment]
+        logger.info(
+            f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+            f"{old_qty} → {prescription.remaining_quantity} (fill started, state={initial_state.value})"
+        )
+
     db.commit()
     db.refresh(refill)
 
@@ -226,8 +282,84 @@ def advance_refill(rx_id: int, payload: schemas.AdvanceRequest, db: Session = De
         else:
             new_state = valid_next_states[0]
 
+    # Set completed_date when reaching READY (drug has been filled/prepared)
+    if new_state == RxState.READY:
+        rx.completed_date = date_type.today()  # type: ignore[assignment]
+
+    # Log the state transition
+    logger.info(
+        f"[RX STATE] Refill #{rx_id} (Rx #{rx.prescription_id}, patient #{rx.patient_id}): "
+        f"{current_state_enum.value} → {new_state.value}"
+    )
+
+    # Adjust remaining_quantity based on workflow transitions
+    # Decrement when entering active fill workflow; re-increment when leaving it (hold/rejected)
+    if current_state_enum not in ACTIVE_STATES and new_state in ACTIVE_STATES:
+        # Resuming from HOLD or SCHEDULED → entering active workflow
+        prescription = db.query(Prescription).filter(Prescription.id == rx.prescription_id).first()
+        if prescription:
+            old_qty = prescription.remaining_quantity or 0
+            prescription.remaining_quantity = max(0, old_qty - (rx.quantity or 0))  # type: ignore[assignment]
+            logger.info(
+                f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+                f"{old_qty} → {prescription.remaining_quantity} (resumed fill, state={new_state.value})"
+            )
+    elif current_state_enum in ACTIVE_STATES and new_state not in ACTIVE_STATES and new_state != RxState.SOLD:
+        # Going to HOLD or REJECTED from active state → return quantity
+        prescription = db.query(Prescription).filter(Prescription.id == rx.prescription_id).first()
+        if prescription:
+            old_qty = prescription.remaining_quantity or 0
+            prescription.remaining_quantity = old_qty + (rx.quantity or 0)  # type: ignore[assignment]
+            logger.info(
+                f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+                f"{old_qty} → {prescription.remaining_quantity} (fill paused/cancelled, state={new_state.value})"
+            )
+
     # Assign the new state (use .value or the enum directly depending on your Column definition)
     rx.state = new_state  # type: ignore
+
+    # When selling: archive to RefillHist (quantity was already decremented at fill start)
+    if new_state == RxState.SOLD:
+        hist = RefillHist(
+            prescription_id=rx.prescription_id,
+            patient_id=rx.patient_id,
+            drug_id=rx.drug_id,
+            quantity=rx.quantity,
+            days_supply=rx.days_supply,
+            completed_date=rx.completed_date or date_type.today(),
+            sold_date=date_type.today(),
+            total_cost=rx.total_cost,
+            insurance_id=rx.insurance_id,
+            copay_amount=rx.copay_amount,
+            insurance_paid=rx.insurance_paid,
+        )
+        db.add(hist)
+        logger.info(
+            f"[RX HIST] Refill #{rx_id}: archived to RefillHist "
+            f"(qty={rx.quantity}, drug_id={rx.drug_id})"
+        )
+
+        if payload.schedule_next_fill:
+            next_due = date_type.today() + timedelta(days=rx.days_supply)  # type: ignore[arg-type]
+            scheduled = Refill(
+                prescription_id=rx.prescription_id,
+                patient_id=rx.patient_id,
+                drug_id=rx.drug_id,
+                due_date=next_due,
+                quantity=rx.quantity,
+                days_supply=rx.days_supply,
+                total_cost=rx.total_cost,
+                priority=rx.priority,
+                state=RxState.SCHEDULED,
+                source="auto_schedule",
+                insurance_id=rx.insurance_id,
+                copay_amount=rx.copay_amount,
+                insurance_paid=rx.insurance_paid,
+            )
+            db.add(scheduled)
+            logger.info(
+                f"[RX SCHED] Prescription #{rx.prescription_id}: next fill scheduled for {next_due}"
+            )
 
     db.commit()
     db.refresh(rx)
@@ -302,6 +434,15 @@ def upload_json_prescription(data: schemas.JSONPrescriptionUpload, db: Session =
     )
 
     db.add(refill)
+
+    # QT is an active state — decrement remaining quantity immediately
+    old_qty = prescription.remaining_quantity or 0
+    prescription.remaining_quantity = max(0, old_qty - data.refill_quantity)  # type: ignore[assignment]
+    logger.info(
+        f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+        f"{old_qty} → {prescription.remaining_quantity} (fill started, state=QT)"
+    )
+
     db.commit()
     db.refresh(refill)
 
@@ -334,14 +475,20 @@ def create_manual_prescription(data: schemas.ManualPrescriptionCreate, db: Sessi
         patient_id=patient.id,
         prescriber_id=prescriber.id,
         date_received=date_type.today(),
-        brand_required=data.brand_required
+        brand_required=data.brand_required,
+        instructions=data.instructions
     )
 
     db.add(prescription)
     db.flush()
 
     # Determine initial state
-    initial_state = RxState.QP if data.initial_state == "QP" else RxState.HOLD
+    if data.initial_state == "QP":
+        initial_state = RxState.QP
+    elif data.initial_state == "SCHEDULED":
+        initial_state = RxState.SCHEDULED
+    else:
+        initial_state = RxState.HOLD
 
     # Create refill with manual source
     refill = Refill(
@@ -358,6 +505,16 @@ def create_manual_prescription(data: schemas.ManualPrescriptionCreate, db: Sessi
     )
 
     db.add(refill)
+
+    # Decrement remaining quantity immediately when entering an active fill state
+    if initial_state in ACTIVE_STATES:
+        old_qty = prescription.remaining_quantity or 0
+        prescription.remaining_quantity = max(0, old_qty - (data.quantity or 0))  # type: ignore[assignment]
+        logger.info(
+            f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+            f"{old_qty} → {prescription.remaining_quantity} (fill started, state={initial_state.value})"
+        )
+
     db.commit()
     db.refresh(refill)
 
@@ -446,6 +603,19 @@ def get_refill_hist(db: Session = Depends(get_db)):
 def get_patients(db: Session = Depends(get_db)):
     return db.query(Patient).options(noload("*")).all()
 
+@app.post("/patients", response_model=schemas.PatientOut)
+def create_patient(p: schemas.PatientCreate, db: Session = Depends(get_db)):
+    patient = Patient(
+        first_name=p.first_name,
+        last_name=p.last_name,
+        dob=p.dob,
+        address=p.address,
+    )
+    db.add(patient)
+    db.commit()
+    db.refresh(patient)
+    return patient
+
 @app.get("/patients/search", response_model=List[schemas.PatientOut])
 def search_patient(name: str, db: Session = Depends(get_db)):
     """
@@ -465,49 +635,57 @@ def search_patient(name: str, db: Session = Depends(get_db)):
 def get_latest_refill_for_prescription(
     db: Session, prescription_id: int
 ) -> Optional[schemas.LatestRefillOut]:
-    # Try to get the latest active refill first
-    refill = (
+    # Active (non-SOLD) refill — ordered by id DESC so newest is always first
+    active_refill = (
         db.query(Refill)
-        .filter(Refill.prescription_id == prescription_id)
-        .order_by(desc(Refill.completed_date))
+        .filter(
+            Refill.prescription_id == prescription_id,
+            Refill.state != RxState.SOLD,
+        )
+        .order_by(desc(Refill.id))
         .first()
     )
 
-    # Also check historical refills
-    refill_latest = (
+    # Latest completed (sold) refill from history
+    latest_hist = (
         db.query(RefillHist)
         .filter(RefillHist.prescription_id == prescription_id)
-        .order_by(desc(RefillHist.completed_date))
+        .order_by(desc(RefillHist.id))
         .first()
     )
 
-    # If nothing exists at all
-    if not refill and not refill_latest:
+    if not active_refill and not latest_hist:
         return None
 
-    # Prefer refill for quantity/days/state if it exists
-    base_refill = refill or refill_latest
+    if active_refill:
+        state_val = active_refill.state.value if hasattr(active_refill.state, "value") else str(active_refill.state)
+        return schemas.LatestRefillOut(
+            quantity=int(active_refill.quantity or 0),  # type: ignore[arg-type]
+            days_supply=int(active_refill.days_supply or 0),  # type: ignore[arg-type]
+            total_cost=Decimal(str(active_refill.total_cost or "0.00")),
+            sold_date=None,
+            completed_date=active_refill.completed_date,  # type: ignore[arg-type]
+            state=state_val,
+            next_pickup=None,
+        )
 
-    quantity = getattr(base_refill, "quantity", 0) or 0
-    days_supply = getattr(base_refill, "days_supply", 0) or 0
-    state = getattr(refill, "state", None) if refill else None
-
-    # Override dates with refill_latest if available
-    total_cost: Decimal = Decimal(getattr(refill_latest, "total_cost", None) or getattr(refill, "total_cost", Decimal("0.00")))
-    sold_date = getattr(refill_latest, "sold_date", None) if refill_latest else getattr(refill, "sold_date", None)
-    completed_date = getattr(refill_latest, "completed_date", None) if refill_latest else getattr(refill, "completed_date", None)
-
-    # Only compute next pickup if active refill (not historical)
-    next_pickup = sold_date + timedelta(days=days_supply) if sold_date and state is None else None
-
+    # No active refill — show last history entry
+    assert latest_hist is not None
+    days_supply = int(latest_hist.days_supply or 0)  # type: ignore[arg-type]
+    sold_date: Optional[date_type] = latest_hist.sold_date  # type: ignore[assignment]
+    next_pickup: Optional[date_type] = (
+        sold_date + timedelta(days=days_supply)
+        if sold_date and days_supply
+        else None
+    )
     return schemas.LatestRefillOut(
-        quantity=quantity,
+        quantity=int(latest_hist.quantity or 0),  # type: ignore[arg-type]
         days_supply=days_supply,
-        total_cost=total_cost,
+        total_cost=Decimal(str(latest_hist.total_cost or "0.00")),
         sold_date=sold_date,
-        completed_date=completed_date,
-        state=state,
-        next_pickup=next_pickup
+        completed_date=latest_hist.completed_date,  # type: ignore[arg-type]
+        state=None,
+        next_pickup=next_pickup,
     )
 
 
@@ -529,6 +707,13 @@ def get_patient(pid: int, db: Session = Depends(get_db)):
             else:
                 # Current or pending refill: show status instead of date
                 prescription.next_pickup = latest_refill.state  # e.g., "Pending" or "In Progress"
+
+        # Sort refill history most recent first
+        prescription.refill_history = sorted(
+            prescription.refill_history,
+            key=lambda r: r.sold_date or r.completed_date or date_type.min,
+            reverse=True
+        )
 
     return patient
 
@@ -846,6 +1031,10 @@ def generate_test_prescriptions(db: Session = Depends(get_db)):
 
             db.add(refill)
             created_refills.append(refill)
+
+            # Decrement remaining quantity for active (non-rejected) fills
+            if state != RxState.REJECTED:
+                prescription.remaining_quantity -= quantity
 
     db.commit()
 

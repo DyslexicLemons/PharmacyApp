@@ -1,7 +1,7 @@
 import { useState, useContext, useRef, useEffect } from "react";
 import { DataContext } from "@/context/DataContext";
 
-import { searchPatients, generateTestPrescriptions } from "@/api";
+import { searchPatients, generateTestPrescriptions, getPrescription } from "@/api";
 
 import PatientProfile from "@/components/PatientProfile";
 import DrugsView from "@/components/DrugsView";
@@ -15,6 +15,8 @@ import PrescribersView from "@/components/PrescribersView";
 import PrescriptionForm from "@/components/PrescriptionForm";
 import FillScriptView from "@/components/FillScriptView";
 import PrescriptionDetailView from "@/components/PrescriptionDetailView";
+import NewPatientForm from "@/components/NewPatientForm";
+import RegisterView from "@/components/RegisterView";
 
 const PATIENT_PAGE_SIZE = 15;
 
@@ -43,7 +45,34 @@ export default function App() {
   }
 
   function handleCommand(input) {
+    const tempCmd = input.toLowerCase();
+    if (tempCmd === " ") {
+            if (route.view !== "HOME" && route.view !== "PATIENT") return;
+      navigateTo({
+        view: "CREATE_PRESCRIPTION",
+        patientId: route.view === "PATIENT" ? route.pid : undefined,
+      });
+      return;
+    }
     const cmd = input.toLowerCase().trim();
+
+    // Look up prescription by Rx ID: rx<id> (from any view)
+    const rxMatch = cmd.match(/^rx(\d+)$/);
+    if (rxMatch) {
+      const rxId = parseInt(rxMatch[1], 10);
+      getPrescription(rxId)
+        .then((prescription) => {
+          const p = prescription.patient;
+          navigateTo({
+            view: "VIEW_PRESCRIPTION",
+            prescription,
+            patientName: `${p.last_name}, ${p.first_name}`,
+            patientId: p.id,
+          });
+        })
+        .catch(() => alert(`Rx #${rxId} not found`));
+      return;
+    }
 
     // View prescription detail: Vx (only in PATIENT view)
     const viewMatch = cmd.match(/^v(\d+)$/);
@@ -145,7 +174,7 @@ export default function App() {
       searchPatients(input)
         .then((list) => {
           if (list.length === 0) {
-            alert("No matching patients");
+            navigateTo({ view: "NO_MATCH", query: input.trim() });
           } else if (list.length === 1) {
             navigateTo({ view: "PATIENT", pid: list[0].id });
           } else {
@@ -161,9 +190,13 @@ export default function App() {
       return;
     }
 
-    // Single space = create new prescription
-    if (cmd === " ") {
-      navigateTo({ view: "CREATE_PRESCRIPTION" });
+    // Single space = create new prescription (only from HOME or PATIENT views)
+    if (input.trim() === "" && input !== "") {
+      if (route.view !== "HOME" && route.view !== "PATIENT") return;
+      navigateTo({
+        view: "CREATE_PRESCRIPTION",
+        patientId: route.view === "PATIENT" ? route.pid : undefined,
+      });
       return;
     }
 
@@ -174,6 +207,7 @@ export default function App() {
     else if (cmd === "stock") navigateTo({ view: "STOCK" });
     else if (cmd === "refill_hist") navigateTo({ view: "REFILL_HIST" });
     else if (cmd === "prescribers") navigateTo({ view: "PRESCRIBERS" });
+    else if (cmd === "register") navigateTo({ view: "REGISTER" });
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
         generateTestPrescriptions()
@@ -272,7 +306,42 @@ export default function App() {
               }}
             />
           )}
-          {route.view === "CREATE_PRESCRIPTION" && <PrescriptionForm onBack={goBack} />}
+          {route.view === "CREATE_PRESCRIPTION" && (
+            <PrescriptionForm onBack={goBack} patientId={route.patientId} />
+          )}
+          {route.view === "NO_MATCH" && (
+            <div className="vstack" style={{ alignItems: "center", justifyContent: "center", height: "100%", gap: "1.5rem" }}>
+              <div style={{ fontSize: "1.1rem", color: "var(--text-light)" }}>
+                No matches for <strong>"{route.query}"</strong>
+              </div>
+              <div style={{ fontSize: "1.05rem" }}>Create a new patient?</div>
+              <div style={{ display: "flex", gap: "1rem" }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const [last = "", first = ""] = route.query.split(",").map((s) => s.trim());
+                    navigateTo({ view: "CREATE_PATIENT", prefillLast: last, prefillFirst: first });
+                  }}
+                >
+                  Yes
+                </button>
+                <button className="btn btn-secondary" onClick={goBack}>
+                  No
+                </button>
+              </div>
+            </div>
+          )}
+          {route.view === "REGISTER" && <RegisterView onBack={goBack} />}
+          {route.view === "CREATE_PATIENT" && (
+            <NewPatientForm
+              prefillLast={route.prefillLast}
+              prefillFirst={route.prefillFirst}
+              onBack={goBack}
+              onCreated={(patient) => {
+                navigateTo({ view: "PATIENT", pid: patient.id });
+              }}
+            />
+          )}
         </div>
         <CommandBar ref={cmdBarRef} onSubmit={handleCommand} />
       </div>
