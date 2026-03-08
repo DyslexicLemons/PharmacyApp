@@ -25,6 +25,7 @@ class PrescriberBase(BaseModel):
     last_name: str
     address: str
     phone_number: str
+    specialty: Optional[str] = None
 
 class PrescriberOut(PrescriberBase):
     id: int
@@ -33,6 +34,7 @@ class PrescriberOut(PrescriberBase):
     last_name: str
     address: str
     phone_number: str
+    specialty: Optional[str] = None
     class Config:
         from_attributes = True
 
@@ -42,6 +44,7 @@ class DrugBase(BaseModel):
     cost: Decimal
     niosh: bool = False
     drug_class: int
+    description: Optional[str] = None
 
 class DrugOut(BaseModel):
     id: int
@@ -50,6 +53,7 @@ class DrugOut(BaseModel):
     cost: Decimal
     niosh: bool
     drug_class: int
+    description: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -68,6 +72,70 @@ class StockOut(BaseModel):
         from_attributes = True
 
 
+# ---- Insurance / Billing ----
+
+class InsuranceCompanyOut(BaseModel):
+    id: int
+    plan_id: str
+    plan_name: str
+    bin_number: Optional[str] = None
+    pcn: Optional[str] = None
+    phone_number: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FormularyOut(BaseModel):
+    id: int
+    drug_id: int
+    drug: DrugOut
+    tier: int
+    copay_per_30: Decimal
+    not_covered: bool
+
+    class Config:
+        from_attributes = True
+
+
+class PatientInsuranceOut(BaseModel):
+    id: int
+    patient_id: int
+    insurance_company: InsuranceCompanyOut
+    member_id: str
+    group_number: Optional[str] = None
+    is_primary: bool
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class PatientInsuranceCreate(BaseModel):
+    insurance_company_id: int
+    member_id: str
+    group_number: Optional[str] = None
+    is_primary: bool = True
+
+
+class BillingCalculateRequest(BaseModel):
+    drug_id: int
+    insurance_id: int  # PatientInsurance.id
+    quantity: int
+    days_supply: int
+
+
+class BillingCalculateResponse(BaseModel):
+    cash_price: Decimal
+    insurance_price: Optional[Decimal] = None
+    insurance_paid: Optional[Decimal] = None
+    tier: Optional[int] = None
+    not_covered: bool = False
+    plan_name: Optional[str] = None
+
+
+# ---- Refills / Prescriptions ----
+
 class LatestRefillOut(BaseModel):
     quantity: int
     days_supply: int
@@ -76,6 +144,8 @@ class LatestRefillOut(BaseModel):
     completed_date: Optional[date] = None
     next_pickup: Optional[date] = None
     state: Optional[str] = None
+    copay_amount: Optional[Decimal] = None
+    insurance_paid: Optional[Decimal] = None
 
     class Config:
         from_attributes = True
@@ -83,24 +153,30 @@ class LatestRefillOut(BaseModel):
 
 class PrescriptionBase(BaseModel):
     drug_id: int
+    brand_required: bool
     original_quantity: int
     remaining_quantity: int
     date_received: date
+    instructions: Optional[str] = None
 
 class PrescriptionOut(PrescriptionBase):
     id: int
     patient: PatientOut
     drug: DrugOut
+    prescriber: Optional[PrescriberOut] = None
+    brand_required: bool
     remaining_quantity: int
     date_received: date
 
     class Config:
         from_attributes = True
-        
+
 
 class PrescriptionOut2(PrescriptionBase):
     id: int
+    brand_required: bool
     patient_id: int
+    prescriber_id: int
     drug: DrugOut
     remaining_quantity: int
     date_received: date
@@ -108,6 +184,17 @@ class PrescriptionOut2(PrescriptionBase):
 
     class Config:
         from_attributes = True
+
+
+class PrescriptionCreate(BaseModel):
+    date: date
+    patient_id: int
+    drug_id: int
+    brand_required: int
+    directions: str
+    refill_quantity: int
+    total_refills: int
+    npi: int
 
 
 class RefillBase(BaseModel):
@@ -127,7 +214,6 @@ class RefillOut(BaseModel):
     prescription: PrescriptionOut
     patient: PatientOut
     drug: DrugOut
-    prescriber: Optional[PrescriberOut] = None
     due_date: date
     quantity: int
     days_supply: int
@@ -135,6 +221,15 @@ class RefillOut(BaseModel):
     priority: str
     state: str
     completed_date: Optional[date] = None
+    bin_number: Optional[int] = None
+    rejected_by: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    rejection_date: Optional[date] = None
+    source: str = "manual"
+    insurance_id: Optional[int] = None
+    copay_amount: Optional[Decimal] = None
+    insurance_paid: Optional[Decimal] = None
+    insurance: Optional[PatientInsuranceOut] = None
 
     class Config:
         from_attributes = True
@@ -160,18 +255,68 @@ class RefillHistOut(BaseModel):
     total_cost: Decimal
     completed_date: date
     sold_date: Optional[date] = None
+    copay_amount: Optional[Decimal] = None
+    insurance_paid: Optional[Decimal] = None
 
     class Config:
         from_attributes = True
 
 
-    
+
 
 class PatientWithRxs(PatientOut):
     prescriptions: List[PrescriptionOut2] = []
+    insurances: List[PatientInsuranceOut] = []
 
     class Config:
         from_attributes = True
 
 class AdvanceRequest(BaseModel):
-    action: Optional[str] = None # reserved for future custom transitions
+    action: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    rejected_by: Optional[str] = None
+
+
+class JSONPrescriptionUpload(BaseModel):
+    """Schema for external JSON prescription uploads that go to QT queue"""
+    date: date
+    patient: dict  # {first_name, last_name, dob}
+    prescriber: dict  # {npi, first_name, last_name}
+    drug: dict  # {name, manufacturer}
+    directions: str
+    refill_quantity: int
+    total_refills: int
+    brand_required: bool = False
+    priority: str = "normal"
+
+
+class ManualPrescriptionCreate(BaseModel):
+    """Schema for manual prescription entry that goes to QP or HOLD"""
+    patient_id: int
+    drug_id: int
+    prescriber_id: int
+    quantity: int
+    days_supply: int
+    total_refills: int
+    brand_required: bool = False
+    priority: str = "normal"
+    initial_state: str = "QP"  # "QP" or "HOLD"
+    due_date: Optional[date] = None
+
+
+class ConflictCheckResponse(BaseModel):
+    """Response for duplicate/conflict checking"""
+    has_conflict: bool
+    active_refills: List[dict] = []
+    recent_fills: List[dict] = []
+    message: Optional[str] = None
+
+
+class FillScriptRequest(BaseModel):
+    """Schema for filling an existing prescription"""
+    quantity: int
+    days_supply: int
+    priority: str = "normal"
+    initial_state: str = "QP"  # "QP" or "HOLD"
+    due_date: Optional[date] = None
+    insurance_id: Optional[int] = None  # PatientInsurance.id for billing

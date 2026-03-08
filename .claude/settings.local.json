@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(python -m app.seed:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(.venv/Scripts/python -c \":*)",
+      "Bash(psql pharmacy_db -f backend/migrations/003_add_insurance_and_billing.sql)",
+      "Bash(PGPASSWORD=6789 \"/c/Program Files/PostgreSQL/17/bin/psql\" -U postgres pharmacy_db -f backend/migrations/003_add_insurance_and_billing.sql)",
+      "Bash(PGPASSWORD=6789 \"/c/Program Files/PostgreSQL/17/bin/psql\" -U postgres pharmacy_db -c \"ALTER TABLE prescribers ALTER COLUMN npi TYPE BIGINT;\")"
+    ]
+  }
+}
