@@ -155,7 +155,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
             ) : selectedPatient ? (
               <div style={{ marginTop: "0.5rem" }}>
                 <div style={{ padding: "0.5rem", background: "var(--bg-light)", borderRadius: "4px" }}>
-                  <strong>{selectedPatient.last_name}, {selectedPatient.first_name}</strong>
+                  <strong>{selectedPatient.last_name.toUpperCase()}, {selectedPatient.first_name.toUpperCase()}</strong>
                   <div style={{ fontSize: "0.9rem", color: "var(--text-light)" }}>
                     DOB: {selectedPatient.dob} | {selectedPatient.address}
                   </div>
@@ -224,7 +224,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
                         style={{ display: "block", width: "100%", textAlign: "left", marginBottom: "0.25rem" }}
                         onClick={() => { setSelectedPatient(p); setPatientSearchResults([]); }}
                       >
-                        {p.last_name}, {p.first_name} — DOB: {p.dob}
+                        {p.last_name.toUpperCase()}, {p.first_name.toUpperCase()} — DOB: {p.dob}
                       </button>
                     ))}
                   </div>
@@ -308,7 +308,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
 
           {selectedPatient && (
             <div style={{ padding: "0.5rem 1rem", background: "var(--bg-light)", borderRadius: "4px", fontSize: "0.9rem" }}>
-              Patient: <strong>{selectedPatient.last_name}, {selectedPatient.first_name}</strong> | Drug: <strong>{selectedDrug?.drug_name}</strong>
+              Patient: <strong>{selectedPatient.last_name.toUpperCase()}, {selectedPatient.first_name.toUpperCase()}</strong> | Drug: <strong>{selectedDrug?.drug_name}</strong>
             </div>
           )}
 
