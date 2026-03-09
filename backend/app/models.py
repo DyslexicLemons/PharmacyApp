@@ -45,7 +45,7 @@ class Prescription(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     drug_id = Column(Integer, ForeignKey("drugs.id"))
-    brand_required = Column(Boolean)
+    daw_code = Column(Integer, default=0)  # Dispense As Written code (0-9)
     original_quantity = Column(Integer)
     remaining_quantity = Column(Integer)
     date_received = Column(Date)

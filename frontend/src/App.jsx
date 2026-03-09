@@ -468,6 +468,11 @@ function App() {
       </div>
       <footer>
         <strong>JoeMed</strong> Pharmacy Management System | API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}
+        {isAuthenticated && authUser && (
+          <span style={{ marginLeft: "1.5rem", color: "var(--text-light)" }}>
+            Logged in as: <strong>{authUser.username}</strong>{authUser.isAdmin ? " (Admin)" : ""}
+          </span>
+        )}
       </footer>
     </div>
   );

@@ -2,6 +2,19 @@ import { useState, useEffect, useRef } from "react";
 import { getDrugs, getPrescribers, searchPatients, getPatient } from "@/api";
 import NewPatientForm from "./NewPatientForm";
 
+const DAW_CODES = {
+  0: "No product selection indicated (generic substitution allowed)",
+  1: "Substitution not allowed by prescriber (brand medically necessary)",
+  2: "Patient requested brand",
+  3: "Pharmacist selected brand",
+  4: "Generic not in stock",
+  5: "Brand dispensed because generic not available",
+  6: "Override due to state law",
+  7: "Brand required by insurance",
+  8: "Generic not available in marketplace",
+  9: "Other",
+};
+
 const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
 export default function PrescriptionForm({ onBack, patientId }) {
@@ -35,7 +48,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
     quantity: "",
     days_supply: "",
     total_refills: "1",
-    brand_required: false,
+    daw_code: 0,
     priority: "normal",
     date_received: today,
     due_date: "",
@@ -81,7 +94,8 @@ export default function PrescriptionForm({ onBack, patientId }) {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm({ ...form, [name]: type === "checkbox" ? checked : value });
+    const parsed = name === "daw_code" ? parseInt(value, 10) : (type === "checkbox" ? checked : value);
+    setForm({ ...form, [name]: parsed });
   };
 
   const checkConflict = async () => {
@@ -120,7 +134,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
           quantity: parseInt(form.quantity),
           days_supply: parseInt(form.days_supply),
           total_refills: parseInt(form.total_refills),
-          brand_required: form.brand_required,
+          daw_code: form.daw_code,
           priority: form.priority,
           initial_state: initialState,
           date_received: form.date_received || null,
@@ -457,14 +471,18 @@ export default function PrescriptionForm({ onBack, patientId }) {
               </select>
             </label>
 
-            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <input
-                type="checkbox"
-                name="brand_required"
-                checked={form.brand_required}
+            <label>
+              <strong>DAW Code</strong>
+              <select
+                name="daw_code"
+                value={form.daw_code}
                 onChange={handleChange}
-              />
-              <strong>Brand Required</strong>
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              >
+                {Object.entries(DAW_CODES).map(([code, desc]) => (
+                  <option key={code} value={code}>{code} — {desc}</option>
+                ))}
+              </select>
             </label>
           </div>
 

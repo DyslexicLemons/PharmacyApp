@@ -4,6 +4,19 @@ import { AuthContext } from "@/context/AuthContext";
 
 const PRIORITIES = ["low", "normal", "high", "stat"];
 
+const DAW_CODES = {
+  0: "No product selection indicated (generic substitution allowed)",
+  1: "Substitution not allowed by prescriber (brand medically necessary)",
+  2: "Patient requested brand",
+  3: "Pharmacist selected brand",
+  4: "Generic not in stock",
+  5: "Brand dispensed because generic not available",
+  6: "Override due to state law",
+  7: "Brand required by insurance",
+  8: "Generic not available in marketplace",
+  9: "Other",
+};
+
 export default function EditRefillView({ refillId, onBack, onSaved }) {
   const { token } = useContext(AuthContext);
   const [refill, setRefill] = useState(null);
@@ -17,7 +30,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
   const [priority, setPriority] = useState("normal");
   const [dueDate, setDueDate] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [brandRequired, setBrandRequired] = useState(false);
+  const [dawCode, setDawCode] = useState(0);
 
   useEffect(() => {
     getRefill(refillId, token)
@@ -28,7 +41,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
         setPriority(r.priority);
         setDueDate(r.due_date);
         setInstructions(r.prescription.instructions || "");
-        setBrandRequired(r.prescription.brand_required);
+        setDawCode(r.prescription.daw_code ?? 0);
         setError("");
       })
       .catch((e) => setError(e.message))
@@ -46,7 +59,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
       priority,
       due_date: dueDate,
       instructions,
-      brand_required: brandRequired,
+      daw_code: dawCode,
     };
 
     try {
@@ -160,15 +173,18 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
           </div>
 
           <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", cursor: "pointer", fontWeight: "bold" }}>
-              <input
-                type="checkbox"
-                checked={brandRequired}
-                onChange={(e) => setBrandRequired(e.target.checked)}
-                style={{ width: "1.1rem", height: "1.1rem" }}
-              />
-              Brand Required
+            <label style={{ display: "block", fontWeight: "bold", marginBottom: "0.3rem" }}>
+              DAW Code
             </label>
+            <select
+              value={dawCode}
+              onChange={(e) => setDawCode(parseInt(e.target.value, 10))}
+              style={{ width: "100%", padding: "0.5rem", background: "var(--bg-light)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)" }}
+            >
+              {Object.entries(DAW_CODES).map(([code, desc]) => (
+                <option key={code} value={code}>{code} — {desc}</option>
+              ))}
+            </select>
           </div>
 
           {error && (

@@ -51,7 +51,7 @@ app.add_middleware(
 # Rate limiting (login endpoints apply @limiter.limit in the router)
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 # Static file serving for prescription images
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))

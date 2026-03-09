@@ -4,6 +4,19 @@ import { advanceRx, getStock, getRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 
+const DAW_CODES = {
+  0: "No product selection indicated (generic substitution allowed)",
+  1: "Substitution not allowed by prescriber (brand medically necessary)",
+  2: "Patient requested brand",
+  3: "Pharmacist selected brand",
+  4: "Generic not in stock",
+  5: "Brand dispensed because generic not available",
+  6: "Override due to state law",
+  7: "Brand required by insurance",
+  8: "Generic not available in marketplace",
+  9: "Other",
+};
+
 export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, keyCmd, onKeyCmdHandled }) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
@@ -130,7 +143,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     <div className="vstack">
       <h2 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <span>Rx #: {refill.prescription.id}</span>
-        <Badge state={refill.state} />
+        <span style={{ fontSize: "1.6rem" }}><Badge state={refill.state} /></span>
       </h2>
 
       {/* Alerts for READY bin number and REJECTED status */}
@@ -157,167 +170,162 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
 
       <div className="card" style={{ padding: "1.5rem", marginBottom: "1rem" }}>
         {/* Patient Information at the top */}
-        <div style={{ marginBottom: "1.5rem", paddingBottom: "1rem", borderBottom: "2px solid var(--bg-light)" }}>
-          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Patient</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: "0.5rem 1.5rem", alignItems: "baseline" }}>
-            <strong>Name:</strong>
-            <span>{refill.patient.first_name.toUpperCase()} {refill.patient.last_name.toUpperCase()}</span>
-            <div></div>
+        <div style={{ marginBottom: "0.75rem", paddingBottom: "0.6rem", borderBottom: "2px solid var(--bg-light)", display: "flex", gap: "2rem", alignItems: "baseline", flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0, fontSize: "1rem", flexShrink: 0 }}>Patient</h3>
+          <span><strong>{refill.patient.first_name.toUpperCase()} {refill.patient.last_name.toUpperCase()}</strong></span>
+          <span style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>DOB: {refill.patient.dob}</span>
+          <span style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>{refill.patient.address}</span>
+        </div>
 
-            <strong>DOB:</strong>
-            <span>{refill.patient.dob}</span>
-            <div></div>
+        {/* Prescription Details */}
+        <div style={{ marginBottom: "1.25rem", paddingBottom: "1rem", borderBottom: "2px solid var(--bg-light)" }}>
+          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription</h3>
+          <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start" }}>
+            {/* Left: prescription fields */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1.5rem", fontSize: "0.95rem" }}>
+                <strong>Rx #:</strong>
+                <span>{refill.prescription.id}</span>
 
-            <strong>Address:</strong>
-            <span>{refill.patient.address}</span>
-            <div></div>
+                <strong>Date Created:</strong>
+                <span>{refill.prescription.date_received ? new Date(refill.prescription.date_received).toLocaleDateString() : "—"}</span>
+
+                <strong>Expiration:</strong>
+                <span>{refill.prescription.expiration_date ? new Date(refill.prescription.expiration_date).toLocaleDateString() : "—"}</span>
+
+                <strong>DAW Code:</strong>
+                <span>{refill.prescription.daw_code} — {DAW_CODES[refill.prescription.daw_code] ?? "Unknown"}</span>
+
+                <strong>Orig. Qty:</strong>
+                <span>{refill.prescription.original_quantity}</span>
+
+                <strong>Remaining:</strong>
+                <span>{refill.prescription.remaining_quantity}</span>
+
+                <strong>Source:</strong>
+                <span>{refill.source}</span>
+              </div>
+              {refill.prescription.instructions && (
+                <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", background: "var(--bg-light)", borderRadius: "6px", fontSize: "0.9rem" }}>
+                  <strong>Instructions:</strong>
+                  <div style={{ marginTop: "0.25rem" }}>{refill.prescription.instructions}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Middle: prescriber info */}
+            {refill.prescription.prescriber && (
+              <div style={{ flexShrink: 0, width: "200px" }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-light)", marginBottom: "0.4rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>Prescriber</div>
+                <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 0.75rem", fontSize: "0.9rem" }}>
+                  <strong>Name:</strong>
+                  <span>Dr. {refill.prescription.prescriber.first_name} {refill.prescription.prescriber.last_name}</span>
+
+                  <strong>NPI:</strong>
+                  <span>{refill.prescription.prescriber.npi}</span>
+
+                  <strong>Phone:</strong>
+                  <span>{refill.prescription.prescriber.phone_number}</span>
+
+                  <strong>Address:</strong>
+                  <span>{refill.prescription.prescriber.address}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Right: prescription image */}
+            <div style={{ flexShrink: 0, width: "280px" }}>
+              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-light)", marginBottom: "0.4rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>Image</div>
+              {refill.prescription.picture ? (
+                <img
+                  src={refill.prescription.picture}
+                  alt="Prescription"
+                  style={{ width: "100%", maxHeight: "240px", objectFit: "contain", borderRadius: "6px", border: "1px solid var(--border, #dee2e6)" }}
+                />
+              ) : (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  height: "120px", border: "2px dashed var(--border, #dee2e6)",
+                  borderRadius: "6px", color: "var(--text-light)", fontSize: "0.9rem"
+                }}>
+                  No Image
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Main content area with Drug info and Prescription details */}
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "2rem", marginBottom: "1.5rem" }}>
-          {/* Left: Drug Information */}
-          <div>
-            <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Drug Information</h3>
-            <div style={{ fontSize: "1.3rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--primary)" }}>
-              {refill.drug.drug_name}
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.25rem 1rem", marginBottom: "1rem" }}>
-              <strong>NDC:</strong>
-              <span style={{ fontFamily: "monospace" }}>{refill.drug.ndc ?? "—"}</span>
-              <strong>Manufacturer:</strong>
-              <span>{refill.drug.manufacturer}</span>
-              <strong>Drug Class:</strong>
-              <span>{refill.drug.drug_class}</span>
-              <strong>Cost per unit:</strong>
-              <span>${Number(refill.drug.cost).toFixed(2)}</span>
-            </div>
+        {/* Refill Details */}
+        <div style={{ marginBottom: "1.25rem", paddingBottom: "1rem", borderBottom: "2px solid var(--bg-light)" }}>
+          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>This Refill</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1.5rem", fontSize: "0.95rem" }}>
+            <strong>Fill Qty:</strong>
+            <span>{refill.quantity}</span>
 
-            {refill.drug.description && (
-              <div style={{
-                padding: "0.75rem",
-                background: "var(--bg-light)",
-                borderRadius: "6px",
-                border: "1px solid var(--primary)",
-                fontSize: "0.9rem",
-                marginBottom: "0.75rem"
-              }}>
-                <strong>Physical Description:</strong>
-                <div style={{ marginTop: "0.25rem" }}>{refill.drug.description}</div>
-              </div>
-            )}
+            <strong>Days Supply:</strong>
+            <span>{refill.days_supply}</span>
 
-            {refill.drug.niosh && (
-              <div style={{
-                padding: "0.75rem",
-                background: "rgba(239, 71, 111, 0.1)",
-                border: "2px solid var(--danger)",
-                borderRadius: "6px",
-                fontWeight: "bold",
-                fontSize: "0.9rem"
-              }}>
-                ⚠️ NIOSH HAZARDOUS DRUG - Special handling required
-              </div>
-            )}
-          </div>
-
-          {/* Right: Prescription Details */}
-          <div>
-            <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.5rem", fontSize: "0.95rem" }}>
-              <strong>Rx #:</strong>
-              <span>{refill.prescription.id}</span>
-
-              <strong>Date Received:</strong>
-              <span>{refill.prescription.date_received ? new Date(refill.prescription.date_received).toLocaleDateString() : "—"}</span>
-
-              <strong>Orig. Qty:</strong>
-              <span>{refill.prescription.original_quantity}</span>
-
-              <strong>Remaining:</strong>
-              <span>{refill.prescription.remaining_quantity}</span>
-
-              <strong>Quantity:</strong>
-              <span>{refill.quantity}</span>
-
-              <strong>Days Supply:</strong>
-              <span>{refill.days_supply}</span>
-
-              <strong>Total Cost:</strong>
-              <span>${Number(refill.total_cost).toFixed(2)}</span>
-
-              <strong>Priority:</strong>
-              <span>{refill.priority}</span>
-
-              <strong>Due Date:</strong>
-              <span>{new Date(refill.due_date).toLocaleDateString()}</span>
-
-              <strong>Due Time:</strong>
-              <span>{new Date(refill.due_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-
-              <strong>Source:</strong>
-              <span>{refill.source}</span>
-
-              <strong>Brand Req:</strong>
-              <span>{refill.prescription.brand_required ? "Yes" : "No"}</span>
-            </div>
-            {refill.prescription.instructions && (
-              <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", background: "var(--bg-light)", borderRadius: "6px", fontSize: "0.9rem" }}>
-                <strong>Instructions:</strong>
-                <div style={{ marginTop: "0.25rem" }}>{refill.prescription.instructions}</div>
-              </div>
-            )}
+            <strong>Pickup Cost:</strong>
+            <span>${Number(refill.total_cost).toFixed(2)}</span>
           </div>
         </div>
 
-        {/* Prescription Image */}
-        <div style={{ paddingTop: "1rem", borderTop: "2px solid var(--bg-light)" }}>
-          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription Image</h3>
-          {refill.prescription.picture ? (
-            <img
-              src={refill.prescription.picture}
-              alt="Prescription"
-              style={{ maxWidth: "100%", maxHeight: "340px", objectFit: "contain", borderRadius: "6px", border: "1px solid var(--border, #dee2e6)" }}
-            />
-          ) : (
+        {/* Drug Information */}
+        <div style={{ marginBottom: "1.5rem" }}>
+          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Drug Information</h3>
+          <div style={{ fontSize: "1.3rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--primary)" }}>
+            {refill.drug.drug_name}
+          </div>
+          {refill.drug.drug_class === 2 && (
             <div style={{
-              display: "flex", alignItems: "center", justifyContent: "center",
-              height: "120px", border: "2px dashed var(--border, #dee2e6)",
-              borderRadius: "6px", color: "var(--text-light)", fontSize: "0.95rem"
+              display: "inline-block",
+              padding: "0.2rem 0.6rem",
+              background: "rgba(239, 71, 111, 0.15)",
+              border: "1px solid var(--danger)",
+              borderRadius: "4px",
+              color: "var(--danger)",
+              fontWeight: "bold",
+              fontSize: "0.85rem",
+              marginBottom: "0.75rem"
             }}>
-              No Image Available
+              C-II Controlled Substance
+            </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.25rem 1rem", marginBottom: "1rem" }}>
+            <strong>NDC:</strong>
+            <span style={{ fontFamily: "monospace" }}>{refill.drug.ndc ?? "—"}</span>
+            <strong>Manufacturer:</strong>
+            <span>{refill.drug.manufacturer}</span>
+          </div>
+
+          {refill.drug.description && (
+            <div style={{
+              padding: "0.75rem",
+              background: "var(--bg-light)",
+              borderRadius: "6px",
+              border: "1px solid var(--primary)",
+              fontSize: "0.9rem",
+              marginBottom: "0.75rem"
+            }}>
+              <strong>Physical Description:</strong>
+              <div style={{ marginTop: "0.25rem" }}>{refill.drug.description}</div>
+            </div>
+          )}
+
+          {refill.drug.niosh && (
+            <div style={{
+              padding: "0.75rem",
+              background: "rgba(239, 71, 111, 0.1)",
+              border: "2px solid var(--danger)",
+              borderRadius: "6px",
+              fontWeight: "bold",
+              fontSize: "0.9rem"
+            }}>
+              ⚠️ NIOSH HAZARDOUS DRUG - Special handling required
             </div>
           )}
         </div>
 
-        {/* Prescriber Information in the lower right */}
-        {refill.prescription.prescriber && (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "2fr 1fr",
-            gap: "2rem",
-            paddingTop: "1rem",
-            borderTop: "2px solid var(--bg-light)"
-          }}>
-            <div></div>
-            <div>
-              <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescriber</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.5rem", fontSize: "0.95rem" }}>
-                <strong>Name:</strong>
-                <span>Dr. {refill.prescription.prescriber.first_name} {refill.prescription.prescriber.last_name}</span>
-
-                <strong>NPI:</strong>
-                <span>{refill.prescription.prescriber.npi}</span>
-
-                <strong>Phone:</strong>
-                <span>{refill.prescription.prescriber.phone_number}</span>
-
-                <strong>Address:</strong>
-                <span>{refill.prescription.prescriber.address}</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {showSellConfirm && (() => {

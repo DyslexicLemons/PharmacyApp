@@ -285,7 +285,7 @@ class RefillHistSimpleOut(BaseModel):
 
 class PrescriptionBase(BaseModel):
     drug_id: int
-    brand_required: bool
+    daw_code: int = 0
     original_quantity: int
     remaining_quantity: int
     date_received: date
@@ -296,7 +296,7 @@ class PrescriptionOut(PrescriptionBase):
     patient: PatientOut
     drug: DrugOut
     prescriber: Optional[PrescriberOut] = None
-    brand_required: bool
+    daw_code: int
     remaining_quantity: int
     date_received: date
     expiration_date: Optional[date] = None
@@ -310,7 +310,7 @@ class PrescriptionOut(PrescriptionBase):
 
 class PrescriptionOut2(PrescriptionBase):
     id: int
-    brand_required: bool
+    daw_code: int
     patient_id: int
     prescriber_id: int
     drug: DrugOut
@@ -347,7 +347,7 @@ class PrescriptionCreate(BaseModel):
     date: date
     patient_id: int
     drug_id: int
-    brand_required: int
+    daw_code: int = 0
     directions: str  # mapped to Prescription.instructions in the endpoint
     refill_quantity: int
     total_refills: int
@@ -455,7 +455,7 @@ class JSONPrescriptionUpload(BaseModel):
     directions: str
     refill_quantity: int
     total_refills: int
-    brand_required: bool = False
+    daw_code: int = 0
     priority: str = "normal"
 
     @field_validator("refill_quantity")
@@ -482,7 +482,7 @@ class ManualPrescriptionCreate(BaseModel):
     quantity: int
     days_supply: int
     total_refills: int
-    brand_required: bool = False
+    daw_code: int = 0
     priority: str = "normal"
     initial_state: str = "QP"  # "QP", "HOLD", or "SCHEDULED"
     date_received: Optional[date] = None  # defaults to today if not provided
@@ -535,7 +535,7 @@ class RefillEditRequest(BaseModel):
     priority: Optional[str] = None
     due_date: Optional[date] = None
     instructions: Optional[str] = None
-    brand_required: Optional[bool] = None
+    daw_code: Optional[int] = None
 
     @field_validator("quantity")
     @classmethod
