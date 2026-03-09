@@ -1,81 +1,55 @@
-import React, { createContext, useState, useEffect } from "react";
-import { getPatients, getDrugs, getStock, getRefillHist, getPrescribers } from "@/api";
+import React, { createContext, useState, useEffect, useContext } from "react";
+import { getDrugs, getPrescribers } from "@/api";
+import { AuthContext } from "./AuthContext";
 
 export const DataContext = createContext();
 
 export const DataProvider = ({ children }) => {
-  const [patients, setPatients] = useState([]);
+  const { isAuthenticated, token } = useContext(AuthContext);
+
   const [drugs, setDrugs] = useState([]);
-  const [stock, setStock] = useState([]);
   const [prescribers, setPrescribers] = useState([]);
-  const [refillHist, setRefillHist] = useState([]);
 
   // loading states
-  const [loadingPatients, setLoadingPatients] = useState(true);
-  const [loadingDrugs, setLoadingDrugs] = useState(true);
-  const [loadingStock, setLoadingStock] = useState(true);
-  const [loadingRefillHist, setLoadingRefillHist] = useState(true);
-  const [loadingPrescribers, setLoadingPrescribers] = useState(true);
+  const [loadingDrugs, setLoadingDrugs] = useState(false);
+  const [loadingPrescribers, setLoadingPrescribers] = useState(false);
 
   // error states
-  const [errorPatients, setErrorPatients] = useState("");
   const [errorDrugs, setErrorDrugs] = useState("");
-  const [errorStock, setErrorStock] = useState("");
-  const [errorRefillHist, setErrorRefillHist] = useState("");
   const [errorPrescribers, setErrorPrescribers] = useState("");
 
+  // Only fetch global reference data (drugs, prescribers) once authenticated.
+  // Patients, stock, refillHist, and queue data are fetched by their own views.
   useEffect(() => {
+    if (!isAuthenticated || !token) return;
+
     let mounted = true;
 
-    getPatients()
-      .then((data) => mounted && setPatients(data))
-      .catch((err) => mounted && setErrorPatients(err.message))
-      .finally(() => mounted && setLoadingPatients(false));
-
-    getDrugs()
-      .then((data) => mounted && setDrugs(data))
+    setLoadingDrugs(true);
+    getDrugs(token)
+      .then((data) => mounted && setDrugs(data.items ?? data))
       .catch((err) => mounted && setErrorDrugs(err.message))
       .finally(() => mounted && setLoadingDrugs(false));
 
-    getStock()
-      .then((data) => mounted && setStock(data))
-      .catch((err) => mounted && setErrorStock(err.message))
-      .finally(() => mounted && setLoadingStock(false));
-
-    getRefillHist()
-      .then((data) => mounted && setRefillHist(data))
-      .catch((err) => mounted && setErrorRefillHist(err.message))
-      .finally(() => mounted && setLoadingRefillHist(false));
-
-    getPrescribers()
-      .then((data) => mounted && setPrescribers(data))
+    setLoadingPrescribers(true);
+    getPrescribers(token)
+      .then((data) => mounted && setPrescribers(data.items ?? data))
       .catch((err) => mounted && setErrorPrescribers(err.message))
       .finally(() => mounted && setLoadingPrescribers(false));
 
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [isAuthenticated, token]);
 
   return (
     <DataContext.Provider
       value={{
-        patients,
         drugs,
-        stock,
-        refillHist,
         prescribers,
-
-        loadingPatients,
         loadingDrugs,
-        loadingStock,
-        loadingRefillHist,
         loadingPrescribers,
-
-        errorPatients,
         errorDrugs,
-        errorStock,
-        errorRefillHist,
         errorPrescribers,
       }}
     >

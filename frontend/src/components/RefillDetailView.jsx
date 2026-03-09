@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import { advanceRx, getStock, getRefill } from "@/api";
+import { AuthContext } from "@/context/AuthContext";
 
-export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit }) {
+export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, keyCmd, onKeyCmdHandled }) {
+  const { token } = useContext(AuthContext);
   const [refill, setRefill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -14,10 +16,19 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
     fetchRefillDetails();
   }, [refillId]);
 
+  useEffect(() => {
+    if (!keyCmd || !refill) return;
+    const approveStates = ["QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED"];
+    const holdStates = ["QT", "QV1", "QP", "QV2"];
+    if (keyCmd === "approve" && approveStates.includes(refill.state)) handleApprove();
+    if (keyCmd === "hold" && holdStates.includes(refill.state)) handleHold();
+    onKeyCmdHandled?.();
+  }, [keyCmd]);
+
   const fetchRefillDetails = async () => {
     try {
       setLoading(true);
-      const found = await getRefill(refillId);
+      const found = await getRefill(refillId, token);
       setRefill(found);
       setError("");
     } catch (e) {
@@ -30,7 +41,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
   const handleApprove = async () => {
     if (refill.state === "READY") {
       try {
-        const stocks = await getStock();
+        const stocks = await getStock(token);
         const entry = stocks.find(s => s.drug_id === refill.drug_id);
         setStockQty(entry ? entry.quantity : 0);
         setScheduleNextFill(false);
@@ -41,7 +52,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
       return;
     }
     try {
-      const updated = await advanceRx(refillId, {});
+      const updated = await advanceRx(refillId, {}, token);
       alert(`Prescription advanced to ${updated.state}`);
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -52,7 +63,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
 
   const handleConfirmSell = async () => {
     try {
-      const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill });
+      const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill }, token);
       alert(`Prescription marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`);
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -72,7 +83,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
         action: "reject",
         rejection_reason: reason,
         rejected_by: rejectedBy
-      });
+      }, token);
       alert("Prescription rejected successfully");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -90,7 +101,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
     if (!window.confirm(confirmMessage)) return;
 
     try {
-      const updated = await advanceRx(refillId, { action: "hold" });
+      const updated = await advanceRx(refillId, { action: "hold" }, token);
       if (isQV2) {
         alert("Prescription placed on HOLD.\n\nThis script has been filled — please return the medication to stock.");
       } else {
@@ -115,7 +126,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
   return (
     <div className="vstack">
       <h2 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <span>Rx #: {'17' + String(refill.prescription.id).padStart(5, '0')}</span>
+        <span>Rx #: {refill.prescription.id}</span>
         <Badge state={refill.state} />
       </h2>
 
@@ -212,7 +223,10 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
             <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription</h3>
             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.5rem", fontSize: "0.95rem" }}>
               <strong>Rx #:</strong>
-              <span>{'17' + String(refill.prescription.id).padStart(5, '0')}</span>
+              <span>{refill.prescription.id}</span>
+
+              <strong>Date Received:</strong>
+              <span>{refill.prescription.date_received ? new Date(refill.prescription.date_received).toLocaleDateString() : "—"}</span>
 
               <strong>Orig. Qty:</strong>
               <span>{refill.prescription.original_quantity}</span>
@@ -251,6 +265,26 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
               </div>
             )}
           </div>
+        </div>
+
+        {/* Prescription Image */}
+        <div style={{ paddingTop: "1rem", borderTop: "2px solid var(--bg-light)" }}>
+          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription Image</h3>
+          {refill.prescription.picture ? (
+            <img
+              src={refill.prescription.picture}
+              alt="Prescription"
+              style={{ maxWidth: "100%", maxHeight: "340px", objectFit: "contain", borderRadius: "6px", border: "1px solid var(--border, #dee2e6)" }}
+            />
+          ) : (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "center",
+              height: "120px", border: "2px dashed var(--border, #dee2e6)",
+              borderRadius: "6px", color: "var(--text-light)", fontSize: "0.95rem"
+            }}>
+              No Image Available
+            </div>
+          )}
         </div>
 
         {/* Prescriber Information in the lower right */}
@@ -377,7 +411,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
             onClick={handleApprove}
             style={{ minWidth: "180px" }}
           >
-            ✓ Approve & Advance
+            ✓ Approve & Advance [a]
           </button>
         )}
 
@@ -387,7 +421,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit })
             onClick={handleHold}
             style={{ minWidth: "120px" }}
           >
-            ⏸ Hold
+            ⏸ Hold [h]
           </button>
         )}
 

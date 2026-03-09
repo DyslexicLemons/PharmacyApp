@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import { fetchQueue } from "@/api";
+import { AuthContext } from "@/context/AuthContext";
 
 
 const PAGE_SIZE = 15;
@@ -23,6 +24,7 @@ function getSortValue(r, key) {
 }
 
 export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, onSelectRefill }) {
+  const { token } = useContext(AuthContext);
   const [refills, setRefills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -32,10 +34,10 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : undefined)
+    fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : undefined, token)
       .then((data) => {
         if (mounted) {
-          setRefills(data);
+          setRefills(data.items ?? data);
           setError("");
         }
       })
@@ -134,7 +136,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
                 <td>
                   <strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong>
                 </td>
-                <td><strong>{'17' + String(r.prescription?.id ?? 0).padStart(5, '0')}</strong></td>
+                <td><strong>{r.prescription?.id}</strong></td>
                 <td>
                   <div>
                     <strong>{r.drug.drug_name}</strong>

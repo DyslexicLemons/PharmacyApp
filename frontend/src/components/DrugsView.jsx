@@ -1,17 +1,31 @@
-import { useContext } from "react";
-import { DataContext } from "@/context/DataContext";
+import { useContext, useEffect, useState } from "react";
+import { AuthContext } from "@/context/AuthContext";
+import { getDrugs } from "@/api";
+
 const PAGE_SIZE = 15;
 
 export default function DrugsView({ onBack, onSelectDrug, page = 1 }) {
-  const { drugs, loadingDrugs, errorDrugs } = useContext(DataContext);
+  const { token } = useContext(AuthContext);
+  const [data, setData] = useState({ items: [], total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (loadingDrugs) return <p>Loading…</p>;
-  if (errorDrugs) return <p style={{ color: "#ff7675" }}>{errorDrugs}</p>;
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true);
+    const offset = (page - 1) * PAGE_SIZE;
+    getDrugs(token, PAGE_SIZE, offset)
+      .then(setData)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [token, page]);
 
-  const total = drugs.length;
+  if (loading) return <p>Loading…</p>;
+  if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
+
+  const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
-  const endIdx = Math.min(startIdx + PAGE_SIZE, total);
-  const pageItems = drugs.slice(startIdx, endIdx);
+  const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
 
   return (
     <div className="vstack">
@@ -27,7 +41,7 @@ export default function DrugsView({ onBack, onSelectDrug, page = 1 }) {
           </tr>
         </thead>
         <tbody>
-          {pageItems.map((d, index) => (
+          {items.map((d, index) => (
             <tr
               key={d.id}
               onClick={() => onSelectDrug && onSelectDrug(d.id)}

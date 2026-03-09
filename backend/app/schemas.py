@@ -1,7 +1,61 @@
 from decimal import Decimal
 from pydantic import BaseModel, field_validator
 from datetime import date
-from typing import List, Optional
+from typing import Generic, List, Optional, TypeVar
+
+# ---- Generic paginated response ----
+
+T = TypeVar("T")
+
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: List[T]
+    total: int
+    limit: int
+    offset: int
+
+
+# ---- Auth schemas (moved from main.py) ----
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class CodeLoginRequest(BaseModel):
+    code: str
+
+
+class CreateUserRequest(BaseModel):
+    username: str
+    password: str
+    is_admin: bool = False
+
+
+class LoginResponse(BaseModel):
+    success: bool
+    username: str
+    is_admin: bool
+    quick_code: str
+    access_token: str
+    token_type: str = "bearer"
+
+
+# ---- Audit log output ----
+
+class AuditLogOut(BaseModel):
+    id: int
+    timestamp: str
+    action: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[int] = None
+    prescription_id: Optional[int] = None
+    details: Optional[str] = None
+    performed_by: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 
 # Valid priority strings accepted by the API
 VALID_PRIORITIES = {"low", "normal", "high", "stat"}
@@ -245,6 +299,10 @@ class PrescriptionOut(PrescriptionBase):
     brand_required: bool
     remaining_quantity: int
     date_received: date
+    expiration_date: Optional[date] = None
+    picture: Optional[str] = None
+    picture_path: Optional[str] = None
+    picture_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -258,11 +316,24 @@ class PrescriptionOut2(PrescriptionBase):
     drug: DrugOut
     remaining_quantity: int
     date_received: date
+    expiration_date: Optional[date] = None
+    picture: Optional[str] = None
+    picture_path: Optional[str] = None
+    picture_url: Optional[str] = None
     latest_refill: Optional[LatestRefillOut] = None
     refill_history: List[RefillHistSimpleOut] = []
 
     class Config:
         from_attributes = True
+
+
+class PrescriptionUpdate(BaseModel):
+    expiration_date: Optional[date] = None
+    instructions: Optional[str] = None
+
+
+class PrescriptionPictureUpdate(BaseModel):
+    picture: str  # base64 data URL, e.g. "data:image/jpeg;base64,..."
 
 
 class PrescriptionDetailOut(PrescriptionOut2):
@@ -414,8 +485,11 @@ class ManualPrescriptionCreate(BaseModel):
     brand_required: bool = False
     priority: str = "normal"
     initial_state: str = "QP"  # "QP", "HOLD", or "SCHEDULED"
+    date_received: Optional[date] = None  # defaults to today if not provided
     due_date: Optional[date] = None
+    expiration_date: Optional[date] = None
     instructions: str
+    picture: Optional[str] = None
 
     @field_validator("quantity")
     @classmethod

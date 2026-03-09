@@ -49,7 +49,10 @@ class Prescription(Base):
     original_quantity = Column(Integer)
     remaining_quantity = Column(Integer)
     date_received = Column(Date)
+    expiration_date = Column(Date, nullable=True)
     instructions = Column(String, nullable=True)  # sig/directions for the dispensed drug
+    picture = Column(String, nullable=True)       # base64 data URL (legacy — use picture_path instead)
+    picture_path = Column(String, nullable=True)  # filesystem path relative to uploads/ dir
 
     patient_id = Column(Integer, ForeignKey("patients.id"))
     patient = relationship("Patient", back_populates="prescriptions")
@@ -66,7 +69,7 @@ class Refill(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     prescription_id = Column(Integer, ForeignKey("prescriptions.id"))
-    patient_id = Column(Integer, ForeignKey("patients.id"))
+    patient_id = Column(Integer, ForeignKey("patients.id"), index=True)
     drug_id = Column(Integer, ForeignKey("drugs.id"))
     due_date = Column(Date)
     quantity = Column(Integer)
@@ -205,6 +208,30 @@ class PatientInsurance(Base):
     insurance_company = relationship("InsuranceCompany", back_populates="patient_insurances", lazy="joined")
 
 
+class User(Base):
+    """Application users for login authentication."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
+
+
+class QuickCode(Base):
+    """Short-lived 6-character login codes generated after successful authentication."""
+    __tablename__ = "quick_codes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(6), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used = Column(Boolean, default=False)
+
+    user = relationship("User")
+
+
 class AuditLog(Base):
     """Immutable audit trail for all significant pharmacy actions."""
     __tablename__ = "audit_log"
@@ -223,3 +250,8 @@ class AuditLog(Base):
     entity_id = Column(Integer, nullable=True)
     # Free-form detail string (keep short — one line describing what changed)
     details = Column(String, nullable=True)
+    # Optional link to the prescription (RX) this action is about
+    prescription_id = Column(Integer, nullable=True, index=True)
+    # Who performed the action
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    performed_by = Column(String, nullable=True)  # denormalized username for historical accuracy

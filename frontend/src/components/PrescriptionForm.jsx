@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getDrugs, getPrescribers, searchPatients, getPatient } from "@/api";
 import NewPatientForm from "./NewPatientForm";
 
@@ -18,6 +18,17 @@ export default function PrescriptionForm({ onBack, patientId }) {
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
   const [newPatientPrefill, setNewPatientPrefill] = useState({ last: "", first: "" });
 
+  const [picture, setPicture] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const defaultExpiration = (() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split("T")[0];
+  })();
+
+  const today = new Date().toISOString().split("T")[0];
+
   const [form, setForm] = useState({
     drug_id: "",
     prescriber_id: "",
@@ -26,7 +37,9 @@ export default function PrescriptionForm({ onBack, patientId }) {
     total_refills: "1",
     brand_required: false,
     priority: "normal",
+    date_received: today,
     due_date: "",
+    expiration_date: defaultExpiration,
     instructions: "",
   });
 
@@ -56,6 +69,14 @@ export default function PrescriptionForm({ onBack, patientId }) {
     } catch (e) {
       setPatientSearchError(e.message);
     }
+  };
+
+  const handlePictureSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPicture(reader.result);
+    reader.readAsDataURL(file);
   };
 
   const handleChange = (e) => {
@@ -102,8 +123,11 @@ export default function PrescriptionForm({ onBack, patientId }) {
           brand_required: form.brand_required,
           priority: form.priority,
           initial_state: initialState,
+          date_received: form.date_received || null,
           due_date: form.due_date || null,
+          expiration_date: form.expiration_date || null,
           instructions: form.instructions,
+          picture: picture || null,
         }),
       });
 
@@ -122,6 +146,13 @@ export default function PrescriptionForm({ onBack, patientId }) {
 
   const selectedDrug = drugs.find(d => d.id === parseInt(form.drug_id));
   const selectedPrescriber = prescribers.find(p => p.id === parseInt(form.prescriber_id));
+
+  const missingFields = [
+    !form.prescriber_id && "Prescriber",
+    !form.quantity && "Quantity",
+    !form.days_supply && "Days Supply",
+    !form.instructions.trim() && "Instructions",
+  ].filter(Boolean);
 
   return (
     <div className="vstack">
@@ -378,11 +409,33 @@ export default function PrescriptionForm({ onBack, patientId }) {
             </label>
 
             <label>
+              <strong>Date Received</strong>
+              <input
+                type="date"
+                name="date_received"
+                value={form.date_received}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              />
+            </label>
+
+            <label>
               <strong>Due Date (optional)</strong>
               <input
                 type="date"
                 name="due_date"
                 value={form.due_date}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              />
+            </label>
+
+            <label>
+              <strong>Script Expiration Date</strong>
+              <input
+                type="date"
+                name="expiration_date"
+                value={form.expiration_date}
                 onChange={handleChange}
                 style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
               />
@@ -429,6 +482,67 @@ export default function PrescriptionForm({ onBack, patientId }) {
               />
             </label>
           </div>
+
+          <div className="card" style={{ padding: "1rem" }}>
+            <div className="hstack" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+              <strong>Prescription Image <span style={{ fontWeight: 400, color: "var(--text-light)" }}>(optional)</span></strong>
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={handlePictureSelect}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ padding: "4px 14px", fontSize: "0.85rem" }}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {picture ? "Replace Image" : "+ Upload Image"}
+                </button>
+                {picture && (
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ padding: "4px 14px", fontSize: "0.85rem" }}
+                    onClick={() => { setPicture(null); fileInputRef.current.value = ""; }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+            {picture ? (
+              <img
+                src={picture}
+                alt="Prescription"
+                style={{ maxWidth: "100%", maxHeight: "300px", objectFit: "contain", borderRadius: "6px", border: "1px solid var(--border, #dee2e6)" }}
+              />
+            ) : (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                height: "120px", border: "2px dashed var(--border, #dee2e6)",
+                borderRadius: "6px", color: "var(--text-light)", fontSize: "0.95rem"
+              }}>
+                No Image Attached
+              </div>
+            )}
+          </div>
+
+          {missingFields.length > 0 && (
+            <div style={{
+              padding: "0.75rem 1rem",
+              background: "rgba(239, 71, 111, 0.1)",
+              border: "1px solid var(--danger)",
+              borderRadius: "4px",
+              fontSize: "0.9rem",
+              color: "var(--danger)",
+            }}>
+              <strong>Required fields missing:</strong> {missingFields.join(", ")}
+            </div>
+          )}
 
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
             <button className="btn btn-secondary" onClick={() => setStep(1)}>

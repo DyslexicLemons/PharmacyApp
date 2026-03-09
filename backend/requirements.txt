@@ -4,6 +4,10 @@ SQLAlchemy==2.0.35
 pydantic==2.9.2
 pydantic-core==2.23.4
 python-multipart==0.0.9
+bcrypt>=4.0.0
+PyJWT>=2.8.0
+slowapi>=0.1.9
+python-dotenv>=1.0.0
 
 # ── Test dependencies ─────────────────────────────────────────────────────
 pytest>=8.0.0

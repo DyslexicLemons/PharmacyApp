@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { getRefill, editRefill } from "@/api";
+import { AuthContext } from "@/context/AuthContext";
 
 const PRIORITIES = ["low", "normal", "high", "stat"];
 
 export default function EditRefillView({ refillId, onBack, onSaved }) {
+  const { token } = useContext(AuthContext);
   const [refill, setRefill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -18,7 +20,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
   const [brandRequired, setBrandRequired] = useState(false);
 
   useEffect(() => {
-    getRefill(refillId)
+    getRefill(refillId, token)
       .then((r) => {
         setRefill(r);
         setQuantity(String(r.quantity));
@@ -48,7 +50,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
     };
 
     try {
-      const updated = await editRefill(refillId, payload);
+      const updated = await editRefill(refillId, payload, token);
       const msg =
         updated.state === "QV1"
           ? "Script saved and sent back to QV1 for re-verification."
@@ -72,7 +74,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
   return (
     <div className="vstack">
       <h2 style={{ marginBottom: "0.25rem" }}>
-        Edit Rx #{'17' + String(refill.prescription.id).padStart(5, '0')}
+        Edit Rx #{refill.prescription.id}
       </h2>
       <p style={{ color: "var(--text-light)", fontSize: "0.9rem", marginBottom: "1rem" }}>
         Current state: <strong>{priorState}</strong> — saving will send to{" "}
