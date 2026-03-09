@@ -454,6 +454,37 @@ class ConflictCheckResponse(BaseModel):
     message: Optional[str] = None
 
 
+class RefillEditRequest(BaseModel):
+    """Schema for editing a refill in QT, QP, or HOLD state."""
+    quantity: Optional[int] = None
+    days_supply: Optional[int] = None
+    priority: Optional[str] = None
+    due_date: Optional[date] = None
+    instructions: Optional[str] = None
+    brand_required: Optional[bool] = None
+
+    @field_validator("quantity")
+    @classmethod
+    def quantity_must_be_positive(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None:
+            return _validate_positive_int("quantity", v)
+        return v
+
+    @field_validator("days_supply")
+    @classmethod
+    def days_supply_must_be_positive(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None:
+            return _validate_positive_int("days_supply", v)
+        return v
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            return _validate_priority(v)
+        return v
+
+
 class FillScriptRequest(BaseModel):
     """Schema for filling an existing prescription"""
     quantity: int

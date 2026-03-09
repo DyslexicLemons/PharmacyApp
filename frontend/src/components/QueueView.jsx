@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import Badge from "@/components/Badge";
-import RefillDetailView from "@/components/RefillDetailView";
 import { fetchQueue } from "@/api";
 
 
@@ -23,18 +22,16 @@ function getSortValue(r, key) {
   }
 }
 
-export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }) {
+export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, onSelectRefill }) {
   const [refills, setRefills] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedRefillId, setSelectedRefillId] = useState(null);
   const [sortKey, setSortKey] = useState("due");
   const [sortDir, setSortDir] = useState("asc");
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    setSelectedRefillId(null); // Reset selection when changing queues
     fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : undefined)
       .then((data) => {
         if (mounted) {
@@ -49,36 +46,19 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
     };
   }, [stateFilter]);
 
+  const handleSelectRefill = (id) => {
+    if (onSelectRefill) onSelectRefill(id);
+  };
+
   // Handle row selection via command bar
   useEffect(() => {
     if (onSelectRow && refills.length > 0) {
       const rowIndex = onSelectRow - 1;
       if (rowIndex >= 0 && rowIndex < refills.length) {
-        setSelectedRefillId(refills[rowIndex].id);
+        handleSelectRefill(refills[rowIndex].id);
       }
     }
   }, [onSelectRow, refills]);
-
-  const handleRefillUpdate = (updatedRefill) => {
-    // Refresh the list after update
-    setSelectedRefillId(null);
-    fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : undefined)
-      .then((data) => {
-        setRefills(data);
-      })
-      .catch((err) => setError(err.message));
-  };
-
-  // If a refill is selected, show detail view
-  if (selectedRefillId) {
-    return (
-      <RefillDetailView
-        refillId={selectedRefillId}
-        onBack={() => setSelectedRefillId(null)}
-        onUpdate={handleRefillUpdate}
-      />
-    );
-  }
 
   const handleSort = (key) => {
     if (sortKey === key) {
@@ -147,7 +127,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
             {pageItems.map((r, index) => (
               <tr
                 key={r.id}
-                onClick={() => setSelectedRefillId(r.id)}
+                onClick={() => handleSelectRefill(r.id)}
                 style={{ cursor: "pointer" }}
                 className="hover-row"
               >

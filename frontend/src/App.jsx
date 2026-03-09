@@ -2,6 +2,8 @@ import { useState, useContext, useRef, useEffect } from "react";
 import { DataContext } from "@/context/DataContext";
 
 import { searchPatients, generateTestPrescriptions, getPrescription } from "@/api";
+import EditRefillView from "@/components/EditRefillView";
+import RefillDetailView from "@/components/RefillDetailView";
 
 import PatientProfile from "@/components/PatientProfile";
 import DrugsView from "@/components/DrugsView";
@@ -24,6 +26,7 @@ export default function App() {
   const [route, setRoute] = useState({ view: "HOME" });
   const [history, setHistory] = useState([]);
   const [currentPatientData, setCurrentPatientData] = useState(null);
+  const [queueSelectRow, setQueueSelectRow] = useState(null);
   const { patients, drugs, stock, prescribers } = useContext(DataContext);
   const cmdBarRef = useRef(null);
 
@@ -31,8 +34,15 @@ export default function App() {
     cmdBarRef.current?.focus();
   }, [route]);
 
+  // Drill-down navigation: pushes current route to history so `q` can go back
   function navigateTo(newRoute) {
     setHistory((prev) => [...prev, route]);
+    setRoute(newRoute);
+  }
+
+  // Section navigation: clears history so `q` cannot return to a previous form/edit view
+  function navigateToSection(newRoute) {
+    setHistory([]);
     setRoute(newRoute);
   }
 
@@ -136,8 +146,7 @@ export default function App() {
         }
         return;
       } else if (route.view === "QUEUE") {
-        // For Queue, update the route with the selected row number
-        navigateTo({ view: "QUEUE", state: route.state, selectRow: rowNum });
+        setQueueSelectRow(rowNum);
         return;
       }
     }
@@ -159,13 +168,21 @@ export default function App() {
       return;
     }
 
-    // New state-specific queue commands
+    // Edit the currently viewed refill (only valid from the refill detail view)
+    if (cmd === "e") {
+      if (route.view === "REFILL_DETAIL") {
+        navigateTo({ view: "EDIT_REFILL", refillId: route.refillId });
+      }
+      return;
+    }
+
+    // Queue state commands — section navigation (clears history)
     if (["qt", "qv1", "qp", "qv2", "ready", "hold", "rejected"].includes(cmd)) {
-      navigateTo({ view: "QUEUE", state: cmd.toUpperCase() });
+      navigateToSection({ view: "QUEUE", state: cmd.toUpperCase() });
       return;
     }
     if (cmd === "all") {
-      navigateTo({ view: "QUEUE", state: "ALL" });
+      navigateToSection({ view: "QUEUE", state: "ALL" });
       return;
     }
 
@@ -200,14 +217,14 @@ export default function App() {
       return;
     }
 
-    // Command shortcuts
-    if (cmd === "drugs") navigateTo({ view: "DRUGS" });
-    else if (cmd === "pt" || cmd === "patients") navigateTo({ view: "PATIENTS" });
-    else if (cmd === "home") navigateTo({ view: "HOME" });
-    else if (cmd === "stock") navigateTo({ view: "STOCK" });
-    else if (cmd === "refill_hist") navigateTo({ view: "REFILL_HIST" });
-    else if (cmd === "prescribers") navigateTo({ view: "PRESCRIBERS" });
-    else if (cmd === "register") navigateTo({ view: "REGISTER" });
+    // Top-level section commands — clears history so `q` cannot return to a previous form/edit view
+    if (cmd === "drugs") navigateToSection({ view: "DRUGS" });
+    else if (cmd === "pt" || cmd === "patients") navigateToSection({ view: "PATIENTS" });
+    else if (cmd === "home") navigateToSection({ view: "HOME" });
+    else if (cmd === "stock") navigateToSection({ view: "STOCK" });
+    else if (cmd === "refill_hist") navigateToSection({ view: "REFILL_HIST" });
+    else if (cmd === "prescribers") navigateToSection({ view: "PRESCRIBERS" });
+    else if (cmd === "register") navigateToSection({ view: "REGISTER" });
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
         generateTestPrescriptions()
@@ -230,8 +247,20 @@ export default function App() {
             <QueueView
               stateFilter={route.state}
               onBack={goBack}
-              onSelectRow={route.selectRow}
+              onSelectRow={queueSelectRow}
               page={route.page || 1}
+              onSelectRefill={(refillId) => {
+                setQueueSelectRow(null);
+                navigateTo({ view: "REFILL_DETAIL", refillId, fromQueueState: route.state });
+              }}
+            />
+          )}
+          {route.view === "REFILL_DETAIL" && (
+            <RefillDetailView
+              refillId={route.refillId}
+              onBack={goBack}
+              onEdit={() => navigateTo({ view: "EDIT_REFILL", refillId: route.refillId })}
+              onUpdate={(updated) => navigateToSection({ view: "QUEUE", state: updated.state })}
             />
           )}
           {route.view === "PATIENT" && (
@@ -264,6 +293,15 @@ export default function App() {
               patientName={route.patientName}
               patientId={route.fromPid}
               onBack={goBack}
+            />
+          )}
+          {route.view === "EDIT_REFILL" && (
+            <EditRefillView
+              refillId={route.refillId}
+              onBack={goBack}
+              onSaved={(updated) => {
+                navigateToSection({ view: "QUEUE", state: updated.state });
+              }}
             />
           )}
           {route.view === "DRUGS" && (

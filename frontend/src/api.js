@@ -138,6 +138,19 @@ export async function addPatientInsurance(patientId, data) {
     return res.json();
 }
 
+export async function editRefill(id, data) {
+    const res = await fetch(`${API}/refills/${id}/edit`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.detail || 'Failed to edit refill');
+    }
+    return res.json();
+}
+
 export async function calculateBilling(data) {
     const res = await fetch(`${API}/billing/calculate`, {
         method: 'POST',
