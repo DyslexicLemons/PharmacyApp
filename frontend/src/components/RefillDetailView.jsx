@@ -2,9 +2,11 @@ import { useContext, useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import { advanceRx, getStock, getRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
+import { useNotification } from "@/context/NotificationContext";
 
 export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, keyCmd, onKeyCmdHandled }) {
   const { token } = useContext(AuthContext);
+  const { addNotification } = useNotification();
   const [refill, setRefill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -42,33 +44,34 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     if (refill.state === "READY") {
       try {
         const stocks = await getStock(token);
-        const entry = stocks.find(s => s.drug_id === refill.drug_id);
+        const items = Array.isArray(stocks) ? stocks : (stocks.items ?? []);
+        const entry = items.find(s => s.drug_id === refill.drug_id);
         setStockQty(entry ? entry.quantity : 0);
         setScheduleNextFill(false);
         setShowSellConfirm(true);
       } catch (e) {
-        alert(`Error fetching stock: ${e.message}`);
+        addNotification(`Error fetching stock: ${e.message}`, "error");
       }
       return;
     }
     try {
       const updated = await advanceRx(refillId, {}, token);
-      alert(`Prescription advanced to ${updated.state}`);
+      addNotification(`Prescription advanced to ${updated.state}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      alert(`Error: ${e.message}`);
+      addNotification(`Error: ${e.message}`, "error");
     }
   };
 
   const handleConfirmSell = async () => {
     try {
       const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill }, token);
-      alert(`Prescription marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`);
+      addNotification(`Prescription marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      alert(`Error: ${e.message}`);
+      addNotification(`Error: ${e.message}`, "error");
     }
   };
 
@@ -84,11 +87,11 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
         rejection_reason: reason,
         rejected_by: rejectedBy
       }, token);
-      alert("Prescription rejected successfully");
+      addNotification("Prescription rejected successfully", "info");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      alert(`Error: ${e.message}`);
+      addNotification(`Error: ${e.message}`, "error");
     }
   };
 
@@ -103,14 +106,14 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     try {
       const updated = await advanceRx(refillId, { action: "hold" }, token);
       if (isQV2) {
-        alert("Prescription placed on HOLD.\n\nThis script has been filled — please return the medication to stock.");
+        addNotification("Prescription placed on HOLD.\nThis script has been filled — please return the medication to stock.", "warning");
       } else {
-        alert("Prescription moved to HOLD");
+        addNotification("Prescription moved to HOLD", "info");
       }
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      alert(`Error: ${e.message}`);
+      addNotification(`Error: ${e.message}`, "error");
     }
   };
 

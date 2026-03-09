@@ -10,17 +10,36 @@ export default function AuditLogView({ onBack, page = 1 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [usernameInput, setUsernameInput] = useState("");
+  const [rxInput, setRxInput] = useState("");
+  const [filters, setFilters] = useState({});
+
   useEffect(() => {
     if (!token) return;
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
-    getAuditLog(token, PAGE_SIZE, offset)
+    getAuditLog(token, PAGE_SIZE, offset, filters)
       .then(setData)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [token, page]);
+  }, [token, page, filters]);
 
-  if (loading) return <p>Loading…</p>;
+  function applyFilters(e) {
+    e.preventDefault();
+    const next = {};
+    if (usernameInput.trim()) next.username = usernameInput.trim();
+    if (rxInput.trim()) next.prescriptionId = rxInput.trim();
+    setFilters(next);
+  }
+
+  function clearFilters() {
+    setUsernameInput("");
+    setRxInput("");
+    setFilters({});
+  }
+
+  const hasFilters = Object.keys(filters).length > 0;
+
   if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
 
   const { items, total } = data;
@@ -30,7 +49,53 @@ export default function AuditLogView({ onBack, page = 1 }) {
   return (
     <div className="vstack">
       <h2>Audit Log</h2>
-      {items.length === 0 ? (
+
+      <form
+        onSubmit={applyFilters}
+        style={{ display: "flex", gap: "0.5rem", alignItems: "flex-end", flexWrap: "wrap", marginBottom: "0.75rem" }}
+      >
+        <div className="vstack" style={{ gap: "0.25rem" }}>
+          <label style={{ fontSize: "0.8rem", color: "var(--text-light)" }}>Username</label>
+          <input
+            className="input"
+            value={usernameInput}
+            onChange={(e) => setUsernameInput(e.target.value)}
+            placeholder="e.g. jsmith"
+            style={{ width: "160px" }}
+          />
+        </div>
+        <div className="vstack" style={{ gap: "0.25rem" }}>
+          <label style={{ fontSize: "0.8rem", color: "var(--text-light)" }}>RX #</label>
+          <input
+            className="input"
+            value={rxInput}
+            onChange={(e) => setRxInput(e.target.value)}
+            placeholder="e.g. 42"
+            type="number"
+            min="1"
+            style={{ width: "100px" }}
+          />
+        </div>
+        <button className="btn" type="submit">Filter</button>
+        {hasFilters && (
+          <button className="btn btn-secondary" type="button" onClick={clearFilters}>
+            Clear
+          </button>
+        )}
+      </form>
+
+      {hasFilters && (
+        <p style={{ fontSize: "0.85rem", color: "var(--text-light)", marginBottom: "0.5rem" }}>
+          Filtering by:{" "}
+          {filters.username && <strong>user "{filters.username}"</strong>}
+          {filters.username && filters.prescriptionId && " and "}
+          {filters.prescriptionId && <strong>RX #{filters.prescriptionId}</strong>}
+        </p>
+      )}
+
+      {loading ? (
+        <p>Loading…</p>
+      ) : items.length === 0 ? (
         <p style={{ color: "var(--text-light)" }}>No audit entries found.</p>
       ) : (
         <table className="table">
@@ -50,36 +115,37 @@ export default function AuditLogView({ onBack, page = 1 }) {
             {items.map((entry, index) => {
               const rxNum = entry.prescription_id ?? (entry.entity_type === "prescription" ? entry.entity_id : null);
               return (
-              <tr key={entry.id}>
-                <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
-                <td style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
-                  {new Date(entry.timestamp).toLocaleString()}
-                </td>
-                <td>
-                  <span style={{
-                    padding: "2px 8px",
-                    borderRadius: "4px",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    background: "var(--bg-light)",
-                    fontFamily: "monospace",
-                  }}>
-                    {entry.action}
-                  </span>
-                </td>
-                <td>{entry.entity_type ?? "—"}</td>
-                <td>{entry.entity_id ?? "—"}</td>
-                <td>{rxNum != null ? <strong style={{ color: "var(--primary)" }}>#{rxNum}</strong> : "—"}</td>
-                <td style={{ fontSize: "0.85rem", maxWidth: "300px", wordBreak: "break-word" }}>
-                  {entry.details ?? "—"}
-                </td>
-                <td>{entry.performed_by ?? "—"}</td>
-              </tr>
+                <tr key={entry.id}>
+                  <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
+                  <td style={{ fontSize: "0.85rem", whiteSpace: "nowrap" }}>
+                    {new Date(entry.timestamp).toLocaleString()}
+                  </td>
+                  <td>
+                    <span style={{
+                      padding: "2px 8px",
+                      borderRadius: "4px",
+                      fontSize: "0.8rem",
+                      fontWeight: 600,
+                      background: "var(--bg-light)",
+                      fontFamily: "monospace",
+                    }}>
+                      {entry.action}
+                    </span>
+                  </td>
+                  <td>{entry.entity_type ?? "—"}</td>
+                  <td>{entry.entity_id ?? "—"}</td>
+                  <td>{rxNum != null ? <strong style={{ color: "var(--primary)" }}>#{rxNum}</strong> : "—"}</td>
+                  <td style={{ fontSize: "0.85rem", maxWidth: "300px", wordBreak: "break-word" }}>
+                    {entry.details ?? "—"}
+                  </td>
+                  <td>{entry.performed_by ?? "—"}</td>
+                </tr>
               );
             })}
           </tbody>
         </table>
       )}
+
       {total > PAGE_SIZE && (
         <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
           Showing {startIdx + 1}–{endIdx} of {total}
