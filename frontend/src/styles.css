@@ -185,6 +185,8 @@ body {
 .state-REJECTED { background: var(--danger); color: white; }
 .state-SOLD { background: #6b7280; color: white; }
 .state-DONE { background: var(--success); color: white; }
+.state-INACTIVATED { background: #374151; color: white; }
+.state-EXPIRED { background: #92400e; color: white; }
 
 footer {
   opacity: 0.8;

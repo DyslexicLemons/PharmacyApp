@@ -1,6 +1,6 @@
 from decimal import Decimal
-from pydantic import BaseModel, field_validator
-from datetime import date
+from pydantic import BaseModel, computed_field, field_validator
+from datetime import date, datetime
 from typing import Generic, List, Optional, TypeVar
 
 # ---- Generic paginated response ----
@@ -322,9 +322,23 @@ class PrescriptionOut2(PrescriptionBase):
     picture_url: Optional[str] = None
     latest_refill: Optional[LatestRefillOut] = None
     refill_history: List[RefillHistSimpleOut] = []
+    is_inactive: bool = False
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_expired(self) -> bool:
+        """True when the expiration date has passed and the Rx was not manually inactivated."""
+        if self.is_inactive:
+            return False
+        return self.expiration_date is not None and self.expiration_date < date.today()
 
     class Config:
         from_attributes = True
+
+
+class InactivateRequest(BaseModel):
+    username: str
+    password: str
 
 
 class PrescriptionUpdate(BaseModel):
@@ -486,7 +500,7 @@ class ManualPrescriptionCreate(BaseModel):
     priority: str = "normal"
     initial_state: str = "QP"  # "QP", "HOLD", or "SCHEDULED"
     date_received: Optional[date] = None  # defaults to today if not provided
-    due_date: Optional[date] = None
+    due_date: Optional[datetime] = None
     expiration_date: Optional[date] = None
     instructions: str
     picture: Optional[str] = None

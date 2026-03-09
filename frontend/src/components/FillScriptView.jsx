@@ -1,6 +1,7 @@
 import { useContext, useState, useEffect } from "react";
 import { fillScript, getPrescribers, getPatientInsurance, calculateBilling } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
+import { useNotification } from "@/context/NotificationContext";
 
 const TIER_LABELS = {
   1: "Tier 1 – Preferred Generic",
@@ -44,6 +45,7 @@ function daysEarly(prescription) {
 
 export default function FillScriptView({ prescription, patientName, patientId, onBack }) {
   const { token } = useContext(AuthContext);
+  const { addNotification } = useNotification();
   const [prescribers, setPrescribers] = useState([]);
   const [patientInsurance, setPatientInsurance] = useState([]);
   const [submitting, setSubmitting] = useState(false);
@@ -174,7 +176,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
         insurance_id: selectedInsuranceId ? parseInt(selectedInsuranceId) : null,
       }, token);
 
-      let msg = `Fill created!\nRefill ID: ${result.refill_id}\nState: ${result.state}`;
+      let msg = `Fill created!\nRX#: ${prescription.id}\nState: ${result.state}`;
 
       if (result.copay_amount != null) {
         msg += `\n\nBilling Summary:
@@ -183,7 +185,7 @@ Patient Copay:   $${result.copay_amount.toFixed(2)}
 Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
       }
 
-      alert(msg);
+      addNotification(msg, "success");
       onBack();
 
     } catch (e) {

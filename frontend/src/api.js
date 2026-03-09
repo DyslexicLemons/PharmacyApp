@@ -204,6 +204,15 @@ export async function updatePrescription(id, data, token) {
     return handleResponse(res);
 }
 
+export async function inactivatePrescription(id, username, password, token) {
+    const res = await fetch(`${V1}/prescriptions/${id}/inactivate`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ username, password }),
+    });
+    return handleResponse(res);
+}
+
 export async function updatePrescriptionPicture(id, file, token) {
     // Multipart file upload — do NOT set Content-Type, browser sets it with boundary
     const formData = new FormData();

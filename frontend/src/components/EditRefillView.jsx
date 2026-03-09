@@ -1,6 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { getRefill, editRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
+import { useNotification } from "@/context/NotificationContext";
 
 const PRIORITIES = ["low", "normal", "high", "stat"];
 
@@ -19,6 +20,7 @@ const DAW_CODES = {
 
 export default function EditRefillView({ refillId, onBack, onSaved }) {
   const { token } = useContext(AuthContext);
+  const { addNotification } = useNotification();
   const [refill, setRefill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,7 +70,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
         updated.state === "QV1"
           ? "Script saved and sent back to QV1 for re-verification."
           : "Script saved and returned to QT for triage.";
-      alert(msg);
+      addNotification(msg, "success");
       if (onSaved) onSaved(updated);
     } catch (e) {
       setError(e.message);

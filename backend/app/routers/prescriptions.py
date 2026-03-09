@@ -2,10 +2,11 @@
 
 import os
 import uuid
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 from decimal import Decimal
 from typing import List, Optional
 
+import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -85,13 +86,17 @@ def create_prescription(
     if not prescriber:
         raise HTTPException(status_code=404, detail="Unable to find prescriber")
 
+    date_received = p.date
+    expiration_date = date_received + timedelta(days=365)
+
     prescription = Prescription(
         drug_id=p.drug_id,
         original_quantity=p.refill_quantity * p.total_refills,
         remaining_quantity=p.refill_quantity * p.total_refills,
         patient_id=p.patient_id,
         prescriber_id=prescriber.id,
-        date_received=p.date,
+        date_received=date_received,
+        expiration_date=expiration_date,
         instructions=p.directions,
         daw_code=p.daw_code,
     )
@@ -123,6 +128,12 @@ def update_prescription(
         raise HTTPException(status_code=404, detail="Prescription not found")
     changed_fields = []
     if payload.expiration_date is not None:
+        date_received = prescription.date_received
+        max_expiration = date_received + timedelta(days=365)
+        if payload.expiration_date < date_received:
+            raise HTTPException(status_code=422, detail="Expiration date cannot be before the date received")
+        if payload.expiration_date > max_expiration:
+            raise HTTPException(status_code=422, detail="Expiration date cannot be more than 1 year after the date received")
         prescription.expiration_date = payload.expiration_date
         changed_fields.append(f"expiration_date={payload.expiration_date}")
     if payload.instructions is not None:
@@ -199,6 +210,9 @@ def fill_prescription(
     )
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
+
+    if prescription.expiration_date and prescription.expiration_date < date_type.today():
+        raise HTTPException(status_code=409, detail="Prescription has expired and cannot be filled")
 
     BLOCKING_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.READY}
     ACTIVE_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.READY}
@@ -309,3 +323,49 @@ def fill_prescription(
         response["copay_amount"] = float(copay_amount)
         response["insurance_paid"] = float(insurance_paid or 0)
     return response
+
+
+@router.post("/{prescription_id}/inactivate", response_model=schemas.PrescriptionDetailOut)
+def inactivate_prescription(
+    prescription_id: int,
+    payload: schemas.InactivateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Inactivate a prescription. Requires the user to re-verify their credentials.
+    Once inactivated, the prescription cannot be filled and shows as INACTIVATED.
+    """
+    # Re-verify credentials
+    user = db.query(User).filter(User.username == payload.username, User.is_active == True).first()
+    if not user or not _bcrypt.checkpw(payload.password.encode(), user.hashed_password.encode()):
+        raise HTTPException(status_code=401, detail="Invalid credentials — inactivation denied")
+
+    prescription = db.get(Prescription, prescription_id)
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    if prescription.is_inactive:
+        raise HTTPException(status_code=409, detail="Prescription is already inactive")
+
+    prescription.is_inactive = True  # type: ignore[assignment]
+    _write_audit(
+        db, "PRESCRIPTION_INACTIVATED",
+        entity_type="prescription", entity_id=prescription_id,
+        prescription_id=prescription_id,
+        details=f"inactivated by {current_user.username} (verified as {payload.username})",
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
+    db.commit()
+    db.refresh(prescription)
+
+    prescription.latest_refill = _get_latest_refill_for_prescription(db, prescription_id)  # type: ignore[attr-defined]
+    prescription.refill_history = sorted(  # type: ignore[assignment]
+        prescription.refill_history,
+        key=lambda r: r.sold_date or r.completed_date or date_type.min,
+        reverse=True,
+    )
+    prescription.picture_url = _build_picture_url(request, prescription.picture_path)  # type: ignore[attr-defined]
+    return prescription

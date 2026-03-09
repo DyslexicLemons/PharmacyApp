@@ -54,6 +54,8 @@ class Prescription(Base):
     picture = Column(String, nullable=True)       # base64 data URL (legacy — use picture_path instead)
     picture_path = Column(String, nullable=True)  # filesystem path relative to uploads/ dir
 
+    is_inactive = Column(Boolean, default=False, nullable=False, server_default="false")
+
     patient_id = Column(Integer, ForeignKey("patients.id"))
     patient = relationship("Patient", back_populates="prescriptions")
     prescriber_id = Column(Integer, ForeignKey("prescribers.id"))
