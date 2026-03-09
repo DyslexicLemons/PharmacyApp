@@ -93,7 +93,7 @@ def create_prescription(
         prescriber_id=prescriber.id,
         date_received=p.date,
         instructions=p.directions,
-        brand_required=bool(p.brand_required),
+        daw_code=p.daw_code,
     )
     db.add(prescription)
     db.flush()

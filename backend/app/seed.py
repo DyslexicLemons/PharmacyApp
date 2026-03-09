@@ -3,6 +3,7 @@ from .database import SessionLocal
 from .models import Patient, Prescription, Drug, Prescriber, Refill, Priority, RxState, Prescriber, Stock, RefillHist
 from datetime import date, timedelta
 from decimal import Decimal
+import random
 
 today = date.today()
 
@@ -128,34 +129,34 @@ db.commit()
 
 # Add prescriptions
 # Add prescriptions
-prescription1 = Prescription(drug_id=3, brand_required=False, original_quantity=30, remaining_quantity=10,
+prescription1 = Prescription(drug_id=3, daw_code=random.randint(0, 9), original_quantity=30, remaining_quantity=10,
                              patient_id=1, date_received=today - timedelta(days=190), prescriber_id=1,
                              instructions="Administer 1 vial by intravenous infusion every 4 weeks as directed by oncologist")  # Cisplatin - 30 orig; hist=10, active=10 -> remaining=10
-prescription2 = Prescription(drug_id=1, brand_required=False, original_quantity=20, remaining_quantity=0,
+prescription2 = Prescription(drug_id=1, daw_code=random.randint(0, 9), original_quantity=20, remaining_quantity=0,
                              patient_id=2, date_received=today - timedelta(days=185), prescriber_id=2,
                              instructions="Take 2 tablets by mouth every 4 to 6 hours as needed for pain, not to exceed 8 tablets per day")  # Tylenol - 20 orig; hist=10, active=10 -> remaining=0
-prescription3 = Prescription(drug_id=4, brand_required=False, original_quantity=90, remaining_quantity=30,
+prescription3 = Prescription(drug_id=4, daw_code=random.randint(0, 9), original_quantity=90, remaining_quantity=30,
                              patient_id=3, date_received=today - timedelta(days=180), prescriber_id=1,
                              instructions="Take 1 tablet by mouth three times daily with meals")  # Metformin - 90 orig; hist=30, active=30 -> remaining=30
-prescription4 = Prescription(drug_id=4, brand_required=False, original_quantity=60, remaining_quantity=60,
+prescription4 = Prescription(drug_id=4, daw_code=random.randint(0, 9), original_quantity=60, remaining_quantity=60,
                              patient_id=4, date_received=today - timedelta(days=210), prescriber_id=1,
                              instructions="Take 2 tablets by mouth twice daily with meals")  # Metformin - 60 orig; no fills -> remaining=60
-prescription5 = Prescription(drug_id=2, brand_required=False, original_quantity=30, remaining_quantity=0,
+prescription5 = Prescription(drug_id=2, daw_code=random.randint(0, 9), original_quantity=30, remaining_quantity=0,
                              patient_id=1, date_received=today - timedelta(days=205), prescriber_id=3,
                              instructions="Take 1 capsule by mouth three times daily until finished")  # Amoxicillin - 30 orig; hist=15, active=15 -> remaining=0
-prescription6 = Prescription(drug_id=5, brand_required=False, original_quantity=100, remaining_quantity=0,
+prescription6 = Prescription(drug_id=5, daw_code=random.randint(0, 9), original_quantity=100, remaining_quantity=0,
                              patient_id=2, date_received=today - timedelta(days=200), prescriber_id=4,
                              instructions="Take 1 tablet by mouth every 8 hours with food as needed for pain")  # Ibuprofen - 100 orig; hist=50, active=50 -> remaining=0
-prescription7 = Prescription(drug_id=6, brand_required=False, original_quantity=25, remaining_quantity=0,
+prescription7 = Prescription(drug_id=6, daw_code=random.randint(0, 9), original_quantity=25, remaining_quantity=0,
                              patient_id=3, date_received=today - timedelta(days=175), prescriber_id=5,
                              instructions="Take 1 tablet by mouth daily for cardiovascular protection")  # Aspirin - 25 orig; active=25 -> remaining=0
-prescription8 = Prescription(drug_id=7, brand_required=False, original_quantity=10, remaining_quantity=0,
+prescription8 = Prescription(drug_id=7, daw_code=random.randint(0, 9), original_quantity=10, remaining_quantity=0,
                              patient_id=4, date_received=today - timedelta(days=170), prescriber_id=6,
                              instructions="Take 1 tablet by mouth once daily for blood pressure")  # Lisinopril - 10 orig; active=10 -> remaining=0
-prescription9 = Prescription(drug_id=8, brand_required=False, original_quantity=40, remaining_quantity=0,
+prescription9 = Prescription(drug_id=8, daw_code=random.randint(0, 9), original_quantity=40, remaining_quantity=0,
                              patient_id=1, date_received=today - timedelta(days=165), prescriber_id=7,
                              instructions="Take 1 tablet by mouth once daily in the morning")  # Hydrochlorothiazide - 40 orig; active=40 -> remaining=0
-prescription10 = Prescription(drug_id=9, brand_required=False, original_quantity=30, remaining_quantity=30,
+prescription10 = Prescription(drug_id=9, daw_code=random.randint(0, 9), original_quantity=30, remaining_quantity=30,
                               patient_id=2, date_received=today - timedelta(days=160), prescriber_id=4,
                               instructions="Take 1 tablet by mouth daily, INR monitoring required")  # Warfarin - 30 orig; rejected refill doesn't consume qty -> remaining=30
 

@@ -161,13 +161,13 @@ def generate_test_prescriptions(
         refill_quantity = random.choice([30, 60, 90])
         total_refills = random.randint(1, 12)
         days_supply = random.choice([7, 14, 30, 60, 90])
-        brand_required = random.choice([True, False])
+        daw_code = random.randint(0, 9)
         days_ago = random.randint(0, 90)
         date_received = date_type.today() - timedelta(days=days_ago)
 
         prescription = Prescription(
             drug_id=drug.id,
-            brand_required=brand_required,
+            daw_code=daw_code,
             original_quantity=refill_quantity * total_refills,
             remaining_quantity=refill_quantity * total_refills,
             date_received=date_received,

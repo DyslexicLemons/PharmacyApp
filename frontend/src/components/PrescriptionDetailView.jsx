@@ -3,6 +3,19 @@ import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientI
 import { AuthContext } from "@/context/AuthContext";
 import Badge from "@/components/Badge";
 
+const DAW_CODES = {
+  0: "No product selection indicated (generic substitution allowed)",
+  1: "Substitution not allowed by prescriber (brand medically necessary)",
+  2: "Patient requested brand",
+  3: "Pharmacist selected brand",
+  4: "Generic not in stock",
+  5: "Brand dispensed because generic not available",
+  6: "Override due to state law",
+  7: "Brand required by insurance",
+  8: "Generic not available in marketplace",
+  9: "Other",
+};
+
 function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }) {
   const [form, setForm] = useState({
     insurance_company_id: "",
@@ -140,7 +153,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
   const pid = patientId ?? prescription.patient_id;
 
   useEffect(() => {
-    getPrescribers(token).then(setPrescribers).catch(console.error);
+    getPrescribers(token).then((data) => setPrescribers(data.items ?? data)).catch(console.error);
     getInsuranceCompanies(token).then(setAllCompanies).catch(console.error);
     if (pid) {
       getPatientInsurance(pid, token).then(setPatientInsurance).catch(console.error);
@@ -226,7 +239,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
               ? `Dr. ${prescriber.first_name} ${prescriber.last_name}${prescriber.specialty ? ` · ${prescriber.specialty}` : ""} (NPI: ${prescriber.npi})`
               : `ID ${prescription.prescriber_id}`}
           </div>
-          <div><strong>Brand Required:</strong> {prescription.brand_required ? "Yes" : "No"}</div>
+          <div><strong>DAW Code:</strong> {prescription.daw_code} — {DAW_CODES[prescription.daw_code] ?? "Unknown"}</div>
         </div>
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
           <div><strong>Date Received:</strong> {new Date(prescription.date_received).toLocaleDateString()}</div>

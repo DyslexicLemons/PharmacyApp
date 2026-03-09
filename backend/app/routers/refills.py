@@ -347,8 +347,8 @@ def edit_refill(
 
         if payload.instructions is not None:
             prescription.instructions = payload.instructions  # type: ignore[assignment]
-        if payload.brand_required is not None:
-            prescription.brand_required = payload.brand_required  # type: ignore[assignment]
+        if payload.daw_code is not None:
+            prescription.daw_code = payload.daw_code  # type: ignore[assignment]
 
     if payload.quantity is not None:
         rx.quantity = payload.quantity  # type: ignore[assignment]
@@ -442,7 +442,7 @@ def upload_json_prescription(
         prescriber_id=prescriber.id,
         date_received=data.date,
         instructions=data.directions,
-        brand_required=data.brand_required,
+        daw_code=data.daw_code,
     )
     db.add(prescription)
     db.flush()
@@ -509,7 +509,7 @@ def create_manual_prescription(
         prescriber_id=prescriber.id,
         date_received=data.date_received or date_type.today(),
         expiration_date=expiration,
-        brand_required=data.brand_required,
+        daw_code=data.daw_code,
         instructions=data.instructions,
         picture=data.picture,
     )
