@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef } from "react";
-import { getDrugs, getPrescribers, searchPatients, getPatient } from "@/api";
+import { useState, useEffect, useRef, useContext } from "react";
+import { getDrugs, getPrescribers, searchPatients, getPatient, checkConflict as apiCheckConflict } from "@/api";
+import { AuthContext } from "@/context/AuthContext";
+import { useNotification } from "@/context/NotificationContext";
 import NewPatientForm from "./NewPatientForm";
 
 const DAW_CODES = {
@@ -15,13 +17,64 @@ const DAW_CODES = {
   9: "Other",
 };
 
-const API = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+const API = `${import.meta.env.VITE_API_BASE || 'http://localhost:8000'}/api/v1`;
+
+function parseDueInput(raw) {
+  const str = raw.trim().toLowerCase();
+  const now = new Date();
+
+  if (str === "q") {
+    const d = new Date(now.getTime() + 15 * 60 * 1000);
+    return { date: d, priority: "stat" };
+  }
+
+  const match = str.match(/^(\d+(?:\.\d+)?)(m|h|d)$/);
+  if (!match) return null;
+
+  const amount = parseFloat(match[1]);
+  const unit = match[2];
+  let ms = 0;
+  if (unit === "m") ms = amount * 60 * 1000;
+  else if (unit === "h") ms = amount * 60 * 60 * 1000;
+  else if (unit === "d") ms = amount * 24 * 60 * 60 * 1000;
+
+  const maxMs = 7 * 24 * 60 * 60 * 1000;
+  if (ms > maxMs) return null;
+
+  return { date: new Date(now.getTime() + ms), priority: null };
+}
+
+function formatDueDisplay(date) {
+  return date.toLocaleString(undefined, {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+
+function parseScheduleDays(raw) {
+  const n = parseInt(raw.trim(), 10);
+  if (isNaN(n) || n < 1 || n > 30) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function formatScheduledDate(date) {
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
 
 export default function PrescriptionForm({ onBack, patientId }) {
+  const { token } = useContext(AuthContext);
+  const { addNotification } = useNotification();
   const [step, setStep] = useState(1);
   const [drugs, setDrugs] = useState([]);
   const [prescribers, setPrescribers] = useState([]);
   const [conflict, setConflict] = useState(null);
+  const [dueInput, setDueInput] = useState("");
+  const [dueDisplay, setDueDisplay] = useState("");
+  const [scheduleMode, setScheduleMode] = useState("now"); // "now" | "scheduled"
+  const [scheduleDays, setScheduleDays] = useState("");
+  const [scheduledDateDisplay, setScheduledDateDisplay] = useState("");
 
   // Patient search state (used when no patientId prop)
   const [patientQuery, setPatientQuery] = useState("");
@@ -33,6 +86,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
 
   const [picture, setPicture] = useState(null);
   const fileInputRef = useRef(null);
+  const [expirationEdited, setExpirationEdited] = useState(false);
 
   const defaultExpiration = (() => {
     const d = new Date();
@@ -57,12 +111,12 @@ export default function PrescriptionForm({ onBack, patientId }) {
   });
 
   useEffect(() => {
-    getDrugs().then(setDrugs).catch(console.error);
-    getPrescribers().then(setPrescribers).catch(console.error);
+    getDrugs(token).then(res => setDrugs(res.items ?? res)).catch(console.error);
+    getPrescribers(token).then(res => setPrescribers(res.items ?? res)).catch(console.error);
     if (patientId) {
-      getPatient(patientId).then(setSelectedPatient).catch(console.error);
+      getPatient(patientId, token).then(setSelectedPatient).catch(console.error);
     }
-  }, [patientId]);
+  }, [patientId, token]);
 
   const handlePatientSearch = async (e) => {
     e.preventDefault();
@@ -92,33 +146,53 @@ export default function PrescriptionForm({ onBack, patientId }) {
     reader.readAsDataURL(file);
   };
 
+  const getMaxExpiration = (dateReceived) => {
+    const d = new Date(dateReceived + "T00:00:00");
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().split("T")[0];
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
+    if (name === "date_received") {
+      const maxExp = getMaxExpiration(value);
+      // If user manually edited expiration, keep it but cap at new max; otherwise always sync to 1 year out
+      const newExp = expirationEdited && form.expiration_date <= maxExp ? form.expiration_date : maxExp;
+      setForm({ ...form, date_received: value, expiration_date: newExp });
+      return;
+    }
+
+    if (name === "expiration_date" && form.date_received) {
+      const maxExp = getMaxExpiration(form.date_received);
+      if (value > maxExp) {
+        addNotification(`Expiration date cannot exceed 1 year from date received (max: ${maxExp}). Date has been capped.`, "warning");
+      }
+      const capped = value > maxExp ? maxExp : value;
+      setExpirationEdited(true);
+      setForm({ ...form, expiration_date: capped });
+      return;
+    }
+
     const parsed = name === "daw_code" ? parseInt(value, 10) : (type === "checkbox" ? checked : value);
     setForm({ ...form, [name]: parsed });
   };
 
   const checkConflict = async () => {
     if (!selectedPatient || !form.drug_id) {
-      alert("Please select patient and drug first");
+      addNotification("Please select patient and drug first", "warning");
       return;
     }
     try {
-      const res = await fetch(
-        `${API}/refills/check_conflict?patient_id=${selectedPatient.id}&drug_id=${form.drug_id}`
-      );
-      if (!res.ok) throw new Error("Conflict check failed");
-      const data = await res.json();
+      const data = await apiCheckConflict(selectedPatient.id, form.drug_id, token);
       setConflict(data);
       if (data.has_conflict) {
-        const proceed = confirm(
-          `${data.message}\n\nActive refills: ${data.active_refills.length}\nDo you want to continue anyway?`
-        );
-        if (!proceed) return;
+        addNotification(`Conflict: ${data.message} — Review below and continue if intended.`, "warning");
+      } else {
+        setStep(2);
       }
-      setStep(2);
     } catch (e) {
-      alert(e.message);
+      addNotification(e.message, "error");
     }
   };
 
@@ -126,7 +200,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
     try {
       const res = await fetch(`${API}/refills/create_manual`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
           patient_id: selectedPatient.id,
           drug_id: parseInt(form.drug_id),
@@ -151,10 +225,10 @@ export default function PrescriptionForm({ onBack, patientId }) {
       }
 
       const result = await res.json();
-      alert(`Prescription created successfully!\nRefill ID: ${result.refill_id}\nState: ${result.state}`);
+      addNotification(`Prescription created successfully! RX#: ${result["RX#"]} | State: ${result.state}`, "success");
       if (onBack) onBack();
     } catch (e) {
-      alert(e.message);
+      addNotification(e.message, "error");
     }
   };
 
@@ -171,9 +245,6 @@ export default function PrescriptionForm({ onBack, patientId }) {
   return (
     <div className="vstack">
       <h2>Create New Prescription</h2>
-      <p style={{ color: "var(--text-light)", marginBottom: "1rem" }}>
-        Manual prescriptions bypass QT triage. Choose how to proceed after entry.
-      </p>
 
       {step === 1 && (
         <div className="vstack" style={{ gap: "1rem" }}>
@@ -334,6 +405,15 @@ export default function PrescriptionForm({ onBack, patientId }) {
                   </ul>
                 </div>
               )}
+              {conflict.has_conflict && (
+                <button
+                  className="btn btn-warning"
+                  style={{ marginTop: "0.5rem" }}
+                  onClick={() => setStep(2)}
+                >
+                  Continue Anyway →
+                </button>
+              )}
             </div>
           )}
 
@@ -383,7 +463,50 @@ export default function PrescriptionForm({ onBack, patientId }) {
             )}
           </div>
 
+          {/* Dates */}
           <div className="card" style={{ padding: "1rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <label>
+              <strong>Date Received</strong>
+              <input
+                type="date"
+                name="date_received"
+                value={form.date_received}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              />
+            </label>
+
+            <label>
+              <strong>Script Expiration Date</strong>
+              <input
+                type="date"
+                name="expiration_date"
+                value={form.expiration_date}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              />
+            </label>
+          </div>
+
+          {/* DAW Code */}
+          <div className="card" style={{ padding: "1rem" }}>
+            <label>
+              <strong>DAW Code</strong>
+              <select
+                name="daw_code"
+                value={form.daw_code}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              >
+                {Object.entries(DAW_CODES).map(([code, desc]) => (
+                  <option key={code} value={code}>{code} — {desc}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {/* Quantity / Days Supply / Total Refills */}
+          <div className="card" style={{ padding: "1rem", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "1rem" }}>
             <label>
               <strong>Quantity</strong>
               <input
@@ -421,71 +544,9 @@ export default function PrescriptionForm({ onBack, patientId }) {
                 style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
               />
             </label>
-
-            <label>
-              <strong>Date Received</strong>
-              <input
-                type="date"
-                name="date_received"
-                value={form.date_received}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              />
-            </label>
-
-            <label>
-              <strong>Due Date (optional)</strong>
-              <input
-                type="date"
-                name="due_date"
-                value={form.due_date}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              />
-            </label>
-
-            <label>
-              <strong>Script Expiration Date</strong>
-              <input
-                type="date"
-                name="expiration_date"
-                value={form.expiration_date}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              />
-            </label>
           </div>
 
-          <div className="card" style={{ padding: "1rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-            <label>
-              <strong>Priority</strong>
-              <select
-                name="priority"
-                value={form.priority}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              >
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-                <option value="stat">Stat</option>
-              </select>
-            </label>
-
-            <label>
-              <strong>DAW Code</strong>
-              <select
-                name="daw_code"
-                value={form.daw_code}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              >
-                {Object.entries(DAW_CODES).map(([code, desc]) => (
-                  <option key={code} value={code}>{code} — {desc}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-
+          {/* Instructions + Priority */}
           <div className="card" style={{ padding: "1rem" }}>
             <label>
               <strong>Instructions <span style={{ color: "var(--danger)" }}>*</span></strong>
@@ -499,6 +560,154 @@ export default function PrescriptionForm({ onBack, patientId }) {
                 style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem", resize: "vertical" }}
               />
             </label>
+
+            <label style={{ marginTop: "0.75rem", display: "block" }}>
+              <strong>Priority</strong>
+              <select
+                name="priority"
+                value={form.priority}
+                onChange={handleChange}
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              >
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="stat">Stat</option>
+              </select>
+            </label>
+          </div>
+
+          {/* Schedule */}
+          <div className="card" style={{ padding: "1rem" }}>
+            <strong>Schedule</strong>
+            <div style={{ display: "flex", gap: "1.5rem", marginTop: "0.5rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="scheduleMode"
+                  value="now"
+                  checked={scheduleMode === "now"}
+                  onChange={() => {
+                    setScheduleMode("now");
+                    setScheduledDateDisplay("");
+                    setScheduleDays("");
+                    setForm(f => ({ ...f, due_date: "" }));
+                  }}
+                />
+                Fill Now
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="scheduleMode"
+                  value="scheduled"
+                  checked={scheduleMode === "scheduled"}
+                  onChange={() => {
+                    setScheduleMode("scheduled");
+                    setDueInput("");
+                    setDueDisplay("");
+                    setForm(f => ({ ...f, due_date: "", priority: f.priority === "stat" ? "normal" : f.priority }));
+                  }}
+                />
+                Scheduled
+              </label>
+            </div>
+
+            {scheduleMode === "now" && (
+              <>
+                <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "var(--text-light)" }}>
+                  Type a shorthand to set when this should be filled:
+                  <span style={{ marginLeft: "0.5rem" }}>
+                    <code>30m</code> = 30 min &nbsp;|&nbsp;
+                    <code>1h</code> = 1 hour &nbsp;|&nbsp;
+                    <code>1d</code> = 1 day &nbsp;|&nbsp;
+                    <code>q</code> = 15 min + Stat priority &nbsp;(max 7d)
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.5rem" }}>
+                  <input
+                    className="input"
+                    placeholder="e.g. 1h, 30m, q, 1d"
+                    value={dueInput}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setDueInput(raw);
+                      if (raw.trim() === "") {
+                        setDueDisplay("");
+                        setForm(f => ({ ...f, due_date: "", priority: f.priority === "stat" ? "normal" : f.priority }));
+                        return;
+                      }
+                      const parsed = parseDueInput(raw);
+                      if (parsed) {
+                        setDueDisplay(formatDueDisplay(parsed.date));
+                        setForm(f => ({
+                          ...f,
+                          due_date: parsed.date.toISOString(),
+                          ...(parsed.priority ? { priority: parsed.priority } : {}),
+                        }));
+                      } else {
+                        setDueDisplay("Invalid — max 7d (e.g. 30m, 2h, 1d)");
+                        setForm(f => ({ ...f, due_date: "" }));
+                      }
+                    }}
+                    style={{ width: "120px", padding: "0.5rem" }}
+                  />
+                  {dueDisplay && (
+                    <span style={{
+                      fontSize: "0.9rem",
+                      color: dueDisplay.startsWith("Invalid") ? "var(--danger)" : "var(--success, #06d6a0)",
+                      fontWeight: 500,
+                    }}>
+                      {dueDisplay.startsWith("Invalid") ? dueDisplay : `→ ${dueDisplay}`}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+
+            {scheduleMode === "scheduled" && (
+              <>
+                <div style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "var(--text-light)" }}>
+                  Enter how many days out to schedule this fill (1–30 days):
+                </div>
+                <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", marginTop: "0.5rem" }}>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    max="30"
+                    placeholder="e.g. 7"
+                    value={scheduleDays}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setScheduleDays(raw);
+                      if (raw.trim() === "") {
+                        setScheduledDateDisplay("");
+                        setForm(f => ({ ...f, due_date: "" }));
+                        return;
+                      }
+                      const d = parseScheduleDays(raw);
+                      if (d) {
+                        setScheduledDateDisplay(formatScheduledDate(d));
+                        setForm(f => ({ ...f, due_date: d.toISOString().split("T")[0] }));
+                      } else {
+                        setScheduledDateDisplay("Invalid — enter 1–30 days");
+                        setForm(f => ({ ...f, due_date: "" }));
+                      }
+                    }}
+                    style={{ width: "120px", padding: "0.5rem" }}
+                  />
+                  {scheduledDateDisplay && (
+                    <span style={{
+                      fontSize: "0.9rem",
+                      color: scheduledDateDisplay.startsWith("Invalid") ? "var(--danger)" : "var(--success, #06d6a0)",
+                      fontWeight: 500,
+                    }}>
+                      {scheduledDateDisplay.startsWith("Invalid") ? scheduledDateDisplay : `→ ${scheduledDateDisplay}`}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="card" style={{ padding: "1rem" }}>
@@ -566,27 +775,41 @@ export default function PrescriptionForm({ onBack, patientId }) {
             <button className="btn btn-secondary" onClick={() => setStep(1)}>
               ← Back
             </button>
-            <button
-              className="btn btn-success"
-              onClick={() => handleSubmit("QP")}
-              disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
-            >
-              Fill Now
-            </button>
-            <button
-              className="btn btn-warning"
-              onClick={() => handleSubmit("HOLD")}
-              disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
-            >
-              Put on Hold
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => handleSubmit("SCHEDULED")}
-              disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
-            >
-              Schedule
-            </button>
+            {scheduleMode === "now" ? (
+              <>
+                <button
+                  className="btn btn-success"
+                  onClick={() => handleSubmit("QP")}
+                  disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
+                >
+                  Create Prescription
+                </button>
+                <button
+                  className="btn btn-warning"
+                  onClick={() => handleSubmit("HOLD")}
+                  disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
+                >
+                  Put on Hold
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => handleSubmit("SCHEDULED")}
+                  disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim() || !form.due_date}
+                >
+                  Schedule Fill
+                </button>
+                <button
+                  className="btn btn-warning"
+                  onClick={() => handleSubmit("HOLD")}
+                  disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
+                >
+                  Put on Hold
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

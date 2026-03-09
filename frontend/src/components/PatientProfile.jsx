@@ -98,7 +98,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
 
               const noQuantityRemaining = r.remaining_quantity <= 0;
 
-              const showFillButton = !fillBlocked && !noQuantityRemaining;
+              const showFillButton = !fillBlocked && !noQuantityRemaining && !r.is_inactive && !r.is_expired;
 
               return (
                 <tr key={r.id}>
@@ -165,7 +165,11 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
                       </td>
 
                       <td>
-                        {r.latest_refill.next_pickup ? (
+                        {r.is_inactive ? (
+                          <Badge state="INACTIVATED" />
+                        ) : r.is_expired ? (
+                          <Badge state="EXPIRED" />
+                        ) : r.latest_refill.next_pickup ? (
                           new Date(
                             r.latest_refill.next_pickup
                           ).toLocaleDateString()
@@ -177,13 +181,30 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
                       </td>
                     </>
                   ) : (
-                    <td colSpan={7} style={{ color: "#888" }}>
-                      No refills yet
-                    </td>
+                    <>
+                      <td colSpan={6} style={{ color: "#888" }}>
+                        No refills yet
+                      </td>
+                      <td>
+                        {r.is_inactive ? (
+                          <Badge state="INACTIVATED" />
+                        ) : r.is_expired ? (
+                          <Badge state="EXPIRED" />
+                        ) : "—"}
+                      </td>
+                    </>
                   )}
 
                   <td>
-                    {noQuantityRemaining ? (
+                    {r.is_inactive ? (
+                      <span style={{ color: "#6b7280", fontSize: "0.8rem", fontWeight: 600 }}>
+                        Inactive
+                      </span>
+                    ) : r.is_expired ? (
+                      <span style={{ color: "#92400e", fontSize: "0.8rem", fontWeight: 600 }}>
+                        Expired
+                      </span>
+                    ) : noQuantityRemaining ? (
                       <span
                         style={{
                           color: "#888",

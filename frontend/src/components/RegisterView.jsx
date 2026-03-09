@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { searchPatients, fetchQueue, advanceRx } from "@/api";
+import { useNotification } from "@/context/NotificationContext";
 import Badge from "@/components/Badge";
 
 function fmt(d) {
@@ -18,6 +19,7 @@ function refillsRemaining(refill) {
 }
 
 export default function RegisterView({ onBack }) {
+  const { addNotification } = useNotification();
   const [lastName, setLastName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [dob, setDob] = useState("");
@@ -85,7 +87,7 @@ export default function RegisterView({ onBack }) {
       const remaining = allRefills.filter((r) => !selected.has(r.id));
       setAllRefills(remaining);
       setSelected(new Set());
-      alert("Sale complete!");
+      addNotification("Sale complete!", "success");
     } catch (e) {
       setError(`Sale failed: ${e.message}`);
     } finally {

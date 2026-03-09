@@ -165,12 +165,15 @@ def generate_test_prescriptions(
         days_ago = random.randint(0, 90)
         date_received = date_type.today() - timedelta(days=days_ago)
 
+        expiration_date = date_received.replace(year=date_received.year + 1)
+
         prescription = Prescription(
             drug_id=drug.id,
             daw_code=daw_code,
             original_quantity=refill_quantity * total_refills,
             remaining_quantity=refill_quantity * total_refills,
             date_received=date_received,
+            expiration_date=expiration_date,
             patient_id=patient.id,
             prescriber_id=prescriber.id,
             instructions=random.choice(instructions_pool),

@@ -5,8 +5,11 @@ This file is intentionally thin: it configures middleware, mounts routers,
 and provides the health-check endpoints. All business logic lives in routers/.
 """
 
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import date, datetime, timedelta
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,8 +19,10 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from .database import Base, engine
+from .database import Base, engine, SessionLocal
+from .models import Prescription, Refill, RxState
 from .routers import admin, auth, drugs, insurance, patients, prescriptions, prescribers, refills
+from .utils import _int, _write_audit
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,10 +38,110 @@ logger = logging.getLogger("pharmacy.rx")
 Base.metadata.create_all(bind=engine)
 
 # ---------------------------------------------------------------------------
+# Background task: auto-expire prescriptions
+# ---------------------------------------------------------------------------
+
+async def _promote_scheduled_refills_task() -> None:
+    """
+    Runs daily at 3 AM. Finds all SCHEDULED refills whose due_date is today
+    or in the past and moves them to QT (Queue Triage) so they enter the
+    active fill workflow.
+    """
+    while True:
+        now = datetime.now()
+        next_3am = now.replace(hour=3, minute=0, second=0, microsecond=0)
+        if next_3am <= now:
+            next_3am += timedelta(days=1)
+        await asyncio.sleep((next_3am - now).total_seconds())
+
+        try:
+            db = SessionLocal()
+            try:
+                today = date.today()
+                due = (
+                    db.query(Refill)
+                    .filter(
+                        Refill.state == RxState.SCHEDULED,
+                        Refill.due_date <= today,
+                    )
+                    .all()
+                )
+                for refill in due:
+                    refill.state = RxState.QT  # type: ignore[assignment]
+                    _write_audit(
+                        db,
+                        "REFILL_AUTO_QUEUED",
+                        entity_type="refill",
+                        entity_id=_int(refill.id),
+                        prescription_id=_int(refill.prescription_id),
+                        details=f"auto-promoted from SCHEDULED to QT: due_date={refill.due_date}",
+                    )
+                if due:
+                    db.commit()
+                    logger.info("Auto-queued %d scheduled refill(s) into QT", len(due))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Error in scheduled refill promotion task")
+
+
+async def _expire_prescriptions_task() -> None:
+    """
+    Runs at startup and then every 24 hours. Marks any active prescription
+    whose expiration_date is in the past as inactive and writes an audit entry.
+    """
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                today = date.today()
+                expired = (
+                    db.query(Prescription)
+                    .filter(
+                        Prescription.is_inactive == False,  # noqa: E712
+                        Prescription.expiration_date < today,
+                    )
+                    .all()
+                )
+                for rx in expired:
+                    rx.is_inactive = True  # type: ignore[assignment]
+                    _write_audit(
+                        db,
+                        "PRESCRIPTION_EXPIRED",
+                        entity_type="prescription",
+                        entity_id=_int(rx.id),
+                        prescription_id=_int(rx.id),
+                        details=f"auto-inactivated: expiration_date={rx.expiration_date}",
+                    )
+                if expired:
+                    db.commit()
+                    logger.info("Auto-expired %d prescription(s)", len(expired))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("Error in prescription expiration task")
+
+        await asyncio.sleep(86400)  # 24 hours
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):  # type: ignore[type-arg]
+    expire_task = asyncio.create_task(_expire_prescriptions_task())
+    schedule_task = asyncio.create_task(_promote_scheduled_refills_task())
+    yield
+    for t in (expire_task, schedule_task):
+        t.cancel()
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # App and middleware
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Pharmacy API", version="1.0.0")
+app = FastAPI(title="Pharmacy API", version="1.0.0", lifespan=lifespan)
 
 # CORS — restrict to known origins via env var
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173").split(",")

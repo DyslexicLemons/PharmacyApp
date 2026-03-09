@@ -1,6 +1,7 @@
 import { useContext, useState, useEffect, useRef } from "react";
-import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientInsurance, updatePrescriptionPicture, updatePrescription } from "@/api";
+import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientInsurance, updatePrescriptionPicture, updatePrescription, inactivatePrescription } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
+import { useNotification } from "@/context/NotificationContext";
 import Badge from "@/components/Badge";
 
 const DAW_CODES = {
@@ -137,12 +138,106 @@ function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }) {
   );
 }
 
-export default function PrescriptionDetailView({ prescription, patientName, patientId, onBack }) {
+function InactivateModal({ prescriptionId, onClose, onInactivated, token }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!username || !password) {
+      setError("Username and password are required.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    try {
+      const result = await inactivatePrescription(prescriptionId, username, password, token);
+      onInactivated(result);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+    }}>
+      <div className="card vstack" style={{ maxWidth: "420px", width: "92%", gap: "1rem", padding: "1.5rem", border: "2px solid var(--danger)" }}>
+        <h3 style={{ margin: 0, color: "var(--danger)" }}>Inactivate Prescription</h3>
+
+        {!confirmed ? (
+          <>
+            <p style={{ margin: 0, fontSize: "0.95rem" }}>
+              Are you sure you want to <strong>inactivate</strong> this prescription?
+              This action cannot be undone and will prevent future fills.
+            </p>
+            {error && <div style={{ color: "var(--danger)", fontSize: "0.9rem" }}>{error}</div>}
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button className="btn" style={{ background: "var(--danger)", color: "#fff" }} onClick={() => setConfirmed(true)}>
+                Yes, Inactivate
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={{ margin: 0, fontSize: "0.95rem" }}>
+              Verify your credentials to confirm this action.
+            </p>
+            <label>
+              <strong>Username</strong>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoFocus
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              />
+            </label>
+            <label>
+              <strong>Password</strong>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+              />
+            </label>
+            {error && <div style={{ color: "var(--danger)", fontSize: "0.9rem" }}>{error}</div>}
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
+              <button
+                className="btn"
+                style={{ background: "var(--danger)", color: "#fff" }}
+                onClick={handleSubmit}
+                disabled={submitting}
+              >
+                {submitting ? "Verifying…" : "Confirm Inactivation"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function PrescriptionDetailView({ prescription, patientName, patientId, onBack, onPrescriptionUpdated }) {
   const { token } = useContext(AuthContext);
+  const { addNotification } = useNotification();
   const [prescribers, setPrescribers] = useState([]);
   const [patientInsurance, setPatientInsurance] = useState([]);
   const [allCompanies, setAllCompanies] = useState([]);
   const [showAddInsurance, setShowAddInsurance] = useState(false);
+  const [showInactivate, setShowInactivate] = useState(false);
+  const [isInactive, setIsInactive] = useState(prescription.is_inactive ?? false);
+  const isExpired = !isInactive && (prescription.is_expired ?? false);
   const [pictureUrl, setPictureUrl] = useState(prescription.picture_url ?? null);
   const [uploadingPicture, setUploadingPicture] = useState(false);
   const fileInputRef = useRef(null);
@@ -160,10 +255,29 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
     }
   }, [pid, token]);
 
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (isInactive || isExpired) return;
+      if (e.key === "i" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        setShowInactivate(true);
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [isInactive]);
+
+  const handleInactivated = (updated) => {
+    setIsInactive(true);
+    setShowInactivate(false);
+    addNotification("Prescription has been inactivated.", "success");
+    onPrescriptionUpdated?.(updated);
+  };
+
   const lr = prescription.latest_refill;
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
 
-  // Build fill count map: sort refill_history by id asc, assign sequential fill numbers
   const sortedHistory = [...(prescription.refill_history ?? [])].sort((a, b) => a.id - b.id);
   const fillCountMap = Object.fromEntries(sortedHistory.map((h, i) => [h.id, i + 1]));
   const activeInsurance = patientInsurance.filter((i) => i.is_active);
@@ -179,12 +293,26 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
   };
 
   const handleSaveExpiration = async () => {
+    if (expirationDate) {
+      const dateReceived = new Date(prescription.date_received);
+      const selected = new Date(expirationDate);
+      const maxExpiration = new Date(prescription.date_received);
+      maxExpiration.setFullYear(maxExpiration.getFullYear() + 1);
+      if (selected < dateReceived) {
+        addNotification("Expiration date cannot be before the date received.", "warning");
+        return;
+      }
+      if (selected > maxExpiration) {
+        addNotification("Expiration date cannot be more than 1 year after the date received.", "warning");
+        return;
+      }
+    }
     setSavingExpiration(true);
     try {
       await updatePrescription(prescription.id, { expiration_date: expirationDate || null }, token);
       setEditingExpiration(false);
     } catch (err) {
-      alert(`Failed to save expiration date: ${err.message}`);
+      addNotification(`Failed to save expiration date: ${err.message}`, "error");
     } finally {
       setSavingExpiration(false);
     }
@@ -198,7 +326,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
       const result = await updatePrescriptionPicture(prescription.id, file, token);
       setPictureUrl(result.picture_url ?? null);
     } catch (err) {
-      alert(`Failed to upload image: ${err.message}`);
+      addNotification(`Failed to upload image: ${err.message}`, "error");
     } finally {
       setUploadingPicture(false);
     }
@@ -216,120 +344,204 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         />
       )}
 
-      <h2>Prescription Detail</h2>
+      {showInactivate && (
+        <InactivateModal
+          prescriptionId={prescription.id}
+          onClose={() => setShowInactivate(false)}
+          onInactivated={handleInactivated}
+          token={token}
+        />
+      )}
 
-      {/* Script Info */}
-      <div className="card vstack" style={{ gap: "0.5rem" }}>
-        <h3 style={{ margin: 0 }}>Script Info</h3>
-        <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-          <div><strong>Rx #:</strong> {prescription.id}</div>
-          <div><strong>Patient:</strong> {patientName}</div>
-          <div>
-            <strong>Drug:</strong> {prescription.drug.drug_name} ({prescription.drug.manufacturer})
-            {prescription.drug.niosh && (
-              <span style={{ color: "var(--danger)", marginLeft: "0.5rem" }}>⚠ NIOSH</span>
-            )}
-          </div>
-          <div><strong>NDC:</strong> {prescription.drug.ndc ?? "—"}</div>
+      <h2 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+        <span>Rx #: {prescription.id}</span>
+        <span style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          {isInactive && <Badge state="INACTIVATED" />}
+          {isExpired && <Badge state="EXPIRED" />}
+          {lr && !isInactive && !isExpired && <span style={{ fontSize: "1.6rem" }}><Badge state={lr.state} /></span>}
+        </span>
+      </h2>
+
+      {/* Main Info Card */}
+      <div className="card" style={{ padding: "1.5rem", marginBottom: "1rem" }}>
+
+        {/* Patient */}
+        <div style={{ marginBottom: "0.75rem", paddingBottom: "0.6rem", borderBottom: "2px solid var(--bg-light)", display: "flex", gap: "2rem", alignItems: "baseline", flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0, fontSize: "1rem", flexShrink: 0 }}>Patient</h3>
+          <span><strong>{patientName}</strong></span>
         </div>
-        <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-          <div>
-            <strong>Prescriber:</strong>{" "}
-            {prescriber
-              ? `Dr. ${prescriber.first_name} ${prescriber.last_name}${prescriber.specialty ? ` · ${prescriber.specialty}` : ""} (NPI: ${prescriber.npi})`
-              : `ID ${prescription.prescriber_id}`}
-          </div>
-          <div><strong>DAW Code:</strong> {prescription.daw_code} — {DAW_CODES[prescription.daw_code] ?? "Unknown"}</div>
-        </div>
-        <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-          <div><strong>Date Received:</strong> {new Date(prescription.date_received).toLocaleDateString()}</div>
-          <div><strong>Remaining Qty on Script:</strong> {prescription.remaining_quantity}</div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <strong>Script Expires:</strong>
-            {editingExpiration ? (
-              <>
-                <input
-                  type="date"
-                  value={expirationDate}
-                  onChange={(e) => setExpirationDate(e.target.value)}
-                  style={{ padding: "2px 6px" }}
-                />
-                <button
-                  className="btn btn-primary"
-                  style={{ padding: "2px 10px", fontSize: "0.85rem" }}
-                  onClick={handleSaveExpiration}
-                  disabled={savingExpiration}
-                >
-                  {savingExpiration ? "Saving…" : "Save"}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: "2px 10px", fontSize: "0.85rem" }}
-                  onClick={() => { setEditingExpiration(false); setExpirationDate(prescription.expiration_date ?? ""); }}
-                  disabled={savingExpiration}
-                >
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <span>
-                  {expirationDate ? new Date(expirationDate).toLocaleDateString() : <em style={{ color: "var(--text-light)" }}>Not set</em>}
+
+        {/* Prescription + Prescriber + Image */}
+        <div style={{ marginBottom: "1.25rem", paddingBottom: "1rem", borderBottom: "2px solid var(--bg-light)" }}>
+          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Prescription</h3>
+          <div style={{ display: "flex", gap: "1.5rem", alignItems: "flex-start" }}>
+
+            {/* Left: prescription fields */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 1.5rem", fontSize: "0.95rem" }}>
+                <strong>Rx #:</strong>
+                <span>{prescription.id}</span>
+
+                <strong>Date Received:</strong>
+                <span>{new Date(prescription.date_received).toLocaleDateString()}</span>
+
+                <strong>Expiration:</strong>
+                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  {editingExpiration ? (
+                    <>
+                      <input
+                        type="date"
+                        value={expirationDate}
+                        onChange={(e) => setExpirationDate(e.target.value)}
+                        min={prescription.date_received}
+                        max={(() => {
+                          const d = new Date(prescription.date_received);
+                          d.setFullYear(d.getFullYear() + 1);
+                          return d.toISOString().split("T")[0];
+                        })()}
+                        style={{ padding: "2px 6px" }}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        style={{ padding: "2px 10px", fontSize: "0.85rem" }}
+                        onClick={handleSaveExpiration}
+                        disabled={savingExpiration}
+                      >
+                        {savingExpiration ? "Saving…" : "Save"}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "2px 10px", fontSize: "0.85rem" }}
+                        onClick={() => { setEditingExpiration(false); setExpirationDate(prescription.expiration_date ?? ""); }}
+                        disabled={savingExpiration}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {expirationDate ? new Date(expirationDate).toLocaleDateString() : <em style={{ color: "var(--text-light)" }}>Not set</em>}
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "2px 10px", fontSize: "0.85rem" }}
+                        onClick={() => setEditingExpiration(true)}
+                      >
+                        {expirationDate ? "Edit" : "Set"}
+                      </button>
+                    </>
+                  )}
                 </span>
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: "2px 10px", fontSize: "0.85rem" }}
-                  onClick={() => setEditingExpiration(true)}
-                >
-                  {expirationDate ? "Edit" : "Set"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-        {prescription.instructions && (
-          <div><strong>Instructions:</strong> {prescription.instructions}</div>
-        )}
-      </div>
 
-      {/* Prescription Image */}
-      <div className="card vstack" style={{ gap: "0.75rem" }}>
-        <div className="hstack" style={{ justifyContent: "space-between", alignItems: "center" }}>
-          <h3 style={{ margin: 0 }}>Prescription Image</h3>
-          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-            {uploadingPicture && <span style={{ fontSize: "0.85rem", color: "var(--text-light)" }}>Uploading…</span>}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={{ display: "none" }}
-              onChange={handlePictureUpload}
-            />
-            <button
-              className="btn btn-primary"
-              style={{ padding: "4px 14px", fontSize: "0.85rem" }}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingPicture}
-            >
-              {pictureUrl ? "Replace Image" : "+ Upload Image"}
-            </button>
+                <strong>DAW Code:</strong>
+                <span>{prescription.daw_code} — {DAW_CODES[prescription.daw_code] ?? "Unknown"}</span>
+
+                <strong>Remaining Qty:</strong>
+                <span>{prescription.remaining_quantity}</span>
+              </div>
+
+              {prescription.instructions && (
+                <div style={{ marginTop: "0.75rem", padding: "0.5rem 0.75rem", background: "var(--bg-light)", borderRadius: "6px", fontSize: "0.9rem" }}>
+                  <strong>Instructions:</strong>
+                  <div style={{ marginTop: "0.25rem" }}>{prescription.instructions}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Middle: prescriber */}
+            {prescriber && (
+              <div style={{ flexShrink: 0, width: "200px" }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-light)", marginBottom: "0.4rem", textTransform: "uppercase", letterSpacing: "0.04em" }}>Prescriber</div>
+                <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.4rem 0.75rem", fontSize: "0.9rem" }}>
+                  <strong>Name:</strong>
+                  <span>Dr. {prescriber.first_name} {prescriber.last_name}</span>
+
+                  <strong>NPI:</strong>
+                  <span>{prescriber.npi}</span>
+
+                  {prescriber.specialty && (
+                    <>
+                      <strong>Specialty:</strong>
+                      <span>{prescriber.specialty}</span>
+                    </>
+                  )}
+
+                  {prescriber.phone_number && (
+                    <>
+                      <strong>Phone:</strong>
+                      <span>{prescriber.phone_number}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Right: prescription image */}
+            <div style={{ flexShrink: 0, width: "280px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.4rem" }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-light)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Image</div>
+                <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+                  {uploadingPicture && <span style={{ fontSize: "0.8rem", color: "var(--text-light)" }}>Uploading…</span>}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: "none" }}
+                    onChange={handlePictureUpload}
+                  />
+                  <button
+                    className="btn btn-primary"
+                    style={{ padding: "2px 10px", fontSize: "0.8rem" }}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingPicture}
+                  >
+                    {pictureUrl ? "Replace" : "+ Upload"}
+                  </button>
+                </div>
+              </div>
+              {pictureUrl ? (
+                <img
+                  src={pictureUrl}
+                  alt="Prescription"
+                  style={{ width: "100%", maxHeight: "240px", objectFit: "contain", borderRadius: "6px", border: "1px solid var(--border, #dee2e6)" }}
+                />
+              ) : (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  height: "120px", border: "2px dashed var(--border, #dee2e6)",
+                  borderRadius: "6px", color: "var(--text-light)", fontSize: "0.9rem"
+                }}>
+                  No Image
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        {pictureUrl ? (
-          <img
-            src={pictureUrl}
-            alt="Prescription"
-            style={{ maxWidth: "100%", maxHeight: "400px", objectFit: "contain", borderRadius: "6px", border: "1px solid var(--border, #dee2e6)" }}
-          />
-        ) : (
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            height: "160px", border: "2px dashed var(--border, #dee2e6)",
-            borderRadius: "6px", color: "var(--text-light)", fontSize: "0.95rem"
-          }}>
-            No Image Available
+
+        {/* Drug Information */}
+        <div>
+          <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Drug Information</h3>
+          <div style={{ fontSize: "1.3rem", fontWeight: "bold", marginBottom: "0.5rem", color: "var(--primary)" }}>
+            {prescription.drug.drug_name}
           </div>
-        )}
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0.25rem 1rem", marginBottom: "0.75rem" }}>
+            <strong>NDC:</strong>
+            <span style={{ fontFamily: "monospace" }}>{prescription.drug.ndc ?? "—"}</span>
+            <strong>Manufacturer:</strong>
+            <span>{prescription.drug.manufacturer}</span>
+          </div>
+          {prescription.drug.niosh && (
+            <div style={{
+              padding: "0.75rem",
+              background: "rgba(239, 71, 111, 0.1)",
+              border: "2px solid var(--danger)",
+              borderRadius: "6px",
+              fontWeight: "bold",
+              fontSize: "0.9rem"
+            }}>
+              ⚠️ NIOSH HAZARDOUS DRUG — Special handling required
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Latest Refill */}
@@ -362,15 +574,13 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
             </div>
 
             {/* Billing summary */}
-            <div
-              style={{
-                background: "var(--surface,#f8f9fa)",
-                border: "1px solid var(--border,#dee2e6)",
-                borderRadius: "6px",
-                padding: "0.6rem 1rem",
-                marginTop: "0.25rem",
-              }}
-            >
+            <div style={{
+              background: "var(--surface,#f8f9fa)",
+              border: "1px solid var(--border,#dee2e6)",
+              borderRadius: "6px",
+              padding: "0.6rem 1rem",
+              marginTop: "0.25rem",
+            }}>
               <div style={{ fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.35rem", color: "var(--text-light)" }}>
                 BILLING
               </div>
@@ -509,10 +719,30 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         )}
       </div>
 
-      <div>
-        <button className="btn btn-secondary" onClick={onBack}>
-          Back
+      {/* Sticky bottom bar */}
+      <div style={{
+        position: "sticky",
+        bottom: 0,
+        padding: "1rem",
+        background: "var(--card)",
+        borderTop: "2px solid var(--border)",
+        display: "flex",
+        gap: "1rem",
+        justifyContent: "center",
+        marginTop: "auto",
+      }}>
+        <button className="btn" onClick={onBack} style={{ minWidth: "120px" }}>
+          ← Back
         </button>
+        {!isInactive && !isExpired && (
+          <button
+            className="btn"
+            style={{ background: "var(--danger)", color: "#fff", minWidth: "140px" }}
+            onClick={() => setShowInactivate(true)}
+          >
+            Inactivate Rx
+          </button>
+        )}
       </div>
     </div>
   );

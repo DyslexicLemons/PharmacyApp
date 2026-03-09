@@ -499,7 +499,8 @@ def create_manual_prescription(
         raise HTTPException(status_code=404, detail="Prescriber not found")
 
     priority = _parse_priority(data.priority)
-    expiration = data.expiration_date or (date_type.today() + timedelta(days=365))
+    date_received = data.date_received or date_type.today()
+    expiration = data.expiration_date or (date_received + timedelta(days=365))
 
     prescription = Prescription(
         drug_id=drug.id,
@@ -507,7 +508,7 @@ def create_manual_prescription(
         remaining_quantity=data.quantity * data.total_refills,
         patient_id=patient.id,
         prescriber_id=prescriber.id,
-        date_received=data.date_received or date_type.today(),
+        date_received=date_received,
         expiration_date=expiration,
         daw_code=data.daw_code,
         instructions=data.instructions,
@@ -523,7 +524,7 @@ def create_manual_prescription(
         prescription_id=prescription.id,
         patient_id=patient.id,
         drug_id=drug.id,
-        due_date=data.due_date or date_type.today(),
+        due_date=(data.due_date.date() if hasattr(data.due_date, "date") else data.due_date) or date_type.today(),
         quantity=data.quantity,
         days_supply=data.days_supply,
         total_cost=Decimal(str(drug.cost)) * data.quantity,
@@ -551,4 +552,4 @@ def create_manual_prescription(
     )
     db.commit()
     db.refresh(refill)
-    return {"message": "Prescription created successfully", "refill_id": refill.id, "state": str(initial_state)}
+    return {"message": "Prescription created successfully", "RX#": prescription.id, "state": str(initial_state)}
