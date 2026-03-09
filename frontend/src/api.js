@@ -303,9 +303,11 @@ export async function generateTestPrescriptions(token) {
     return handleResponse(res);
 }
 
-export async function getAuditLog(token, limit = 100, offset = 0, action = null) {
+export async function getAuditLog(token, limit = 100, offset = 0, { action, username, prescriptionId } = {}) {
     const params = new URLSearchParams({ limit, offset });
     if (action) params.set('action', action);
+    if (username) params.set('username', username);
+    if (prescriptionId) params.set('prescription_id', prescriptionId);
     const res = await fetch(`${V1}/audit_log?${params}`, { headers: authHeaders(token) });
     return handleResponse(res);
 }

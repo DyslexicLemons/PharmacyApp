@@ -46,6 +46,9 @@ def get_audit_log(
     limit: int = 100,
     offset: int = 0,
     action: Optional[str] = None,
+    user_id: Optional[int] = None,
+    username: Optional[str] = None,
+    prescription_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -53,6 +56,12 @@ def get_audit_log(
     q = db.query(AuditLog)
     if action:
         q = q.filter(AuditLog.action == action)
+    if user_id is not None:
+        q = q.filter(AuditLog.user_id == user_id)
+    if username:
+        q = q.filter(AuditLog.performed_by == username)
+    if prescription_id is not None:
+        q = q.filter(AuditLog.prescription_id == prescription_id)
     total = q.count()
     items = q.order_by(desc(AuditLog.timestamp)).offset(offset).limit(limit).all()
 

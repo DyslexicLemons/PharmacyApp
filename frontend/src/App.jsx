@@ -1,6 +1,8 @@
 import { useState, useContext, useRef, useEffect } from "react";
 import { AuthContext } from "@/context/AuthContext";
+import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import LoginForm from "@/components/LoginForm";
+import NotificationPanel from "@/components/NotificationPanel";
 
 import { searchPatients, generateTestPrescriptions, getPrescription } from "@/api";
 import EditRefillView from "@/components/EditRefillView";
@@ -26,8 +28,17 @@ import AuditLogView from "@/components/AuditLogView";
 
 const PATIENT_PAGE_SIZE = 15;
 
-export default function App() {
+export default function AppRoot() {
+  return (
+    <NotificationProvider>
+      <App />
+    </NotificationProvider>
+  );
+}
+
+function App() {
   const { isAuthenticated, shouldResetToHome, clearHomeReset, authUser, quickCode, clearQuickCode, token, logout } = useContext(AuthContext);
+  const { addNotification } = useNotification();
   const [route, setRoute] = useState({ view: "HOME" });
   const [history, setHistory] = useState([]);
   const [currentPatientData, setCurrentPatientData] = useState(null);
@@ -111,7 +122,7 @@ export default function App() {
             patientId: p.id,
           });
         })
-        .catch(() => alert(`Rx #${rxId} not found`));
+        .catch(() => addNotification(`Rx #${rxId} not found`, "error"));
       return;
     }
 
@@ -131,7 +142,7 @@ export default function App() {
             patientId: currentPatientData.id,
           });
         } else {
-          alert(`Row ${lineNum} not found`);
+          addNotification(`Row ${lineNum} not found`, "error");
         }
       }
       return;
@@ -200,7 +211,7 @@ export default function App() {
     if (cmd.includes(",")) {
       const [partA = "", partB = ""] = input.split(",").map((s) => s.trim());
       if (partA.length < 3 || partB.length < 3) {
-        alert("Please enter at least 3 characters for both first and last name.");
+        addNotification("Please enter at least 3 characters for both first and last name.", "warning");
         return;
       }
       searchPatients(input, token)
@@ -213,7 +224,7 @@ export default function App() {
             navigateTo({ view: "PATIENT_SELECT", patients: list, query: input.trim() });
           }
         })
-        .catch((e) => alert(e.message));
+        .catch((e) => addNotification(e.message, "error"));
       return;
     }
 
@@ -237,24 +248,24 @@ export default function App() {
     else if (cmd === "logout") logout();
     else if (cmd === "register") navigateToSection({ view: "REGISTER" });
     else if (cmd === "users") {
-      if (!authUser?.isAdmin) { alert("Access denied: admin only."); return; }
+      if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
       navigateToSection({ view: "USER_MANAGEMENT" });
     }
     else if (cmd === "logs") {
-      if (!authUser?.isAdmin) { alert("Access denied: admin only."); return; }
+      if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
       navigateToSection({ view: "AUDIT_LOG" });
     }
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
         generateTestPrescriptions(token)
           .then((result) => {
-            alert(`Success!\n\nCreated ${result.prescriptions_created} prescriptions\nActive refills: ${result.active_refills_created}\nSold refills: ${result.sold_prescriptions}`);
+            addNotification(`Created ${result.prescriptions_created} prescriptions\nActive refills: ${result.active_refills_created}\nSold refills: ${result.sold_prescriptions}`, "success");
             navigateTo({ view: "HOME" });
           })
-          .catch((e) => alert(`Error: ${e.message}`));
+          .catch((e) => addNotification(`Error: ${e.message}`, "error"));
       }
     }
-    else alert("Unknown command");
+    else addNotification("Unknown command", "warning");
   }
 
   // First-time visit (never logged in) — show full-screen login, nothing behind it.
@@ -266,6 +277,7 @@ export default function App() {
 
   return (
     <div className="container vstack">
+      <NotificationPanel />
       {/* Non-dismissible login modal — shown after session timeout */}
       {showLoginModal && (
         <div
@@ -368,7 +380,7 @@ export default function App() {
               page={route.page || 1}
               onSelectDrug={(drugId) => {
                 // Future: navigate to drug detail view
-                alert(`Drug ID: ${drugId}`);
+                addNotification(`Drug ID: ${drugId}`, "info");
               }}
             />
           )}
@@ -387,7 +399,7 @@ export default function App() {
               page={route.page || 1}
               onSelectStock={(drugId) => {
                 // Future: navigate to stock detail view
-                alert(`Drug ID: ${drugId}`);
+                addNotification(`Drug ID: ${drugId}`, "info");
               }}
             />
           )}
@@ -398,7 +410,7 @@ export default function App() {
               page={route.page || 1}
               onSelectPrescriber={(prescriberId) => {
                 // Future: navigate to prescriber detail view
-                alert(`Prescriber ID: ${prescriberId}`);
+                addNotification(`Prescriber ID: ${prescriberId}`, "info");
               }}
             />
           )}
