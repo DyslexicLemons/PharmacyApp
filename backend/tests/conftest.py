@@ -1,24 +1,24 @@
 """
 conftest.py — shared pytest fixtures for the Pharmacy API test suite.
 
-Uses SQLite (in-memory) so tests run without a real PostgreSQL instance.
-Each test gets a fresh database via function-scoped fixtures.
+Uses a dedicated PostgreSQL test database (pharmacy_test_db) so tests run
+against the same engine as production.
+Each test gets a fresh schema via function-scoped fixtures (create_all/drop_all).
 
 IMPORTANT: DATABASE_URL must be overridden BEFORE any app module is imported,
 because app/database.py calls create_engine() at module level.
 """
 import os
-# Override the DB URL before ANY app import — prevents psycopg2 lookup
-os.environ["DATABASE_URL"] = "sqlite://"
+# Override the DB URL before ANY app import
+os.environ["DATABASE_URL"] = "postgresql://postgres:6789@localhost/pharmacy_test_db"
 
 import pytest
 from decimal import Decimal
 from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 # ── App imports (must come AFTER os.environ override above) ──────────────────
 from app.main import app
@@ -30,26 +30,14 @@ from app.models import (
 )
 
 # ---------------------------------------------------------------------------
-# In-memory SQLite engine — StaticPool forces all connections to reuse
-# the same underlying SQLite connection (required for in-memory DBs so that
-# every session sees the same data).
+# PostgreSQL test engine — creates all tables before each test and drops them
+# after, giving every test a clean slate.
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="function")
 def engine():
-    """Create a fresh in-memory SQLite engine per test with StaticPool."""
-    eng = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    # Enable FK enforcement in SQLite
-    @event.listens_for(eng, "connect")
-    def set_sqlite_pragma(dbapi_conn, _):
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
+    """Create a fresh PostgreSQL engine per test."""
+    eng = create_engine("postgresql://postgres:6789@localhost/pharmacy_test_db")
     Base.metadata.create_all(bind=eng)
     yield eng
     Base.metadata.drop_all(bind=eng)

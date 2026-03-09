@@ -41,11 +41,16 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
       <div className="card vstack">
         <div className="hstack" style={{ justifyContent: "space-between" }}>
           <strong>
-            {data.last_name}, {data.first_name}
+            {data.last_name.toUpperCase()}, {data.first_name.toUpperCase()}
           </strong>
           <span>DOB: {new Date(data.dob).toLocaleDateString()}</span>
         </div>
-        <div>{data.address}</div>
+        <div>
+          {data.address.toUpperCase()}
+          {(data.city || data.state) && (
+            <span>, {[data.city, data.state].filter(Boolean).map(s => s.toUpperCase()).join(", ")}</span>
+          )}
+        </div>
       </div>
 
       <h3>Prescriptions</h3>
