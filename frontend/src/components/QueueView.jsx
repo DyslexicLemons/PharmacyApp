@@ -170,7 +170,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1 }
                     )}
                   </div>
                 </td>
-                <td>{r.patient.first_name} {r.patient.last_name}</td>
+                <td>{r.patient.first_name.toUpperCase()} {r.patient.last_name.toUpperCase()}</td>
                 <td>{r.quantity}</td>
                 <td>{r.days_supply}</td>
                 <td>{"$" + Number(r.total_cost).toFixed(2)}</td>

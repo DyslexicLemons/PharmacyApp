@@ -24,6 +24,28 @@ class PatientBase(BaseModel):
     last_name: str
     dob: date
     address: str
+    city: Optional[str] = None
+    state: Optional[str] = None
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def capitalize_name(cls, v: str) -> str:
+        return v.strip().title()
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def capitalize_address(cls, v: str) -> str:
+        return v.strip().title()
+
+    @field_validator("city", mode="before")
+    @classmethod
+    def capitalize_city(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip().title() if v else v
+
+    @field_validator("state", mode="before")
+    @classmethod
+    def uppercase_state(cls, v: Optional[str]) -> Optional[str]:
+        return v.strip().upper() if v else v
 
 
 class PatientCreate(PatientBase):
@@ -44,6 +66,16 @@ class PrescriberBase(BaseModel):
     address: str
     phone_number: str
     specialty: Optional[str] = None
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def capitalize_name(cls, v: str) -> str:
+        return v.strip().title()
+
+    @field_validator("address", mode="before")
+    @classmethod
+    def capitalize_address(cls, v: str) -> str:
+        return v.strip().title()
 
 class PrescriberOut(PrescriberBase):
     id: int

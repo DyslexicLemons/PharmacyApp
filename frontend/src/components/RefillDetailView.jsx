@@ -146,7 +146,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
           <h3 style={{ margin: "0 0 0.75rem 0", fontSize: "1.1rem" }}>Patient</h3>
           <div style={{ display: "grid", gridTemplateColumns: "auto auto 1fr", gap: "0.5rem 1.5rem", alignItems: "baseline" }}>
             <strong>Name:</strong>
-            <span>{refill.patient.first_name} {refill.patient.last_name}</span>
+            <span>{refill.patient.first_name.toUpperCase()} {refill.patient.last_name.toUpperCase()}</span>
             <div></div>
 
             <strong>DOB:</strong>
@@ -296,7 +296,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
               <h3 style={{ marginTop: 0 }}>Confirm Sale</h3>
               <p style={{ marginBottom: "1.25rem" }}>
                 Mark <strong>{refill.drug.drug_name}</strong> for{" "}
-                <strong>{refill.patient.first_name} {refill.patient.last_name}</strong> as sold?
+                <strong>{refill.patient.first_name.toUpperCase()} {refill.patient.last_name.toUpperCase()}</strong> as sold?
               </p>
 
               <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "1rem", cursor: "pointer" }}>

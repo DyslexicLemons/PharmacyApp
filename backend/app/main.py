@@ -174,10 +174,11 @@ def fill_prescription(
     Create a new refill for an existing prescription.
     Uses SELECT FOR UPDATE to prevent concurrent double-fills.
     """
-    # Lock the prescription row for the duration of this transaction
+    # Lock the prescription row for the duration of this transaction.
+    # FOR UPDATE cannot be used with LEFT OUTER JOIN (joinedload), so lock first,
+    # then let SQLAlchemy lazy-load the drug relationship as needed.
     prescription = (
         db.query(Prescription)
-        .options(joinedload(Prescription.drug))
         .filter(Prescription.id == prescription_id)
         .with_for_update()
         .first()
@@ -782,6 +783,8 @@ def create_patient(p: schemas.PatientCreate, db: Session = Depends(get_db)):
         last_name=p.last_name,
         dob=p.dob,
         address=p.address,
+        city=p.city,
+        state=p.state,
     )
     db.add(patient)
     db.flush()
@@ -790,6 +793,22 @@ def create_patient(p: schemas.PatientCreate, db: Session = Depends(get_db)):
         entity_type="patient", entity_id=_int(patient.id),
         details=f"{p.last_name}, {p.first_name} DOB={p.dob}"
     )
+    db.commit()
+    db.refresh(patient)
+    return patient
+
+
+@app.patch("/patients/{pid}", response_model=schemas.PatientOut)
+def update_patient(pid: int, p: schemas.PatientCreate, db: Session = Depends(get_db)):
+    patient = db.get(Patient, pid)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    patient.first_name = p.first_name  # type: ignore[assignment]
+    patient.last_name = p.last_name    # type: ignore[assignment]
+    patient.dob = p.dob                # type: ignore[assignment]
+    patient.address = p.address        # type: ignore[assignment]
+    patient.city = p.city              # type: ignore[assignment]
+    patient.state = p.state            # type: ignore[assignment]
     db.commit()
     db.refresh(patient)
     return patient

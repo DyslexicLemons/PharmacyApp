@@ -45,7 +45,7 @@ export default function RefillHistView({ onBack, page = 1 }) {
             <tr key={s.id}>
               <td><strong style={{ color: "var(--primary)" }}>{fillNumberMap[s.id]}</strong></td>
               <td><strong>{'17' + String(s.prescription?.id ?? 0).padStart(5, '0')}</strong></td>
-              <td>{s.patient?.first_name} {s.patient?.last_name}</td>
+              <td>{s.patient?.first_name?.toUpperCase()} {s.patient?.last_name?.toUpperCase()}</td>
               <td>{s.drug?.drug_name}</td>
               <td>{s.quantity}</td>
               <td>{s.days_supply}</td>
