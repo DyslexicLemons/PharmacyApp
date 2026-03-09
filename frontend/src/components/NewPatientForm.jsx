@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useContext } from "react";
+import { AuthContext } from "@/context/AuthContext";
 import { createPatient } from "@/api";
 
 export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, onBack }) {
+  const { token } = useContext(AuthContext);
   const UPPERCASE_FIELDS = ["first_name", "last_name", "address", "city", "state"];
 
   const [form, setForm] = useState({
@@ -28,7 +30,7 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
     setError("");
     setSubmitting(true);
     try {
-      const patient = await createPatient(form);
+      const patient = await createPatient(form, token);
       onCreated(patient);
     } catch (err) {
       setError(err.message);

@@ -19,6 +19,7 @@ import PrescriptionForm from "@/components/PrescriptionForm";
 import FillScriptView from "@/components/FillScriptView";
 import PrescriptionDetailView from "@/components/PrescriptionDetailView";
 import NewPatientForm from "@/components/NewPatientForm";
+import PatientSelectView from "@/components/PatientSelectView";
 import RegisterView from "@/components/RegisterView";
 import UserManagementView from "@/components/UserManagementView";
 import AuditLogView from "@/components/AuditLogView";
@@ -31,6 +32,7 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [currentPatientData, setCurrentPatientData] = useState(null);
   const [queueSelectRow, setQueueSelectRow] = useState(null);
+  const [patientSelectRow, setPatientSelectRow] = useState(null);
   const [refillKeyCmd, setRefillKeyCmd] = useState(null);
   const [showHelp, setShowHelp] = useState(true);
   const cmdBarRef = useRef(null);
@@ -143,6 +145,10 @@ export default function App() {
         setQueueSelectRow(rowNum);
         return;
       }
+      if (route.view === "PATIENT_SELECT") {
+        setPatientSelectRow(rowNum);
+        return;
+      }
     }
 
     if (cmd === "q") {
@@ -190,8 +196,13 @@ export default function App() {
       return;
     }
 
-    // Patient search (lastname,firstname)
+    // Patient search (firstname,lastname or lastname,firstname)
     if (cmd.includes(",")) {
+      const [partA = "", partB = ""] = input.split(",").map((s) => s.trim());
+      if (partA.length < 3 || partB.length < 3) {
+        alert("Please enter at least 3 characters for both first and last name.");
+        return;
+      }
       searchPatients(input, token)
         .then((list) => {
           if (list.length === 0) {
@@ -199,12 +210,7 @@ export default function App() {
           } else if (list.length === 1) {
             navigateTo({ view: "PATIENT", pid: list[0].id });
           } else {
-            const names = list
-              .map((p) => `${p.id}: ${p.last_name}, ${p.first_name}`)
-              .join("\n");
-            const pick = prompt(`Multiple matches. Enter ID to open:\n${names}`);
-            const chosen = list.find((p) => String(p.id) === String(pick));
-            if (chosen) navigateTo({ view: "PATIENT", pid: chosen.id });
+            navigateTo({ view: "PATIENT_SELECT", patients: list, query: input.trim() });
           }
         })
         .catch((e) => alert(e.message));
@@ -420,6 +426,17 @@ export default function App() {
                 </button>
               </div>
             </div>
+          )}
+          {route.view === "PATIENT_SELECT" && (
+            <PatientSelectView
+              patients={route.patients}
+              query={route.query}
+              onSelectRow={patientSelectRow}
+              onSelect={(pid) => {
+                setPatientSelectRow(null);
+                navigateTo({ view: "PATIENT", pid });
+              }}
+            />
           )}
           {route.view === "REGISTER" && <RegisterView onBack={goBack} />}
           {route.view === "USER_MANAGEMENT" && <UserManagementView onBack={goBack} />}

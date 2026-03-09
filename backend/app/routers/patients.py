@@ -59,16 +59,41 @@ def search_patient(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Search patients by 'lastname,firstname' (prefix match on each part)."""
+    """Search patients by 'lastname,firstname' or 'firstname,lastname'.
+    Requires at least 3 characters for each part. Returns exact prefix matches
+    first, then near-matches (2-char prefix) not already in exact results."""
     if "," not in name:
-        raise HTTPException(status_code=400, detail="Name must be 'lastname,firstname'")
-    last, first = [s.strip() for s in name.split(",", 1)]
-    q = db.query(Patient)
-    if last:
-        q = q.filter(Patient.last_name.ilike(f"{last}%"))
-    if first:
-        q = q.filter(Patient.first_name.ilike(f"{first}%"))
-    return q.order_by(Patient.last_name.asc(), Patient.first_name.asc()).all()
+        raise HTTPException(status_code=400, detail="Name must be 'lastname,firstname' or 'firstname,lastname'")
+    a, b = [s.strip() for s in name.split(",", 1)]
+
+    if len(a) < 3 or len(b) < 3:
+        raise HTTPException(status_code=400, detail="At least 3 characters required for both first and last name")
+
+    seen_ids: set = set()
+
+    def run_query(last: str, first: str):
+        q = db.query(Patient)
+        if last:
+            q = q.filter(Patient.last_name.ilike(f"{last}%"))
+        if first:
+            q = q.filter(Patient.first_name.ilike(f"{first}%"))
+        group = []
+        for p in q.order_by(Patient.last_name.asc(), Patient.first_name.asc()).all():
+            if p.id not in seen_ids:
+                seen_ids.add(p.id)
+                group.append(p)
+        return group
+
+    # Exact prefix matches (both orderings)
+    primary = run_query(last=a, first=b)
+    secondary = run_query(last=b, first=a)
+
+    # Near-matches: first 2 chars of each part (patients not already in exact results)
+    a2, b2 = a[:2], b[:2]
+    near_primary = run_query(last=a2, first=b2)
+    near_secondary = run_query(last=b2, first=a2)
+
+    return primary + secondary + near_primary + near_secondary
 
 
 @router.get("/{pid}", response_model=schemas.PatientWithRxs)
