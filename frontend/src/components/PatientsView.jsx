@@ -24,6 +24,8 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1 }) {
             <th>FirstName</th>
             <th>Date of Birth</th>
             <th>Address</th>
+            <th>City</th>
+            <th>State</th>
           </tr>
         </thead>
         <tbody>
@@ -35,10 +37,12 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1 }) {
               className={onSelectPatient ? "hover-row" : ""}
             >
               <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
-              <td>{p.last_name}</td>
-              <td>{p.first_name}</td>
+              <td>{p.last_name.toUpperCase()}</td>
+              <td>{p.first_name.toUpperCase()}</td>
               <td>{new Date(p.dob).toLocaleDateString()}</td>
-              <td>{p.address}</td>
+              <td>{p.address.toUpperCase()}</td>
+              <td>{p.city ? p.city.toUpperCase() : "—"}</td>
+              <td>{p.state ? p.state.toUpperCase() : "—"}</td>
             </tr>
           ))}
         </tbody>

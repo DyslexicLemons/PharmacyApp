@@ -31,6 +31,8 @@ class Patient(Base):
     last_name = Column(String, index=True)
     dob = Column(Date)
     address = Column(String)
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
 
     prescriptions = relationship("Prescription", back_populates="patient", lazy="selectin")
     refills = relationship("Refill", back_populates="patient", lazy="selectin")

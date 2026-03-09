@@ -75,7 +75,7 @@ export default function RegisterView({ onBack }) {
 
   async function handleSell() {
     if (selected.size === 0) return;
-    if (!confirm(`Sell ${selected.size} prescription(s) to ${patient.last_name}, ${patient.first_name}?`)) return;
+    if (!confirm(`Sell ${selected.size} prescription(s) to ${patient.last_name.toUpperCase()}, ${patient.first_name.toUpperCase()}?`)) return;
     setSelling(true);
     setError("");
     try {
@@ -119,7 +119,7 @@ export default function RegisterView({ onBack }) {
           </div>
           <form className="vstack" style={{ gap: "1rem" }} onSubmit={handleSearch}>
             <div className="hstack" style={{ gap: "0.75rem" }}>
-              <div style={{ flex: 1 }} className="vstack" style={{ gap: "0.3rem" }}>
+              <div style={{ flex: 1, gap: "0.3rem" }} className="vstack">
                 <label style={{ fontSize: "0.85rem", color: "var(--text-light)" }}>Last Name</label>
                 <input
                   className="input"
@@ -129,7 +129,7 @@ export default function RegisterView({ onBack }) {
                   autoFocus
                 />
               </div>
-              <div style={{ flex: 1 }} className="vstack" style={{ gap: "0.3rem" }}>
+              <div style={{ flex: 1, gap: "0.3rem" }} className="vstack">
                 <label style={{ fontSize: "0.85rem", color: "var(--text-light)" }}>First Name</label>
                 <input
                   className="input"
@@ -174,7 +174,7 @@ export default function RegisterView({ onBack }) {
               style={{ justifyContent: "space-between", display: "flex", width: "100%" }}
               onClick={() => loadPatientRefills(pt)}
             >
-              <span style={{ fontWeight: 600 }}>{pt.last_name}, {pt.first_name}</span>
+              <span style={{ fontWeight: 600 }}>{pt.last_name.toUpperCase()}, {pt.first_name.toUpperCase()}</span>
               <span style={{ color: "var(--text-light)" }}>DOB: {new Date(pt.dob).toLocaleDateString()}</span>
             </button>
           ))}
@@ -199,7 +199,7 @@ export default function RegisterView({ onBack }) {
 
       <div className="card hstack" style={{ justifyContent: "space-between" }}>
         <div>
-          <strong style={{ fontSize: "1.1rem" }}>{patient.last_name}, {patient.first_name}</strong>
+          <strong style={{ fontSize: "1.1rem" }}>{patient.last_name.toUpperCase()}, {patient.first_name.toUpperCase()}</strong>
         </div>
         <span style={{ color: "var(--text-light)" }}>
           DOB: {new Date(patient.dob).toLocaleDateString()}

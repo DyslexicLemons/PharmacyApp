@@ -2,18 +2,25 @@ import { useState } from "react";
 import { createPatient } from "@/api";
 
 export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, onBack }) {
+  const UPPERCASE_FIELDS = ["first_name", "last_name", "address", "city", "state"];
+
   const [form, setForm] = useState({
-    first_name: prefillFirst || "",
-    last_name: prefillLast || "",
+    first_name: (prefillFirst || "").toUpperCase(),
+    last_name: (prefillLast || "").toUpperCase(),
     dob: "",
     address: "",
+    city: "",
+    state: "",
   });
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   function handleChange(e) {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: UPPERCASE_FIELDS.includes(name) ? value.toUpperCase() : value,
+    }));
   }
 
   async function handleSubmit(e) {
@@ -30,7 +37,7 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
     }
   }
 
-  const ready = form.first_name.trim() && form.last_name.trim() && form.dob && form.address.trim();
+  const ready = form.first_name.trim() && form.last_name.trim() && form.dob && form.address.trim() && form.city.trim() && form.state.trim();
 
   return (
     <div className="vstack">
@@ -84,6 +91,32 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
               value={form.address}
               onChange={handleChange}
               required
+              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+            />
+          </label>
+
+          <label>
+            <strong>City <span style={{ color: "var(--danger)" }}>*</span></strong>
+            <input
+              className="input"
+              name="city"
+              value={form.city}
+              onChange={handleChange}
+              required
+              style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
+            />
+          </label>
+
+          <label>
+            <strong>State <span style={{ color: "var(--danger)" }}>*</span></strong>
+            <input
+              className="input"
+              name="state"
+              value={form.state}
+              onChange={handleChange}
+              required
+              maxLength={2}
+              placeholder="e.g. TX"
               style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
             />
           </label>
