@@ -553,6 +553,123 @@ def advance_refill(rx_id: int, payload: schemas.AdvanceRequest, db: Session = De
     return rx
 
 
+@app.patch("/refills/{rx_id}/edit", response_model=schemas.RefillOut)
+def edit_refill(rx_id: int, payload: schemas.RefillEditRequest, db: Session = Depends(get_db)):
+    """
+    Edit a refill that is in QT, QP, or HOLD state.
+    After editing, the refill is sent back to QT or QV1 for re-verification:
+      - QT  → stays QT  (still needs triage)
+      - QP  → back to QV1 (needs re-verification)
+      - HOLD → back to QT (full re-triage after edit)
+    """
+    EDITABLE_STATES = {RxState.QT, RxState.QP, RxState.HOLD}
+
+    rx = db.query(Refill).options(
+        joinedload(Refill.patient),
+        joinedload(Refill.drug),
+        joinedload(Refill.prescription).joinedload(Prescription.prescriber)
+    ).filter(Refill.id == rx_id).first()
+
+    if not rx:
+        raise HTTPException(status_code=404, detail="Refill not found")
+
+    raw_state = rx.state
+    current_state = raw_state if isinstance(raw_state, RxState) else RxState(str(raw_state))
+
+    if current_state not in EDITABLE_STATES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot edit a refill in state {current_state.value}. Only QT, QP, and HOLD are editable."
+        )
+
+    old_quantity = _int(rx.quantity)
+    new_quantity = payload.quantity if payload.quantity is not None else old_quantity
+
+    # Lock prescription row and adjust remaining_quantity
+    prescription = (
+        db.query(Prescription)
+        .filter(Prescription.id == rx.prescription_id)
+        .with_for_update()
+        .first()
+    )
+
+    if prescription:
+        remaining = _int(prescription.remaining_quantity)
+
+        if current_state in ACTIVE_STATES:
+            # Quantity is currently reserved; effective available = remaining + old_qty
+            available = remaining + old_quantity
+            if new_quantity > available:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Requested quantity ({new_quantity}) exceeds authorized remaining "
+                        f"({available})"
+                    )
+                )
+            prescription.remaining_quantity = available - new_quantity  # type: ignore[assignment]
+        else:
+            # HOLD: quantity was already returned; will be re-reserved when entering QT
+            if new_quantity > remaining:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"Requested quantity ({new_quantity}) exceeds remaining authorized "
+                        f"quantity ({remaining})"
+                    )
+                )
+            prescription.remaining_quantity = remaining - new_quantity  # type: ignore[assignment]
+
+        if payload.instructions is not None:
+            prescription.instructions = payload.instructions  # type: ignore[assignment]
+        if payload.brand_required is not None:
+            prescription.brand_required = payload.brand_required  # type: ignore[assignment]
+
+    # Update refill-level fields
+    if payload.quantity is not None:
+        rx.quantity = payload.quantity  # type: ignore[assignment]
+        # Recalculate cash price when quantity changes
+        drug = rx.drug
+        rx.total_cost = Decimal(str(drug.cost)) * payload.quantity  # type: ignore[assignment]
+    if payload.days_supply is not None:
+        rx.days_supply = payload.days_supply  # type: ignore[assignment]
+    if payload.priority is not None:
+        rx.priority = _parse_priority(payload.priority)  # type: ignore[assignment]
+    if payload.due_date is not None:
+        rx.due_date = payload.due_date  # type: ignore[assignment]
+
+    # Determine new state
+    if current_state == RxState.QT:
+        new_state = RxState.QT
+    elif current_state == RxState.QP:
+        new_state = RxState.QV1
+    else:  # HOLD
+        new_state = RxState.QT
+
+    old_state_str = current_state.value
+    rx.state = new_state  # type: ignore[assignment]
+
+    logger.info(
+        f"[RX EDIT] Refill #{rx_id}: edited "
+        f"{old_state_str} → {new_state.value} "
+        f"qty={_int(rx.quantity)} days={_int(rx.days_supply)}"
+    )
+
+    _write_audit(
+        db, "REFILL_EDITED",
+        entity_type="refill", entity_id=rx_id,
+        details=(
+            f"prior_state={old_state_str} new_state={new_state.value} "
+            f"qty={_int(rx.quantity)} days_supply={_int(rx.days_supply)} "
+            f"prescription_id={rx.prescription_id} patient_id={rx.patient_id}"
+        )
+    )
+    db.commit()
+    db.refresh(rx)
+
+    return rx
+
+
 @app.post("/refills/upload_json")
 def upload_json_prescription(data: schemas.JSONPrescriptionUpload, db: Session = Depends(get_db)):
     """Upload external JSON prescription — goes to QT queue for triage."""

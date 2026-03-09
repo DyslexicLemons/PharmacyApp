@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import { advanceRx, getStock, getRefill } from "@/api";
 
-export default function RefillDetailView({ refillId, onBack, onUpdate }) {
+export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit }) {
   const [refill, setRefill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -110,6 +110,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
   const canApprove = ["QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED"].includes(refill.state);
   const canReject = ["QV1", "HOLD"].includes(refill.state);
   const canHold = ["QT", "QV1", "QP", "QV2"].includes(refill.state);
+  const canEdit = ["QT", "QP", "HOLD"].includes(refill.state);
 
   return (
     <div className="vstack">
@@ -387,6 +388,16 @@ export default function RefillDetailView({ refillId, onBack, onUpdate }) {
             style={{ minWidth: "120px" }}
           >
             ⏸ Hold
+          </button>
+        )}
+
+        {canEdit && onEdit && (
+          <button
+            className="btn btn-secondary"
+            onClick={onEdit}
+            style={{ minWidth: "120px" }}
+          >
+            ✎ Edit [e]
           </button>
         )}
 
