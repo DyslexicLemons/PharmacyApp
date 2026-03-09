@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { getPatient } from "@/api";
+import { AuthContext } from "@/context/AuthContext";
 import Badge from "@/components/Badge";
 
 const PAGE_SIZE = 15;
 
 export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1 }) {
+  const { token } = useContext(AuthContext);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
 
-    getPatient(pid)
+    getPatient(pid, token)
       .then((d) => {
         if (!mounted) return;
         setData(d);
@@ -74,12 +76,13 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
               <th>Rx #</th>
               <th>Drug</th>
               <th>Qty Remaining</th>
-              <th>Received</th>
+              <th>Date Received</th>
               <th>Last Qty Dispensed</th>
               <th>Days Supply</th>
               <th>Last Sold</th>
               <th>Last cost</th>
               <th>Last filled</th>
+              <th>Expiration</th>
               <th>Current Status</th>
               <th></th>
             </tr>
@@ -106,7 +109,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
                   </td>
 
                   <td>
-                    <strong>{'17' + String(r.id).padStart(5, '0')}</strong>
+                    <strong>{r.id}</strong>
                   </td>
 
                   <td>
@@ -156,6 +159,12 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
                       </td>
 
                       <td>
+                        {r.expiration_date
+                          ? new Date(r.expiration_date).toLocaleDateString()
+                          : "—"}
+                      </td>
+
+                      <td>
                         {r.latest_refill.next_pickup ? (
                           new Date(
                             r.latest_refill.next_pickup
@@ -168,7 +177,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
                       </td>
                     </>
                   ) : (
-                    <td colSpan={6} style={{ color: "#888" }}>
+                    <td colSpan={7} style={{ color: "#888" }}>
                       No refills yet
                     </td>
                   )}

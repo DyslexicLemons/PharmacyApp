@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useContext, useState, useEffect } from "react";
 import { fillScript, getPrescribers, getPatientInsurance, calculateBilling } from "@/api";
+import { AuthContext } from "@/context/AuthContext";
 
 const TIER_LABELS = {
   1: "Tier 1 – Preferred Generic",
@@ -42,7 +43,7 @@ function daysEarly(prescription) {
 }
 
 export default function FillScriptView({ prescription, patientName, patientId, onBack }) {
-
+  const { token } = useContext(AuthContext);
   const [prescribers, setPrescribers] = useState([]);
   const [patientInsurance, setPatientInsurance] = useState([]);
   const [submitting, setSubmitting] = useState(false);
@@ -72,13 +73,13 @@ export default function FillScriptView({ prescription, patientName, patientId, o
   });
 
   useEffect(() => {
-    getPrescribers().then(setPrescribers).catch(console.error);
+    getPrescribers(token).then(setPrescribers).catch(console.error);
 
     const pid = patientId ?? prescription.patient_id;
     if (pid) {
-      getPatientInsurance(pid).then(setPatientInsurance).catch(console.error);
+      getPatientInsurance(pid, token).then(setPatientInsurance).catch(console.error);
     }
-  }, []);
+  }, [token]);
 
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
 
@@ -96,7 +97,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
       insurance_id: parseInt(selectedInsuranceId),
       quantity: parseInt(form.quantity),
       days_supply: parseInt(form.days_supply),
-    })
+    }, token)
       .then(setBilling)
       .catch(() => setBilling(null))
       .finally(() => setBillingLoading(false));
@@ -171,7 +172,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
         scheduled: form.scheduled,
         due_date: form.due_date || null,
         insurance_id: selectedInsuranceId ? parseInt(selectedInsuranceId) : null,
-      });
+      }, token);
 
       let msg = `Fill created!\nRefill ID: ${result.refill_id}\nState: ${result.state}`;
 
@@ -230,7 +231,7 @@ Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
         <h3 style={{ margin: 0 }}>Script Details</h3>
 
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-          <div><strong>Rx #:</strong> {'17' + String(prescription.id).padStart(5, '0')}</div>
+          <div><strong>Rx #:</strong> {prescription.id}</div>
           <div><strong>Patient:</strong> {patientName}</div>
           <div>
             <strong>Drug:</strong> {prescription.drug.drug_name} ({prescription.drug.manufacturer})

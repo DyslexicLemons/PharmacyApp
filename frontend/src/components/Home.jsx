@@ -117,7 +117,28 @@ export default function Home({ onCommand }) {
             </h3>
             <ul style={{ margin: 0 }}>
               <li>
+                <code>users</code> – Manage users (create accounts, assign roles)
+              </li>
+              <li>
+                <code>logs</code> – View audit log
+              </li>
+              <li>
                 <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
+              </li>
+            </ul>
+          </section>
+
+          {/* System */}
+          <section className="card vstack" style={{ padding: "1rem" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              🖥️ System
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>?</code> – Toggle this help panel
+              </li>
+              <li>
+                <code>logout</code> – Log out of the session
               </li>
             </ul>
           </section>

@@ -1,26 +1,40 @@
-import { useContext } from "react";
-import { DataContext } from "@/context/DataContext";
+import { useContext, useEffect, useState } from "react";
+import { AuthContext } from "@/context/AuthContext";
+import { getRefillHist } from "@/api";
+
 const PAGE_SIZE = 15;
 
 export default function RefillHistView({ onBack, page = 1 }) {
-  const { refillHist, loadingRefillHist, errorRefillHist } = useContext(DataContext);
+  const { token } = useContext(AuthContext);
+  const [data, setData] = useState({ items: [], total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (loadingRefillHist) return <p>Loading…</p>;
-  if (errorRefillHist) return <p style={{ color: "#ff7675" }}>{errorRefillHist}</p>;
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true);
+    const offset = (page - 1) * PAGE_SIZE;
+    getRefillHist(token, PAGE_SIZE, offset)
+      .then(setData)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [token, page]);
 
-  // Compute per-prescription fill number (sorted by id so oldest fill = #1)
+  if (loading) return <p>Loading…</p>;
+  if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
+
+  const { items, total } = data;
+  const startIdx = (page - 1) * PAGE_SIZE;
+  const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
+
+  // Compute per-prescription fill number within the current page
   const fillNumberMap = {};
   const rxCounter = {};
-  [...refillHist].sort((a, b) => a.id - b.id).forEach((r) => {
+  [...items].sort((a, b) => a.id - b.id).forEach((r) => {
     const rxId = r.prescription?.id;
     rxCounter[rxId] = (rxCounter[rxId] || 0) + 1;
     fillNumberMap[r.id] = rxCounter[rxId];
   });
-
-  const total = refillHist.length;
-  const startIdx = (page - 1) * PAGE_SIZE;
-  const endIdx = Math.min(startIdx + PAGE_SIZE, total);
-  const pageItems = refillHist.slice(startIdx, endIdx);
 
   return (
     <div className="vstack">
@@ -34,17 +48,17 @@ export default function RefillHistView({ onBack, page = 1 }) {
             <th>Drug</th>
             <th>Quantity</th>
             <th>Days Supply</th>
-            <th>cost</th>
+            <th>Cost</th>
             <th>Insurance</th>
             <th>Completed Date</th>
             <th>Sold Date</th>
           </tr>
         </thead>
         <tbody>
-          {pageItems.map((s, index) => (
+          {items.map((s) => (
             <tr key={s.id}>
               <td><strong style={{ color: "var(--primary)" }}>{fillNumberMap[s.id]}</strong></td>
-              <td><strong>{'17' + String(s.prescription?.id ?? 0).padStart(5, '0')}</strong></td>
+              <td><strong>{s.prescription?.id}</strong></td>
               <td>{s.patient?.first_name?.toUpperCase()} {s.patient?.last_name?.toUpperCase()}</td>
               <td>{s.drug?.drug_name}</td>
               <td>{s.quantity}</td>

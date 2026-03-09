@@ -10,7 +10,10 @@
       "Bash(PGPASSWORD=6789 \"/c/Program Files/PostgreSQL/17/bin/psql\" -U postgres pharmacy_db -f backend/migrations/003_add_insurance_and_billing.sql)",
       "Bash(PGPASSWORD=6789 \"/c/Program Files/PostgreSQL/17/bin/psql\" -U postgres pharmacy_db -c \"ALTER TABLE prescribers ALTER COLUMN npi TYPE BIGINT;\")",
       "Bash(powershell -NonInteractive -Command \"$env:PGPASSWORD=''6789''; & ''C:\\\\Program Files\\\\PostgreSQL\\\\17\\\\bin\\\\psql.exe'' -U postgres -d pharmacy_db -f ''C:\\\\Users\\\\jmajo\\\\VSProjects\\\\PharmacyApp\\\\backend\\\\migrations\\\\004_renumber_prescription_ids.sql''\")",
-      "Bash(exit 0)"
+      "Bash(exit 0)",
+      "Bash(.venv/Scripts/python -m app.migrate_add_prescription_picture)",
+      "Bash(wc -l /c/Users/jmajo/VSProjects/PharmacyApp/frontend/src/components/*.jsx)",
+      "Bash(pip install \"PyJWT>=2.8.0\" \"slowapi>=0.1.9\")"
     ]
   }
 }

@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientInsurance } from "@/api";
+import { useContext, useState, useEffect, useRef } from "react";
+import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientInsurance, updatePrescriptionPicture, updatePrescription } from "@/api";
+import { AuthContext } from "@/context/AuthContext";
 import Badge from "@/components/Badge";
 
-function AddInsuranceModal({ patientId, companies, onClose, onAdded }) {
+function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }) {
   const [form, setForm] = useState({
     insurance_company_id: "",
     member_id: "",
@@ -30,7 +31,7 @@ function AddInsuranceModal({ patientId, companies, onClose, onAdded }) {
         member_id: form.member_id,
         group_number: form.group_number || null,
         is_primary: form.is_primary,
-      });
+      }, token);
       onAdded(result);
     } catch (e) {
       setError(e.message);
@@ -124,20 +125,27 @@ function AddInsuranceModal({ patientId, companies, onClose, onAdded }) {
 }
 
 export default function PrescriptionDetailView({ prescription, patientName, patientId, onBack }) {
+  const { token } = useContext(AuthContext);
   const [prescribers, setPrescribers] = useState([]);
   const [patientInsurance, setPatientInsurance] = useState([]);
   const [allCompanies, setAllCompanies] = useState([]);
   const [showAddInsurance, setShowAddInsurance] = useState(false);
+  const [pictureUrl, setPictureUrl] = useState(prescription.picture_url ?? null);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const fileInputRef = useRef(null);
+  const [editingExpiration, setEditingExpiration] = useState(false);
+  const [expirationDate, setExpirationDate] = useState(prescription.expiration_date ?? "");
+  const [savingExpiration, setSavingExpiration] = useState(false);
 
   const pid = patientId ?? prescription.patient_id;
 
   useEffect(() => {
-    getPrescribers().then(setPrescribers).catch(console.error);
-    getInsuranceCompanies().then(setAllCompanies).catch(console.error);
+    getPrescribers(token).then(setPrescribers).catch(console.error);
+    getInsuranceCompanies(token).then(setAllCompanies).catch(console.error);
     if (pid) {
-      getPatientInsurance(pid).then(setPatientInsurance).catch(console.error);
+      getPatientInsurance(pid, token).then(setPatientInsurance).catch(console.error);
     }
-  }, [pid]);
+  }, [pid, token]);
 
   const lr = prescription.latest_refill;
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
@@ -157,6 +165,32 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
     setShowAddInsurance(false);
   };
 
+  const handleSaveExpiration = async () => {
+    setSavingExpiration(true);
+    try {
+      await updatePrescription(prescription.id, { expiration_date: expirationDate || null }, token);
+      setEditingExpiration(false);
+    } catch (err) {
+      alert(`Failed to save expiration date: ${err.message}`);
+    } finally {
+      setSavingExpiration(false);
+    }
+  };
+
+  const handlePictureUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setUploadingPicture(true);
+    try {
+      const result = await updatePrescriptionPicture(prescription.id, file, token);
+      setPictureUrl(result.picture_url ?? null);
+    } catch (err) {
+      alert(`Failed to upload image: ${err.message}`);
+    } finally {
+      setUploadingPicture(false);
+    }
+  };
+
   return (
     <div className="vstack">
       {showAddInsurance && (
@@ -165,6 +199,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
           companies={allCompanies}
           onClose={() => setShowAddInsurance(false)}
           onAdded={handleInsuranceAdded}
+          token={token}
         />
       )}
 
@@ -174,7 +209,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
       <div className="card vstack" style={{ gap: "0.5rem" }}>
         <h3 style={{ margin: 0 }}>Script Info</h3>
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-          <div><strong>Rx #:</strong> {'17' + String(prescription.id).padStart(5, '0')}</div>
+          <div><strong>Rx #:</strong> {prescription.id}</div>
           <div><strong>Patient:</strong> {patientName}</div>
           <div>
             <strong>Drug:</strong> {prescription.drug.drug_name} ({prescription.drug.manufacturer})
@@ -196,12 +231,91 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
           <div><strong>Date Received:</strong> {new Date(prescription.date_received).toLocaleDateString()}</div>
           <div><strong>Remaining Qty on Script:</strong> {prescription.remaining_quantity}</div>
-          {prescription.expiration_date && (
-            <div><strong>Script Expires:</strong> {new Date(prescription.expiration_date).toLocaleDateString()}</div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <strong>Script Expires:</strong>
+            {editingExpiration ? (
+              <>
+                <input
+                  type="date"
+                  value={expirationDate}
+                  onChange={(e) => setExpirationDate(e.target.value)}
+                  style={{ padding: "2px 6px" }}
+                />
+                <button
+                  className="btn btn-primary"
+                  style={{ padding: "2px 10px", fontSize: "0.85rem" }}
+                  onClick={handleSaveExpiration}
+                  disabled={savingExpiration}
+                >
+                  {savingExpiration ? "Saving…" : "Save"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: "2px 10px", fontSize: "0.85rem" }}
+                  onClick={() => { setEditingExpiration(false); setExpirationDate(prescription.expiration_date ?? ""); }}
+                  disabled={savingExpiration}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <span>
+                  {expirationDate ? new Date(expirationDate).toLocaleDateString() : <em style={{ color: "var(--text-light)" }}>Not set</em>}
+                </span>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: "2px 10px", fontSize: "0.85rem" }}
+                  onClick={() => setEditingExpiration(true)}
+                >
+                  {expirationDate ? "Edit" : "Set"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
         {prescription.instructions && (
           <div><strong>Instructions:</strong> {prescription.instructions}</div>
+        )}
+      </div>
+
+      {/* Prescription Image */}
+      <div className="card vstack" style={{ gap: "0.75rem" }}>
+        <div className="hstack" style={{ justifyContent: "space-between", alignItems: "center" }}>
+          <h3 style={{ margin: 0 }}>Prescription Image</h3>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            {uploadingPicture && <span style={{ fontSize: "0.85rem", color: "var(--text-light)" }}>Uploading…</span>}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handlePictureUpload}
+            />
+            <button
+              className="btn btn-primary"
+              style={{ padding: "4px 14px", fontSize: "0.85rem" }}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPicture}
+            >
+              {pictureUrl ? "Replace Image" : "+ Upload Image"}
+            </button>
+          </div>
+        </div>
+        {pictureUrl ? (
+          <img
+            src={pictureUrl}
+            alt="Prescription"
+            style={{ maxWidth: "100%", maxHeight: "400px", objectFit: "contain", borderRadius: "6px", border: "1px solid var(--border, #dee2e6)" }}
+          />
+        ) : (
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            height: "160px", border: "2px dashed var(--border, #dee2e6)",
+            borderRadius: "6px", color: "var(--text-light)", fontSize: "0.95rem"
+          }}>
+            No Image Available
+          </div>
         )}
       </div>
 

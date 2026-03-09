@@ -1,21 +1,35 @@
-import { useContext } from "react";
-import { DataContext } from "@/context/DataContext";
+import { useContext, useEffect, useState } from "react";
+import { AuthContext } from "@/context/AuthContext";
+import { getPrescribers } from "@/api";
+
 const PAGE_SIZE = 15;
 
 export default function PrescribersView({ onBack, onSelectPrescriber, page = 1 }) {
-  const { prescribers, loadingPrescribers, errorPrescribers } = useContext(DataContext);
+  const { token } = useContext(AuthContext);
+  const [data, setData] = useState({ items: [], total: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (loadingPrescribers) return <p>Loading…</p>;
-  if (errorPrescribers) return <p style={{ color: "#ff7675" }}>{errorPrescribers}</p>;
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true);
+    const offset = (page - 1) * PAGE_SIZE;
+    getPrescribers(token, PAGE_SIZE, offset)
+      .then(setData)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [token, page]);
 
-  const total = prescribers.length;
+  if (loading) return <p>Loading…</p>;
+  if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
+
+  const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
-  const endIdx = Math.min(startIdx + PAGE_SIZE, total);
-  const pageItems = prescribers.slice(startIdx, endIdx);
+  const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
 
   return (
     <div className="vstack">
-      <h2>Presribers</h2>
+      <h2>Prescribers</h2>
       <table className="table">
         <thead>
           <tr>
@@ -28,7 +42,7 @@ export default function PrescribersView({ onBack, onSelectPrescriber, page = 1 }
           </tr>
         </thead>
         <tbody>
-          {pageItems.map((p, index) => (
+          {items.map((p, index) => (
             <tr
               key={p.id}
               onClick={() => onSelectPrescriber && onSelectPrescriber(p.id)}
