@@ -2,9 +2,11 @@
 JWT authentication utilities for the Pharmacy API.
 
 Provides:
-- create_access_token(user)  — sign an 8-hour JWT for a User
-- get_current_user(...)      — Bearer-token dependency; returns User or raises 401
-- require_admin(...)         — composes on top of get_current_user; raises 403 if not admin
+- create_access_token(user)   — sign an 8-hour JWT for a User
+- get_current_user(...)       — Bearer-token dependency; returns User or raises 401
+- require_admin(...)          — raises 403 if user role != "admin"
+- require_pharmacist(...)     — raises 403 if user role is "technician"
+                                (pharmacist AND admin both pass)
 """
 
 import os
