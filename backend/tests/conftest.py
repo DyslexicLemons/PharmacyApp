@@ -9,8 +9,14 @@ IMPORTANT: DATABASE_URL must be overridden BEFORE any app module is imported,
 because app/database.py calls create_engine() at module level.
 """
 import os
-# Override the DB URL before ANY app import
-os.environ["DATABASE_URL"] = "postgresql://postgres:6789@localhost/pharmacy_test_db"
+# Override the DB URL before ANY app import.
+# CI sets TEST_DATABASE_URL to point at the GH Actions Postgres service container.
+# Local dev falls back to the default below.
+_TEST_DB = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql://postgres:6789@localhost/pharmacy_test_db",
+)
+os.environ["DATABASE_URL"] = _TEST_DB
 
 import pytest
 from decimal import Decimal
@@ -37,7 +43,7 @@ from app.models import (
 @pytest.fixture(scope="function")
 def engine():
     """Create a fresh PostgreSQL engine per test."""
-    eng = create_engine("postgresql://postgres:6789@localhost/pharmacy_test_db")
+    eng = create_engine(_TEST_DB)
     Base.metadata.create_all(bind=eng)
     yield eng
     Base.metadata.drop_all(bind=eng)

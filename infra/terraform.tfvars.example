@@ -1,0 +1,14 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored — never commit it.
+
+aws_region   = "us-east-1"
+project_name = "pharmacy"
+environment  = "prod"
+
+# Database
+db_username = "pharmacy_admin"
+db_password = "CHANGE_ME_strong_password_here"
+db_name     = "pharmacy_db"
+
+# Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+jwt_secret_key = "CHANGE_ME_64_char_hex_string_here"

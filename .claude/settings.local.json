@@ -14,7 +14,9 @@
       "Bash(.venv/Scripts/python -m app.migrate_add_prescription_picture)",
       "Bash(wc -l /c/Users/jmajo/VSProjects/PharmacyApp/frontend/src/components/*.jsx)",
       "Bash(pip install \"PyJWT>=2.8.0\" \"slowapi>=0.1.9\")",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(npm test:*)",
+      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp -type f -name *.env* -o -name .env)"
     ]
   }
 }

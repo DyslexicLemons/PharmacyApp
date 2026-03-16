@@ -5,6 +5,11 @@ This file is intentionally thin: it configures middleware, mounts routers,
 and provides the health-check endpoints. All business logic lives in routers/.
 """
 
+# Load secrets from AWS Secrets Manager before any other module reads env vars.
+# In local dev / CI this is a no-op (AWS_SECRET_NAME is not set).
+from .secrets import load_aws_secrets
+load_aws_secrets()
+
 import asyncio
 import logging
 import os
@@ -19,6 +24,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from .cache import close_redis, init_redis
 from .database import Base, engine, SessionLocal
 from .models import Prescription, Refill, RxState
 from .routers import admin, auth, drugs, insurance, patients, prescriptions, prescribers, refills
@@ -126,6 +132,7 @@ async def _expire_prescriptions_task() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
+    init_redis()
     expire_task = asyncio.create_task(_expire_prescriptions_task())
     schedule_task = asyncio.create_task(_promote_scheduled_refills_task())
     yield
@@ -135,6 +142,7 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
             await t
         except asyncio.CancelledError:
             pass
+    close_redis()
 
 
 # ---------------------------------------------------------------------------

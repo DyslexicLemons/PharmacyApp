@@ -28,3 +28,11 @@ backend/uploads/
 # OS
 .DS_Store
 Thumbs.db
+
+# Terraform — never commit state or secrets
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/terraform.tfvars
+infra/*.tfplan

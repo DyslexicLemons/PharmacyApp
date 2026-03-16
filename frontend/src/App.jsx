@@ -1,30 +1,42 @@
-import { useState, useContext, useRef, useEffect } from "react";
+import { useState, useContext, useRef, useEffect, lazy, Suspense } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import LoginForm from "@/components/LoginForm";
 import NotificationPanel from "@/components/NotificationPanel";
+import CommandBar from "@/components/CommandBar";
 
 import { searchPatients, generateTestPrescriptions, getPrescription } from "@/api";
-import EditRefillView from "@/components/EditRefillView";
-import RefillDetailView from "@/components/RefillDetailView";
 
-import PatientProfile from "@/components/PatientProfile";
-import DrugsView from "@/components/DrugsView";
-import PatientsView from "@/components/PatientsView";
-import QueueView from "@/components/QueueView";
-import Home from "@/components/Home";
-import CommandBar from "@/components/CommandBar";
-import StockView from "@/components/StockView";
-import RefillHistView from "@/components/RefillHistView";
-import PrescribersView from "@/components/PrescribersView";
-import PrescriptionForm from "@/components/PrescriptionForm";
-import FillScriptView from "@/components/FillScriptView";
-import PrescriptionDetailView from "@/components/PrescriptionDetailView";
-import NewPatientForm from "@/components/NewPatientForm";
-import PatientSelectView from "@/components/PatientSelectView";
-import RegisterView from "@/components/RegisterView";
-import UserManagementView from "@/components/UserManagementView";
-import AuditLogView from "@/components/AuditLogView";
+// Route-level components are lazy-loaded so each view becomes its own chunk.
+// LoginForm and CommandBar stay eager — they are needed before/after any route.
+const EditRefillView        = lazy(() => import("@/components/EditRefillView"));
+const RefillDetailView      = lazy(() => import("@/components/RefillDetailView"));
+const PatientProfile        = lazy(() => import("@/components/PatientProfile"));
+const DrugsView             = lazy(() => import("@/components/DrugsView"));
+const PatientsView          = lazy(() => import("@/components/PatientsView"));
+const QueueView             = lazy(() => import("@/components/QueueView"));
+const Home                  = lazy(() => import("@/components/Home"));
+const StockView             = lazy(() => import("@/components/StockView"));
+const RefillHistView        = lazy(() => import("@/components/RefillHistView"));
+const PrescribersView       = lazy(() => import("@/components/PrescribersView"));
+const PrescriptionForm      = lazy(() => import("@/components/PrescriptionForm"));
+const FillScriptView        = lazy(() => import("@/components/FillScriptView"));
+const PrescriptionDetailView = lazy(() => import("@/components/PrescriptionDetailView"));
+const NewPatientForm        = lazy(() => import("@/components/NewPatientForm"));
+const PatientSelectView     = lazy(() => import("@/components/PatientSelectView"));
+const RegisterView          = lazy(() => import("@/components/RegisterView"));
+const UserManagementView    = lazy(() => import("@/components/UserManagementView"));
+const AuditLogView          = lazy(() => import("@/components/AuditLogView"));
+const ShipmentView          = lazy(() => import("@/components/ShipmentView"));
+const ShipmentHistView      = lazy(() => import("@/components/ShipmentHistView"));
+
+function ViewFallback() {
+  return (
+    <div style={{ padding: "2rem", textAlign: "center", color: "var(--text-light)" }}>
+      Loading…
+    </div>
+  );
+}
 
 const PATIENT_PAGE_SIZE = 15;
 
@@ -45,6 +57,7 @@ function App() {
   const [queueSelectRow, setQueueSelectRow] = useState(null);
   const [patientSelectRow, setPatientSelectRow] = useState(null);
   const [refillKeyCmd, setRefillKeyCmd] = useState(null);
+  const [shipmentKeyCmd, setShipmentKeyCmd] = useState(null);
   const [showHelp, setShowHelp] = useState(true);
   const cmdBarRef = useRef(null);
   // Track whether auth has ever been established in this session.
@@ -238,6 +251,12 @@ function App() {
       return;
     }
 
+    // Finish shipment — only valid from SHIPMENT view
+    if (cmd === "finished" || cmd === "f") {
+      if (route.view === "SHIPMENT") setShipmentKeyCmd("finish");
+      return;
+    }
+
     // Top-level section commands — clears history so `q` cannot return to a previous form/edit view
     if (cmd === "drugs") navigateToSection({ view: "DRUGS" });
     else if (cmd === "pt" || cmd === "patients") navigateToSection({ view: "PATIENTS" });
@@ -245,6 +264,8 @@ function App() {
     else if (cmd === "stock") navigateToSection({ view: "STOCK" });
     else if (cmd === "refill_hist") navigateToSection({ view: "REFILL_HIST" });
     else if (cmd === "prescribers") navigateToSection({ view: "PRESCRIBERS" });
+    else if (cmd === "shipment") navigateToSection({ view: "SHIPMENT" });
+    else if (cmd === "shipment_hist") navigateToSection({ view: "SHIPMENT_HIST" });
     else if (cmd === "logout") logout();
     else if (cmd === "register") navigateToSection({ view: "REGISTER" });
     else if (cmd === "users") {
@@ -305,6 +326,7 @@ function App() {
 
       <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", height: "calc(100vh - 120px)" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px", minHeight: 0 }}>
+          <Suspense fallback={<ViewFallback />}>
           {route.view === "HOME" && showHelp && <Home onCommand={handleCommand} />}
           {route.view === "HOME" && !showHelp && (
             <div style={{ color: "var(--text-light)", textAlign: "center", paddingTop: "2rem" }}>
@@ -453,6 +475,16 @@ function App() {
           {route.view === "REGISTER" && <RegisterView onBack={goBack} />}
           {route.view === "USER_MANAGEMENT" && <UserManagementView onBack={goBack} />}
           {route.view === "AUDIT_LOG" && <AuditLogView onBack={goBack} page={route.page || 1} />}
+          {route.view === "SHIPMENT" && (
+            <ShipmentView
+              onBack={goBack}
+              keyCmd={shipmentKeyCmd}
+              onKeyCmdHandled={() => setShipmentKeyCmd(null)}
+            />
+          )}
+          {route.view === "SHIPMENT_HIST" && (
+            <ShipmentHistView onBack={goBack} page={route.page || 1} />
+          )}
           {route.view === "CREATE_PATIENT" && (
             <NewPatientForm
               prefillLast={route.prefillLast}
@@ -463,6 +495,7 @@ function App() {
               }}
             />
           )}
+          </Suspense>
         </div>
         {!showLoginModal && <CommandBar ref={cmdBarRef} onSubmit={handleCommand} />}
       </div>

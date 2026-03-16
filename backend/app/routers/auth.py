@@ -14,7 +14,7 @@ from slowapi.util import get_remote_address
 from ..auth import create_access_token, require_admin
 from ..database import get_db
 from ..models import QuickCode, User
-from .. import schemas
+from .. import cache, schemas
 
 router = APIRouter(tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
@@ -45,10 +45,36 @@ def _generate_quick_code() -> str:
 
 def _create_quick_code(user_id: int, db: Session) -> str:
     code = _generate_quick_code()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
-    db.add(QuickCode(code=code, user_id=user_id, expires_at=expires_at))
-    db.commit()
+    if not cache.store_quick_code(code, user_id):
+        # Redis unavailable — persist to database instead
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+        db.add(QuickCode(code=code, user_id=user_id, expires_at=expires_at))
+        db.commit()
     return code
+
+
+def _consume_quick_code(code: str, db: Session) -> "User | None":
+    """
+    Validate and consume a quick code, checking Redis first then the database.
+    Returns the associated User, or None if the code is invalid/expired.
+    """
+    # --- Redis path ---
+    user_id = cache.consume_quick_code(code)
+    if user_id is not None:
+        return db.query(User).filter(User.id == user_id, User.is_active == True).first()
+
+    # --- Database fallback ---
+    now = datetime.now(timezone.utc)
+    quick_code = db.query(QuickCode).filter(
+        QuickCode.code == code,
+        QuickCode.used == False,
+        QuickCode.expires_at > now,
+    ).first()
+    if not quick_code:
+        return None
+    quick_code.used = True
+    db.commit()
+    return db.query(User).filter(User.id == quick_code.user_id, User.is_active == True).first()
 
 
 # ---------------------------------------------------------------------------
@@ -81,20 +107,10 @@ def login_with_code(request: Request, payload: schemas.CodeLoginRequest, db: Ses
     if len(code_upper) != _QUICK_CODE_LENGTH or not code_upper.isalpha():
         raise HTTPException(status_code=400, detail="Code must be exactly 3 letter characters")
 
-    now = datetime.now(timezone.utc)
-    quick_code = db.query(QuickCode).filter(
-        QuickCode.code == code_upper,
-        QuickCode.used == False,
-        QuickCode.expires_at > now,
-    ).first()
-    if not quick_code:
+    user = _consume_quick_code(code_upper, db)
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired code")
 
-    user = db.query(User).filter(User.id == quick_code.user_id, User.is_active == True).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found or inactive")
-
-    quick_code.used = True
     new_code = _create_quick_code(user.id, db)
     token = create_access_token(user)
     return schemas.LoginResponse(

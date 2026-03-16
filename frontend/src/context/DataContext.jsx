@@ -1,4 +1,13 @@
-import React, { createContext, useState, useEffect, useContext } from "react";
+/**
+ * DataContext — previously fetched drugs and prescribers with raw useEffect +
+ * useState. Now backed by React Query, which gives us automatic caching,
+ * background refetching, and deduplication for free.
+ *
+ * The context value shape is intentionally identical to the old one so every
+ * consumer (PrescriptionForm, EditRefillView, etc.) works without changes.
+ */
+import { createContext, useContext } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getDrugs, getPrescribers } from "@/api";
 import { AuthContext } from "./AuthContext";
 
@@ -7,40 +16,31 @@ export const DataContext = createContext();
 export const DataProvider = ({ children }) => {
   const { isAuthenticated, token } = useContext(AuthContext);
 
-  const [drugs, setDrugs] = useState([]);
-  const [prescribers, setPrescribers] = useState([]);
+  const {
+    data: drugs = [],
+    isLoading: loadingDrugs,
+    error: drugsError,
+  } = useQuery({
+    queryKey: ["drugs", token],
+    queryFn: () => getDrugs(token),
+    enabled: isAuthenticated && !!token,
+    // Unwrap paginated response shape or plain array
+    select: (data) => data.items ?? data,
+    // Drugs change rarely — keep the cache fresh for 5 minutes
+    staleTime: 5 * 60 * 1000,
+  });
 
-  // loading states
-  const [loadingDrugs, setLoadingDrugs] = useState(false);
-  const [loadingPrescribers, setLoadingPrescribers] = useState(false);
-
-  // error states
-  const [errorDrugs, setErrorDrugs] = useState("");
-  const [errorPrescribers, setErrorPrescribers] = useState("");
-
-  // Only fetch global reference data (drugs, prescribers) once authenticated.
-  // Patients, stock, refillHist, and queue data are fetched by their own views.
-  useEffect(() => {
-    if (!isAuthenticated || !token) return;
-
-    let mounted = true;
-
-    setLoadingDrugs(true);
-    getDrugs(token)
-      .then((data) => mounted && setDrugs(data.items ?? data))
-      .catch((err) => mounted && setErrorDrugs(err.message))
-      .finally(() => mounted && setLoadingDrugs(false));
-
-    setLoadingPrescribers(true);
-    getPrescribers(token)
-      .then((data) => mounted && setPrescribers(data.items ?? data))
-      .catch((err) => mounted && setErrorPrescribers(err.message))
-      .finally(() => mounted && setLoadingPrescribers(false));
-
-    return () => {
-      mounted = false;
-    };
-  }, [isAuthenticated, token]);
+  const {
+    data: prescribers = [],
+    isLoading: loadingPrescribers,
+    error: prescribersError,
+  } = useQuery({
+    queryKey: ["prescribers", token],
+    queryFn: () => getPrescribers(token),
+    enabled: isAuthenticated && !!token,
+    select: (data) => data.items ?? data,
+    staleTime: 5 * 60 * 1000,
+  });
 
   return (
     <DataContext.Provider
@@ -49,8 +49,8 @@ export const DataProvider = ({ children }) => {
         prescribers,
         loadingDrugs,
         loadingPrescribers,
-        errorDrugs,
-        errorPrescribers,
+        errorDrugs: drugsError?.message ?? "",
+        errorPrescribers: prescribersError?.message ?? "",
       }}
     >
       {children}

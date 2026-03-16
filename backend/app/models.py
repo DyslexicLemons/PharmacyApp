@@ -234,6 +234,37 @@ class QuickCode(Base):
     user = relationship("User")
 
 
+class InventoryShipment(Base):
+    """Header record for a drug inventory shipment/receiving event."""
+    __tablename__ = "inventory_shipments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    performed_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    performed_by = Column(String, nullable=False)
+    performed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    items = relationship("InventoryShipmentItem", back_populates="shipment", lazy="selectin")
+
+
+class InventoryShipmentItem(Base):
+    """Line item within an inventory shipment — one row per drug received."""
+    __tablename__ = "inventory_shipment_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shipment_id = Column(Integer, ForeignKey("inventory_shipments.id"), nullable=False)
+    drug_id = Column(Integer, ForeignKey("drugs.id"), nullable=False)
+    bottles_received = Column(Integer, nullable=False)
+    units_per_bottle = Column(Integer, nullable=False, default=100)
+
+    shipment = relationship("InventoryShipment", back_populates="items")
+    drug = relationship("Drug", lazy="joined")
+
+
 class AuditLog(Base):
     """Immutable audit trail for all significant pharmacy actions."""
     __tablename__ = "audit_log"
