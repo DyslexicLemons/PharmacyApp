@@ -573,6 +573,49 @@ class RefillEditRequest(BaseModel):
         return v
 
 
+class ShipmentItemIn(BaseModel):
+    drug_id: int
+    bottles_received: int
+    units_per_bottle: int = 100
+
+    @field_validator("bottles_received")
+    @classmethod
+    def bottles_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("bottles_received", v)
+
+    @field_validator("units_per_bottle")
+    @classmethod
+    def units_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("units_per_bottle", v)
+
+
+class ShipmentCreate(BaseModel):
+    items: List["ShipmentItemIn"]
+    username: str
+    password: str
+
+
+class ShipmentItemOut(BaseModel):
+    id: int
+    drug_id: int
+    drug: DrugOut
+    bottles_received: int
+    units_per_bottle: int
+
+    class Config:
+        from_attributes = True
+
+
+class ShipmentOut(BaseModel):
+    id: int
+    performed_at: datetime
+    performed_by: str
+    items: List[ShipmentItemOut] = []
+
+    class Config:
+        from_attributes = True
+
+
 class FillScriptRequest(BaseModel):
     """Schema for filling an existing prescription"""
     quantity: int

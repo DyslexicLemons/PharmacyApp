@@ -252,6 +252,22 @@ export async function getStock(token, limit = 100, offset = 0) {
     return handleResponse(res);
 }
 
+export async function createShipment(data, token) {
+    const res = await fetch(`${V1}/shipments`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+}
+
+export async function getShipments(token, limit = 20, offset = 0) {
+    const res = await fetch(`${V1}/shipments?limit=${limit}&offset=${offset}`, {
+        headers: authHeaders(token),
+    });
+    return handleResponse(res);
+}
+
 // ---------------------------------------------------------------------------
 // Prescribers
 // ---------------------------------------------------------------------------
