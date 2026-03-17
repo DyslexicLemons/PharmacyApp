@@ -139,28 +139,6 @@ function App() {
       return;
     }
 
-    // View prescription detail: Vx (only in PATIENT view)
-    const viewMatch = cmd.match(/^v(\d+)$/);
-    if (viewMatch && route.view === "PATIENT") {
-      const lineNum = parseInt(viewMatch[1], 10);
-      if (currentPatientData) {
-        const page = route.page || 1;
-        const idx = (page - 1) * PATIENT_PAGE_SIZE + (lineNum - 1);
-        const prescription = currentPatientData.prescriptions[idx];
-        if (prescription) {
-          navigateTo({
-            view: "VIEW_PRESCRIPTION",
-            prescription,
-            patientName: `${currentPatientData.last_name}, ${currentPatientData.first_name}`,
-            patientId: currentPatientData.id,
-          });
-        } else {
-          addNotification(`Row ${lineNum} not found`, "error");
-        }
-      }
-      return;
-    }
-
     // Check if input is a number (row selection)
     const rowNum = parseInt(cmd, 10);
     if (!isNaN(rowNum) && rowNum > 0) {
@@ -171,6 +149,24 @@ function App() {
       }
       if (route.view === "PATIENT_SELECT") {
         setPatientSelectRow(rowNum);
+        return;
+      }
+      if (route.view === "PATIENT") {
+        if (currentPatientData) {
+          const page = route.page || 1;
+          const idx = (page - 1) * PATIENT_PAGE_SIZE + (rowNum - 1);
+          const prescription = currentPatientData.prescriptions[idx];
+          if (prescription) {
+            navigateTo({
+              view: "VIEW_PRESCRIPTION",
+              prescription,
+              patientName: `${currentPatientData.last_name}, ${currentPatientData.first_name}`,
+              patientId: currentPatientData.id,
+            });
+          } else {
+            addNotification(`Row ${rowNum} not found`, "error");
+          }
+        }
         return;
       }
     }

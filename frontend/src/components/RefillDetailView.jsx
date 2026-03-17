@@ -26,6 +26,8 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   const [showSellConfirm, setShowSellConfirm] = useState(false);
   const [scheduleNextFill, setScheduleNextFill] = useState(false);
   const [stockQty, setStockQty] = useState(null);
+  const [showHoldConfirm, setShowHoldConfirm] = useState(false);
+  const [holdIsQV2, setHoldIsQV2] = useState(false);
 
   useEffect(() => {
     fetchRefillDetails();
@@ -108,18 +110,17 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     }
   };
 
-  const handleHold = async () => {
-    const isQV2 = refill.state === "QV2";
-    const confirmMessage = isQV2
-      ? "This script has already been filled. Placing it on hold means you will need to return the medication to stock. Proceed?"
-      : "Move this prescription to HOLD?";
+  const handleHold = () => {
+    setHoldIsQV2(refill.state === "QV2");
+    setShowHoldConfirm(true);
+  };
 
-    if (!window.confirm(confirmMessage)) return;
-
+  const handleConfirmHold = async () => {
+    setShowHoldConfirm(false);
     try {
       const updated = await advanceRx(refillId, { action: "hold" }, token);
-      if (isQV2) {
-        addNotification("Prescription placed on HOLD.\nThis script has been filled — please return the medication to stock.", "warning");
+      if (holdIsQV2) {
+        addNotification("Prescription placed on HOLD. This script has been filled — please return the medication to stock.", "warning");
       } else {
         addNotification("Prescription moved to HOLD", "info");
       }
@@ -327,6 +328,31 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
         </div>
 
       </div>
+
+      {showHoldConfirm && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+        }}>
+          <div className="card vstack" style={{ maxWidth: "420px", width: "92%", gap: "1rem", padding: "1.5rem", border: "2px solid var(--warning, #f59e0b)" }}>
+            <h3 style={{ margin: 0, color: "var(--warning, #f59e0b)" }}>⏸ Place on Hold</h3>
+            <p style={{ margin: 0, fontSize: "0.95rem" }}>
+              {holdIsQV2
+                ? <>This script has already been filled. Placing it on hold means you will need to <strong>return the medication to stock</strong>. Proceed?</>
+                : "Move this prescription to HOLD?"}
+            </p>
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" onClick={() => setShowHoldConfirm(false)}>Cancel</button>
+              <button
+                className="btn btn-warning"
+                onClick={handleConfirmHold}
+              >
+                Confirm Hold
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSellConfirm && (() => {
         const nextFillDate = new Date();

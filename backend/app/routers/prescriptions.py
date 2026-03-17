@@ -325,6 +325,74 @@ def fill_prescription(
     return response
 
 
+@router.post("/{prescription_id}/hold", response_model=schemas.PrescriptionDetailOut)
+def hold_prescription(
+    prescription_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Place the active refill for this prescription on hold.
+    Valid from states: QT, QV1, QP, QV2, SCHEDULED.
+    """
+    prescription = db.get(Prescription, prescription_id)
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+
+    if prescription.is_inactive:
+        raise HTTPException(status_code=409, detail="Prescription is inactive")
+
+    HOLDABLE_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.SCHEDULED}
+    ACTIVE_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.READY}
+
+    refill = (
+        db.query(Refill)
+        .filter(
+            Refill.prescription_id == prescription_id,
+            Refill.state.in_(HOLDABLE_STATES),
+        )
+        .order_by(desc(Refill.id))
+        .first()
+    )
+
+    if not refill:
+        raise HTTPException(status_code=409, detail="No active refill that can be placed on hold")
+
+    current_state = refill.state if isinstance(refill.state, RxState) else RxState(str(refill.state))
+
+    # Return quantity to prescription when moving out of an active state
+    if current_state in ACTIVE_STATES:
+        rx_quantity = _int(refill.quantity)
+        old_qty = _int(prescription.remaining_quantity)
+        prescription.remaining_quantity = old_qty + rx_quantity  # type: ignore[assignment]
+
+    refill.state = RxState.HOLD  # type: ignore[assignment]
+
+    _write_audit(
+        db, "STATE_TRANSITION",
+        entity_type="refill", entity_id=_int(refill.id),
+        prescription_id=prescription_id,
+        details=(
+            f"{current_state.value} → HOLD "
+            f"prescription_id={prescription_id} patient_id={prescription.patient_id}"
+        ),
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
+    db.commit()
+    db.refresh(prescription)
+
+    prescription.latest_refill = _get_latest_refill_for_prescription(db, prescription_id)  # type: ignore[attr-defined]
+    prescription.refill_history = sorted(  # type: ignore[assignment]
+        prescription.refill_history,
+        key=lambda r: r.sold_date or r.completed_date or date_type.min,
+        reverse=True,
+    )
+    prescription.picture_url = _build_picture_url(request, prescription.picture_path)  # type: ignore[attr-defined]
+    return prescription
+
+
 @router.post("/{prescription_id}/inactivate", response_model=schemas.PrescriptionDetailOut)
 def inactivate_prescription(
     prescription_id: int,
