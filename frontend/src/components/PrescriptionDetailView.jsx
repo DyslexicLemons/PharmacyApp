@@ -1,5 +1,5 @@
 import { useContext, useState, useEffect, useRef } from "react";
-import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientInsurance, updatePrescriptionPicture, updatePrescription, inactivatePrescription } from "@/api";
+import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientInsurance, updatePrescriptionPicture, updatePrescription, inactivatePrescription, holdPrescription } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 import Badge from "@/components/Badge";
@@ -228,6 +228,34 @@ function InactivateModal({ prescriptionId, onClose, onInactivated, token }) {
   );
 }
 
+function HoldModal({ onClose, onConfirm, submitting }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+    }}>
+      <div className="card vstack" style={{ maxWidth: "420px", width: "92%", gap: "1rem", padding: "1.5rem", border: "2px solid var(--warning, #f39c12)" }}>
+        <h3 style={{ margin: 0, color: "var(--warning, #f39c12)" }}>Place Prescription on Hold</h3>
+        <p style={{ margin: 0, fontSize: "0.95rem" }}>
+          This will move the active refill to <strong>HOLD</strong> status.
+          The refill can be resumed from the workflow queue.
+        </p>
+        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+          <button className="btn btn-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button
+            className="btn"
+            style={{ background: "var(--warning, #f39c12)", color: "#fff", minWidth: "100px" }}
+            onClick={onConfirm}
+            disabled={submitting}
+          >
+            {submitting ? "Holding…" : "Confirm Hold"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PrescriptionDetailView({ prescription, patientName, patientId, onBack, onPrescriptionUpdated }) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
@@ -236,6 +264,8 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
   const [allCompanies, setAllCompanies] = useState([]);
   const [showAddInsurance, setShowAddInsurance] = useState(false);
   const [showInactivate, setShowInactivate] = useState(false);
+  const [showHold, setShowHold] = useState(false);
+  const [holdingRx, setHoldingRx] = useState(false);
   const [isInactive, setIsInactive] = useState(prescription.is_inactive ?? false);
   const isExpired = !isInactive && (prescription.is_expired ?? false);
   const [pictureUrl, setPictureUrl] = useState(prescription.picture_url ?? null);
@@ -274,6 +304,23 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
     addNotification("Prescription has been inactivated.", "success");
     onPrescriptionUpdated?.(updated);
   };
+
+  const handleHold = async () => {
+    setHoldingRx(true);
+    try {
+      const updated = await holdPrescription(prescription.id, token);
+      setShowHold(false);
+      addNotification("Refill has been placed on hold.", "success");
+      onPrescriptionUpdated?.(updated);
+      onBack?.();
+    } catch (err) {
+      addNotification(`Failed to hold prescription: ${err.message}`, "error");
+    } finally {
+      setHoldingRx(false);
+    }
+  };
+
+  const HOLDABLE_STATES = new Set(["QT", "QV1", "QP", "QV2", "SCHEDULED"]);
 
   const lr = prescription.latest_refill;
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
@@ -353,6 +400,14 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         />
       )}
 
+      {showHold && (
+        <HoldModal
+          onClose={() => setShowHold(false)}
+          onConfirm={handleHold}
+          submitting={holdingRx}
+        />
+      )}
+
       <h2 style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <span>Rx #: {prescription.id}</span>
         <span style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
@@ -386,50 +441,8 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
                 <span>{new Date(prescription.date_received).toLocaleDateString()}</span>
 
                 <strong>Expiration:</strong>
-                <span style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                  {editingExpiration ? (
-                    <>
-                      <input
-                        type="date"
-                        value={expirationDate}
-                        onChange={(e) => setExpirationDate(e.target.value)}
-                        min={prescription.date_received}
-                        max={(() => {
-                          const d = new Date(prescription.date_received);
-                          d.setFullYear(d.getFullYear() + 1);
-                          return d.toISOString().split("T")[0];
-                        })()}
-                        style={{ padding: "2px 6px" }}
-                      />
-                      <button
-                        className="btn btn-primary"
-                        style={{ padding: "2px 10px", fontSize: "0.85rem" }}
-                        onClick={handleSaveExpiration}
-                        disabled={savingExpiration}
-                      >
-                        {savingExpiration ? "Saving…" : "Save"}
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        style={{ padding: "2px 10px", fontSize: "0.85rem" }}
-                        onClick={() => { setEditingExpiration(false); setExpirationDate(prescription.expiration_date ?? ""); }}
-                        disabled={savingExpiration}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      {expirationDate ? new Date(expirationDate).toLocaleDateString() : <em style={{ color: "var(--text-light)" }}>Not set</em>}
-                      <button
-                        className="btn btn-secondary"
-                        style={{ padding: "2px 10px", fontSize: "0.85rem" }}
-                        onClick={() => setEditingExpiration(true)}
-                      >
-                        {expirationDate ? "Edit" : "Set"}
-                      </button>
-                    </>
-                  )}
+                <span>
+                  {expirationDate ? new Date(expirationDate).toLocaleDateString() : <em style={{ color: "var(--text-light)" }}>Not set</em>}
                 </span>
 
                 <strong>DAW Code:</strong>
@@ -734,6 +747,15 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         <button className="btn" onClick={onBack} style={{ minWidth: "120px" }}>
           ← Back
         </button>
+        {!isInactive && !isExpired && HOLDABLE_STATES.has(lr?.state) && (
+          <button
+            className="btn"
+            style={{ background: "var(--warning, #f39c12)", color: "#fff", minWidth: "140px" }}
+            onClick={() => setShowHold(true)}
+          >
+            Hold Rx
+          </button>
+        )}
         {!isInactive && !isExpired && (
           <button
             className="btn"

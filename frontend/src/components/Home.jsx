@@ -51,13 +51,16 @@ export default function Home({ onCommand }) {
             </h3>
             <ul style={{ margin: 0 }}>
               <li>
-                <code>pt</code> – View all patients
+                <code>pt</code> / <code>patients</code> – View all patients
               </li>
               <li>
                 <code>lastname,firstname</code> – Open patient profile (e.g., <code>smith,john</code>)
               </li>
               <li>
                 <code>&lt;space&gt;</code> – Create new prescription
+              </li>
+              <li>
+                <code>rx&lt;id&gt;</code> – Look up prescription by Rx ID (e.g., <code>rx42</code>)
               </li>
               <li>
                 <code>prescribers</code> – View all prescribers
@@ -77,6 +80,12 @@ export default function Home({ onCommand }) {
               <li>
                 <code>q</code> – Go back to previous screen
               </li>
+              <li>
+                <code>n</code> / <code>p</code> – Next / previous page
+              </li>
+              <li>
+                <code>&lt;number&gt;</code> – Select row (in queue or patient select views)
+              </li>
             </ul>
           </section>
         </div>
@@ -94,6 +103,24 @@ export default function Home({ onCommand }) {
               </li>
               <li>
                 <code>stock</code> – View current inventory
+              </li>
+            </ul>
+          </section>
+
+          {/* Shipments */}
+          <section className="card vstack" style={{ padding: "1rem" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              📦 Shipments
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>shipment</code> – Receive a new shipment
+              </li>
+              <li>
+                <code>shipment_hist</code> – View shipment history
+              </li>
+              <li>
+                <code>f</code> / <code>finished</code> – Finish current shipment (in Shipment view)
               </li>
             </ul>
           </section>
@@ -117,6 +144,9 @@ export default function Home({ onCommand }) {
             </h3>
             <ul style={{ margin: 0 }}>
               <li>
+                <code>register</code> – Register a new user account
+              </li>
+              <li>
                 <code>users</code> – Manage users (create accounts, assign roles)
               </li>
               <li>
@@ -124,6 +154,27 @@ export default function Home({ onCommand }) {
               </li>
               <li>
                 <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
+              </li>
+            </ul>
+          </section>
+
+          {/* Context-Specific Commands */}
+          <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(255, 190, 11, 0.08) 0%, rgba(200, 130, 0, 0.08) 100%)" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              🔍 Context Commands
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>&lt;num&gt;</code> – View prescription by row (in Patient profile)
+              </li>
+              <li>
+                <code>e</code> – Edit refill (in Refill Detail)
+              </li>
+              <li>
+                <code>a</code> – Approve refill (in Refill Detail)
+              </li>
+              <li>
+                <code>h</code> – Hold refill (in Refill Detail)
               </li>
             </ul>
           </section>

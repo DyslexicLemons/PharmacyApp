@@ -204,6 +204,14 @@ export async function updatePrescription(id, data, token) {
     return handleResponse(res);
 }
 
+export async function holdPrescription(id, token) {
+    const res = await fetch(`${V1}/prescriptions/${id}/hold`, {
+        method: 'POST',
+        headers: authHeaders(token),
+    });
+    return handleResponse(res);
+}
+
 export async function inactivatePrescription(id, username, password, token) {
     const res = await fetch(`${V1}/prescriptions/${id}/inactivate`, {
         method: 'POST',
