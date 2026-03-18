@@ -20,7 +20,7 @@ from app.schemas import (
     _validate_positive_int,
 )
 from app.models import RxState, Priority
-from app.utils import _int, _parse_priority
+from app.utils import _int, _mask_patient_id, _parse_priority
 from fastapi import HTTPException
 
 
@@ -107,6 +107,32 @@ class TestParsePriority:
         with pytest.raises(HTTPException) as exc_info:
             _parse_priority("")
         assert exc_info.value.status_code == 400
+
+
+# ===========================================================================
+# _mask_patient_id helper
+# ===========================================================================
+
+class TestMaskPatientId:
+    def test_returns_string(self):
+        assert isinstance(_mask_patient_id(1), str)
+
+    def test_length_is_12(self):
+        assert len(_mask_patient_id(1)) == 12
+
+    def test_same_id_same_token(self):
+        assert _mask_patient_id(42) == _mask_patient_id(42)
+
+    def test_different_ids_different_tokens(self):
+        assert _mask_patient_id(1) != _mask_patient_id(2)
+
+    def test_does_not_contain_patient_id(self):
+        # The raw numeric ID must not appear literally in the output
+        assert "99999" not in _mask_patient_id(99999)
+
+    def test_hex_characters_only(self):
+        token = _mask_patient_id(7)
+        assert all(c in "0123456789abcdef" for c in token)
 
 
 # ===========================================================================

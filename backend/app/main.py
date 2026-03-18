@@ -18,7 +18,6 @@ from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -64,15 +63,6 @@ app.add_middleware(
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
-
-# Static file serving for prescription images
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_DIR = os.environ.get(
-    "UPLOAD_DIR",
-    os.path.normpath(os.path.join(_BASE_DIR, "..", "..", "uploads")),
-)
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-app.mount("/static", StaticFiles(directory=UPLOAD_DIR), name="static")
 
 # Global exception handler — hides internal details from clients
 @app.exception_handler(Exception)
