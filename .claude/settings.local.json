@@ -16,7 +16,9 @@
       "Bash(pip install \"PyJWT>=2.8.0\" \"slowapi>=0.1.9\")",
       "Bash(xargs wc -l)",
       "Bash(npm test:*)",
-      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp -type f -name *.env* -o -name .env)"
+      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp -type f -name *.env* -o -name .env)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/)"
     ]
   }
 }

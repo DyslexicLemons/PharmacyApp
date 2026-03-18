@@ -27,7 +27,7 @@ from slowapi.util import get_remote_address
 from .cache import close_redis, init_redis
 from .database import Base, engine, SessionLocal
 from .models import Prescription, Refill, RxState
-from .routers import admin, auth, drugs, insurance, patients, prescriptions, prescribers, refills
+from .routers import admin, auth, billing, drugs, insurance, patients, prescriptions, prescribers, refills
 from .utils import _int, _write_audit
 
 logging.basicConfig(
@@ -193,6 +193,7 @@ app.include_router(refills.router,       prefix=API_PREFIX)
 app.include_router(drugs.router,         prefix=API_PREFIX)
 app.include_router(prescribers.router,   prefix=API_PREFIX)
 app.include_router(insurance.router,     prefix=API_PREFIX)
+app.include_router(billing.router,       prefix=API_PREFIX)
 app.include_router(admin.router,         prefix=API_PREFIX)
 
 # ---------------------------------------------------------------------------
