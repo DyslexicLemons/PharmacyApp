@@ -6,10 +6,10 @@ patient safety issues if not properly handled.
 """
 import pytest
 from decimal import Decimal
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
-from app.models import RxState, Priority, Refill, Prescription, RefillHist
+from app.models import RxState, Priority, Refill, Prescription, RefillHist, QuickCode, User
 from tests.conftest import (
     make_prescriber, make_drug, make_patient, make_prescription,
     make_refill, make_insurance, make_formulary, make_patient_insurance,
@@ -695,3 +695,108 @@ class TestScheduledPromotion:
         assert scheduled_count == 1
         db.refresh(prescription)
         assert prescription.remaining_quantity == 0
+
+
+# ===========================================================================
+# QUICK CODE PURGE (Celery task)
+# ===========================================================================
+
+def _make_user(db) -> User:
+    u = User(username="purge_test_user", hashed_password="x", is_active=True, is_admin=False)
+    db.add(u)
+    db.flush()
+    return u
+
+
+def _make_quick_code(db, user_id: int, expires_at: datetime, used: bool = False) -> QuickCode:
+    qc = QuickCode(code="TST", user_id=user_id, expires_at=expires_at, used=used)
+    db.add(qc)
+    db.flush()
+    return qc
+
+
+class TestPurgeExpiredQuickCodes:
+    """
+    Verify that purge_expired_quick_codes removes stale DB-backed quick codes
+    while leaving recent or unexpired rows untouched.
+
+    The task creates its own SessionLocal() session, so test data must be
+    committed before calling it, and objects must be refreshed after.
+    """
+
+    def test_purges_old_expired_rows(self, db_session):
+        """Rows expired more than 1 hour ago are deleted."""
+        from app.tasks import purge_expired_quick_codes
+        db = db_session
+        user = _make_user(db)
+        old_expiry = datetime.now(timezone.utc) - timedelta(hours=2)
+        _make_quick_code(db, user.id, expires_at=old_expiry)
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = purge_expired_quick_codes()
+
+        assert result["deleted"] == 1
+        assert db.query(QuickCode).count() == 0
+
+    def test_retains_recently_expired_rows(self, db_session):
+        """Rows expired less than 1 hour ago are kept (grace window)."""
+        from app.tasks import purge_expired_quick_codes
+        db = db_session
+        user = _make_user(db)
+        recent_expiry = datetime.now(timezone.utc) - timedelta(minutes=30)
+        _make_quick_code(db, user.id, expires_at=recent_expiry)
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = purge_expired_quick_codes()
+
+        assert result["deleted"] == 0
+        assert db.query(QuickCode).count() == 1
+
+    def test_retains_unexpired_rows(self, db_session):
+        """Active (not yet expired) rows are never deleted."""
+        from app.tasks import purge_expired_quick_codes
+        db = db_session
+        user = _make_user(db)
+        future_expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
+        _make_quick_code(db, user.id, expires_at=future_expiry)
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = purge_expired_quick_codes()
+
+        assert result["deleted"] == 0
+        assert db.query(QuickCode).count() == 1
+
+    def test_skips_when_lock_held(self, db_session):
+        """Returns skipped=True without touching the DB when lock is unavailable."""
+        from app.tasks import purge_expired_quick_codes
+        db = db_session
+        user = _make_user(db)
+        old_expiry = datetime.now(timezone.utc) - timedelta(hours=2)
+        _make_quick_code(db, user.id, expires_at=old_expiry)
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=False):
+            result = purge_expired_quick_codes()
+
+        assert result == {"skipped": True}
+        assert db.query(QuickCode).count() == 1  # row untouched
+
+    def test_purges_multiple_old_rows_leaves_fresh(self, db_session):
+        """Mixed table: old rows deleted, fresh row retained."""
+        from app.tasks import purge_expired_quick_codes
+        db = db_session
+        user = _make_user(db)
+        now = datetime.now(timezone.utc)
+        _make_quick_code(db, user.id, expires_at=now - timedelta(hours=3))
+        _make_quick_code(db, user.id, expires_at=now - timedelta(hours=5))
+        _make_quick_code(db, user.id, expires_at=now + timedelta(minutes=5))  # still valid
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = purge_expired_quick_codes()
+
+        assert result["deleted"] == 2
+        assert db.query(QuickCode).count() == 1

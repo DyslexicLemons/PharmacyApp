@@ -1,5 +1,5 @@
 from decimal import Decimal
-from pydantic import BaseModel, computed_field, field_validator
+from pydantic import BaseModel, computed_field, field_validator, Field
 from datetime import date, datetime
 from typing import Generic, List, Optional, TypeVar
 
@@ -450,8 +450,8 @@ class PatientWithRxs(PatientOut):
 
 class AdvanceRequest(BaseModel):
     action: Optional[str] = None
-    rejection_reason: Optional[str] = None
-    rejected_by: Optional[str] = None
+    rejection_reason: Optional[str] = Field(default=None, max_length=500)
+    rejected_by: Optional[str] = Field(default=None, max_length=200)
     schedule_next_fill: bool = False
 
 
