@@ -1,10 +1,10 @@
-import { useContext, useState, useEffect, useRef } from "react";
+import React, { useContext, useState, useEffect, useRef } from "react";
 import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientInsurance, updatePrescriptionPicture, updatePrescription, inactivatePrescription, holdPrescription } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 import Badge from "@/components/Badge";
 
-const DAW_CODES = {
+const DAW_CODES: Record<number, string> = {
   0: "No product selection indicated (generic substitution allowed)",
   1: "Substitution not allowed by prescriber (brand medically necessary)",
   2: "Patient requested brand",
@@ -17,8 +17,100 @@ const DAW_CODES = {
   9: "Other",
 };
 
-function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }) {
-  const [form, setForm] = useState({
+interface InsuranceCompanyDetail {
+  id: number;
+  plan_name: string;
+  plan_id: string;
+  bin_number?: string | null;
+  pcn?: string | null;
+  phone_number?: string | null;
+}
+
+interface PatientInsuranceItem {
+  id: number;
+  is_active: boolean;
+  is_primary: boolean;
+  member_id: string;
+  group_number?: string | null;
+  insurance_company: InsuranceCompanyDetail;
+}
+
+interface PrescriberDetail {
+  id: number;
+  first_name: string;
+  last_name: string;
+  npi: string;
+  specialty?: string;
+  phone_number?: string;
+  address?: string;
+}
+
+interface RefillHistoryItem {
+  id: number;
+  quantity: number;
+  days_supply: number;
+  completed_date?: string | null;
+  sold_date?: string | null;
+  total_cost: number | string;
+  insurance_paid?: number | null;
+  copay_amount?: number | null;
+  insurance?: { insurance_company?: { plan_name?: string } } | null;
+}
+
+interface LatestRefill {
+  id: number;
+  state: string;
+  priority?: string | null;
+  quantity: number;
+  days_supply: number;
+  due_date?: string | null;
+  completed_date?: string | null;
+  sold_date?: string | null;
+  next_pickup?: string | null;
+  total_cost?: number | null;
+  copay_amount?: number | null;
+  insurance_paid?: number | null;
+}
+
+interface PrescriptionDetail {
+  id: number;
+  date_received: string;
+  expiration_date?: string | null;
+  daw_code: number;
+  remaining_quantity: number;
+  instructions?: string | null;
+  is_inactive?: boolean;
+  is_expired?: boolean;
+  picture_url?: string | null;
+  patient_id?: number;
+  prescriber_id?: number;
+  drug: {
+    drug_name: string;
+    ndc?: string | null;
+    manufacturer: string;
+    niosh?: boolean;
+  };
+  latest_refill?: LatestRefill | null;
+  refill_history?: RefillHistoryItem[];
+}
+
+interface AddInsuranceModalProps {
+  patientId: number;
+  companies: InsuranceCompanyDetail[];
+  onClose: () => void;
+  onAdded: (ins: PatientInsuranceItem) => void;
+  token: string | null;
+}
+
+interface AddInsuranceForm {
+  insurance_company_id: string;
+  member_id: string;
+  group_number: string;
+  is_primary: boolean;
+}
+
+function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }: AddInsuranceModalProps) {
+  const [form, setForm] = useState<AddInsuranceForm>({
     insurance_company_id: "",
     member_id: "",
     group_number: "",
@@ -27,9 +119,10 @@ function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const handleChange = (e) => {
-    const val = e.target.type === "checkbox" ? e.target.checked : e.target.value;
-    setForm({ ...form, [e.target.name]: val });
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const target = e.target as HTMLInputElement;
+    const val = target.type === "checkbox" ? target.checked : target.value;
+    setForm({ ...form, [target.name]: val });
   };
 
   const handleSubmit = async () => {
@@ -45,10 +138,10 @@ function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }) {
         member_id: form.member_id,
         group_number: form.group_number || null,
         is_primary: form.is_primary,
-      }, token);
-      onAdded(result);
+      }, token!);
+      onAdded(result as unknown as PatientInsuranceItem);
     } catch (e) {
-      setError(e.message);
+      setError((e as Error).message);
     } finally {
       setSubmitting(false);
     }
@@ -138,7 +231,14 @@ function AddInsuranceModal({ patientId, companies, onClose, onAdded, token }) {
   );
 }
 
-function InactivateModal({ prescriptionId, onClose, onInactivated, token }) {
+interface InactivateModalProps {
+  prescriptionId: number;
+  onClose: () => void;
+  onInactivated: (updated: unknown) => void;
+  token: string | null;
+}
+
+function InactivateModal({ prescriptionId, onClose, onInactivated, token }: InactivateModalProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmed, setConfirmed] = useState(false);
@@ -153,10 +253,10 @@ function InactivateModal({ prescriptionId, onClose, onInactivated, token }) {
     setSubmitting(true);
     setError("");
     try {
-      const result = await inactivatePrescription(prescriptionId, username, password, token);
+      const result = await inactivatePrescription(prescriptionId, username, password, token!);
       onInactivated(result);
     } catch (e) {
-      setError(e.message);
+      setError((e as Error).message);
     } finally {
       setSubmitting(false);
     }
@@ -194,7 +294,7 @@ function InactivateModal({ prescriptionId, onClose, onInactivated, token }) {
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
                 autoFocus
                 style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
               />
@@ -204,8 +304,8 @@ function InactivateModal({ prescriptionId, onClose, onInactivated, token }) {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => e.key === "Enter" && handleSubmit()}
                 style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
               />
             </label>
@@ -228,7 +328,13 @@ function InactivateModal({ prescriptionId, onClose, onInactivated, token }) {
   );
 }
 
-function HoldModal({ onClose, onConfirm, submitting }) {
+interface HoldModalProps {
+  onClose: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}
+
+function HoldModal({ onClose, onConfirm, submitting }: HoldModalProps) {
   return (
     <div style={{
       position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
@@ -256,40 +362,51 @@ function HoldModal({ onClose, onConfirm, submitting }) {
   );
 }
 
-export default function PrescriptionDetailView({ prescription, patientName, patientId, onBack, onPrescriptionUpdated }) {
+interface PrescriptionDetailViewProps {
+  prescription: PrescriptionDetail;
+  patientName: string;
+  patientId?: number;
+  onBack?: () => void;
+  onPrescriptionUpdated?: (updated: unknown) => void;
+}
+
+export default function PrescriptionDetailView({ prescription, patientName, patientId, onBack, onPrescriptionUpdated }: PrescriptionDetailViewProps) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
-  const [prescribers, setPrescribers] = useState([]);
-  const [patientInsurance, setPatientInsurance] = useState([]);
-  const [allCompanies, setAllCompanies] = useState([]);
+  const [prescribers, setPrescribers] = useState<PrescriberDetail[]>([]);
+  const [patientInsurance, setPatientInsurance] = useState<PatientInsuranceItem[]>([]);
+  const [allCompanies, setAllCompanies] = useState<InsuranceCompanyDetail[]>([]);
   const [showAddInsurance, setShowAddInsurance] = useState(false);
   const [showInactivate, setShowInactivate] = useState(false);
   const [showHold, setShowHold] = useState(false);
   const [holdingRx, setHoldingRx] = useState(false);
   const [isInactive, setIsInactive] = useState(prescription.is_inactive ?? false);
   const isExpired = !isInactive && (prescription.is_expired ?? false);
-  const [pictureUrl, setPictureUrl] = useState(prescription.picture_url ?? null);
+  const [pictureUrl, setPictureUrl] = useState<string | null>(prescription.picture_url ?? null);
   const [uploadingPicture, setUploadingPicture] = useState(false);
-  const fileInputRef = useRef(null);
-  const [editingExpiration, setEditingExpiration] = useState(false);
-  const [expirationDate, setExpirationDate] = useState(prescription.expiration_date ?? "");
-  const [savingExpiration, setSavingExpiration] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [_editingExpiration, _setEditingExpiration] = useState(false);
+  const [expirationDate, _setExpirationDate] = useState(prescription.expiration_date ?? "");
+  const [_savingExpiration, _setSavingExpiration] = useState(false);
 
   const pid = patientId ?? prescription.patient_id;
 
   useEffect(() => {
-    getPrescribers(token).then((data) => setPrescribers(data.items ?? data)).catch(console.error);
-    getInsuranceCompanies(token).then(setAllCompanies).catch(console.error);
+    getPrescribers(token!).then((data: { items?: PrescriberDetail[] } | PrescriberDetail[]) => {
+      const items = Array.isArray(data) ? data : (data.items ?? data as unknown as PrescriberDetail[]);
+      setPrescribers(items);
+    }).catch(console.error);
+    getInsuranceCompanies(token!).then((data) => setAllCompanies(data as unknown as InsuranceCompanyDetail[])).catch(console.error);
     if (pid) {
-      getPatientInsurance(pid, token).then(setPatientInsurance).catch(console.error);
+      getPatientInsurance(pid, token!).then((data) => setPatientInsurance(data as unknown as PatientInsuranceItem[])).catch(console.error);
     }
   }, [pid, token]);
 
   useEffect(() => {
-    const handleKey = (e) => {
+    const handleKey = (e: KeyboardEvent) => {
       if (isInactive || isExpired) return;
       if (e.key === "i" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const tag = document.activeElement?.tagName;
+        const tag = (document.activeElement as HTMLElement)?.tagName;
         if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
         setShowInactivate(true);
       }
@@ -298,7 +415,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
     return () => window.removeEventListener("keydown", handleKey);
   }, [isInactive]);
 
-  const handleInactivated = (updated) => {
+  const handleInactivated = (updated: unknown) => {
     setIsInactive(true);
     setShowInactivate(false);
     addNotification("Prescription has been inactivated.", "success");
@@ -309,13 +426,13 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
   const handleHold = async () => {
     setHoldingRx(true);
     try {
-      const updated = await holdPrescription(prescription.id, token);
+      const updated = await holdPrescription(prescription.id, token!);
       setShowHold(false);
       addNotification("Refill has been placed on hold.", "success");
       onPrescriptionUpdated?.(updated);
       onBack?.();
     } catch (err) {
-      addNotification(`Failed to hold prescription: ${err.message}`, "error");
+      addNotification(`Failed to hold prescription: ${(err as Error).message}`, "error");
     } finally {
       setHoldingRx(false);
     }
@@ -330,7 +447,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
   const fillCountMap = Object.fromEntries(sortedHistory.map((h, i) => [h.id, i + 1]));
   const activeInsurance = patientInsurance.filter((i) => i.is_active);
 
-  const handleInsuranceAdded = (newIns) => {
+  const handleInsuranceAdded = (newIns: PatientInsuranceItem) => {
     setPatientInsurance((prev) => {
       const updated = newIns.is_primary
         ? prev.map((i) => ({ ...i, is_primary: false }))
@@ -340,7 +457,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
     setShowAddInsurance(false);
   };
 
-  const handleSaveExpiration = async () => {
+  const _handleSaveExpiration = async () => {
     if (expirationDate) {
       const dateReceived = new Date(prescription.date_received);
       const selected = new Date(expirationDate);
@@ -355,26 +472,26 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         return;
       }
     }
-    setSavingExpiration(true);
+    _setSavingExpiration(true);
     try {
-      await updatePrescription(prescription.id, { expiration_date: expirationDate || null }, token);
-      setEditingExpiration(false);
+      await updatePrescription(prescription.id, { expiration_date: expirationDate || null }, token!);
+      _setEditingExpiration(false);
     } catch (err) {
-      addNotification(`Failed to save expiration date: ${err.message}`, "error");
+      addNotification(`Failed to save expiration date: ${(err as Error).message}`, "error");
     } finally {
-      setSavingExpiration(false);
+      _setSavingExpiration(false);
     }
   };
 
-  const handlePictureUpload = async (e) => {
-    const file = e.target.files[0];
+  const handlePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     setUploadingPicture(true);
     try {
-      const result = await updatePrescriptionPicture(prescription.id, file, token);
-      setPictureUrl(result.picture_url ?? null);
+      const result = await updatePrescriptionPicture(prescription.id, file, token!);
+      setPictureUrl((result as { picture_url?: string | null }).picture_url ?? null);
     } catch (err) {
-      addNotification(`Failed to upload image: ${err.message}`, "error");
+      addNotification(`Failed to upload image: ${(err as Error).message}`, "error");
     } finally {
       setUploadingPicture(false);
     }
@@ -382,7 +499,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
 
   return (
     <div className="vstack">
-      {showAddInsurance && (
+      {showAddInsurance && pid != null && (
         <AddInsuranceModal
           patientId={pid}
           companies={allCompanies}
@@ -748,7 +865,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
         <button className="btn" onClick={onBack} style={{ minWidth: "120px" }}>
           ← Back
         </button>
-        {!isInactive && !isExpired && HOLDABLE_STATES.has(lr?.state) && (
+        {!isInactive && !isExpired && lr && HOLDABLE_STATES.has(lr.state) && (
           <button
             className="btn"
             style={{ background: "var(--warning, #f39c12)", color: "#fff", minWidth: "140px" }}

@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { Patient } from "@/types";
 
 /**
  * Shown when a patient search returns multiple matches.
@@ -9,7 +10,15 @@ import { useEffect } from "react";
  *   Blue   — first 3 chars match but first/last name order is swapped
  *   None   — near match only (2-char prefix match)
  */
-export default function PatientSelectView({ patients, query, onSelect, onSelectRow }) {
+
+interface PatientSelectViewProps {
+  patients: Patient[];
+  query: string;
+  onSelect: (id: number) => void;
+  onSelectRow?: number | null;
+}
+
+export default function PatientSelectView({ patients, query, onSelect, onSelectRow }: PatientSelectViewProps) {
   // When a row number comes in from the command bar, fire onSelect
   useEffect(() => {
     if (onSelectRow == null) return;
@@ -25,7 +34,7 @@ export default function PatientSelectView({ patients, query, onSelect, onSelectR
   const qb3 = qb.slice(0, 3);
   const canHighlight = qa3.length >= 3 && qb3.length >= 3;
 
-  function getRowStyle(p) {
+  function getRowStyle(p: Patient): React.CSSProperties {
     if (!canHighlight) return { cursor: "pointer" };
     const last = p.last_name.toLowerCase();
     const first = p.first_name.toLowerCase();

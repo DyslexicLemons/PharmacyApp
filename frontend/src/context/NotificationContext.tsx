@@ -1,15 +1,22 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import type { Notification, NotificationType } from "@/types";
 
-const NotificationContext = createContext(null);
+interface NotificationContextValue {
+  notifications: Notification[];
+  addNotification: (message: string, type?: NotificationType) => void;
+  removeNotification: (id: number) => void;
+}
+
+const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 const FADE_START_MS = 18000; // start fading at 18s
 const REMOVE_MS = 20000;     // remove at 20s
 const DISMISS_FADE_MS = 300; // fade duration when manually dismissed
 
-export function NotificationProvider({ children }) {
-  const [notifications, setNotifications] = useState([]);
+export function NotificationProvider({ children }: { children: ReactNode }) {
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const addNotification = useCallback((message, type = "info") => {
+  const addNotification = useCallback((message: string, type: NotificationType = "info") => {
     const id = Date.now() + Math.random();
     setNotifications((prev) => [...prev, { id, message, type, fading: false }]);
 
@@ -24,7 +31,7 @@ export function NotificationProvider({ children }) {
     }, REMOVE_MS);
   }, []);
 
-  const removeNotification = useCallback((id) => {
+  const removeNotification = useCallback((id: number) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, fading: true } : n))
     );
@@ -40,6 +47,8 @@ export function NotificationProvider({ children }) {
   );
 }
 
-export function useNotification() {
-  return useContext(NotificationContext);
+export function useNotification(): NotificationContextValue {
+  const ctx = useContext(NotificationContext);
+  if (!ctx) throw new Error("useNotification must be used inside NotificationProvider");
+  return ctx;
 }

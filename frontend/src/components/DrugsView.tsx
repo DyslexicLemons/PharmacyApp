@@ -1,12 +1,23 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
-import { getPrescribers } from "@/api";
+import { getDrugs } from "@/api";
+import type { Drug, PaginatedResponse } from "@/types";
 
 const PAGE_SIZE = 15;
 
-export default function PrescribersView({ onBack, onSelectPrescriber, page = 1 }) {
+interface DrugsViewProps {
+  onBack?: () => void;
+  onSelectDrug?: (id: number) => void;
+  page?: number;
+}
+
+interface DrugWithCost extends Drug {
+  cost: number | string;
+}
+
+export default function DrugsView({ onBack, onSelectDrug, page = 1 }: DrugsViewProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ items: [], total: 0 });
+  const [data, setData] = useState<PaginatedResponse<DrugWithCost>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -14,9 +25,9 @@ export default function PrescribersView({ onBack, onSelectPrescriber, page = 1 }
     if (!token) return;
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
-    getPrescribers(token, PAGE_SIZE, offset)
+    getDrugs(token, PAGE_SIZE, offset)
       .then(setData)
-      .catch((e) => setError(e.message))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page]);
 
@@ -29,32 +40,30 @@ export default function PrescribersView({ onBack, onSelectPrescriber, page = 1 }
 
   return (
     <div className="vstack">
-      <h2>Prescribers</h2>
+      <h2>Drug Catalog</h2>
       <table className="table">
         <thead>
           <tr>
             <th>#</th>
-            <th>NPI</th>
-            <th>LastName</th>
-            <th>FirstName</th>
-            <th>Phone Number</th>
-            <th>Address</th>
+            <th>Name</th>
+            <th>Manufacturer</th>
+            <th>Cost per Pill</th>
+            <th>NIOSH</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((p, index) => (
+          {items.map((d, index) => (
             <tr
-              key={p.id}
-              onClick={() => onSelectPrescriber && onSelectPrescriber(p.id)}
-              style={{ cursor: onSelectPrescriber ? "pointer" : "default" }}
-              className={onSelectPrescriber ? "hover-row" : ""}
+              key={d.id}
+              onClick={() => onSelectDrug && onSelectDrug(d.id)}
+              style={{ cursor: onSelectDrug ? "pointer" : "default" }}
+              className={onSelectDrug ? "hover-row" : ""}
             >
               <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
-              <td>{p.npi}</td>
-              <td>{p.last_name}</td>
-              <td>{p.first_name}</td>
-              <td>{p.phone_number}</td>
-              <td>{p.address}</td>
+              <td>{d.drug_name}</td>
+              <td>{d.manufacturer}</td>
+              <td>{"$" + Number(d.cost).toFixed(2)}</td>
+              <td>{d.niosh ? "✔️" : "—"}</td>
             </tr>
           ))}
         </tbody>

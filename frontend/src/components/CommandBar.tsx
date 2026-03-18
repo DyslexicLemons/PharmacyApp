@@ -1,8 +1,19 @@
-import { useState, useRef, forwardRef, useImperativeHandle } from "react";
+import React, { useState, useRef, forwardRef, useImperativeHandle } from "react";
 
-const CommandBar = forwardRef(function CommandBar({ onSubmit }, ref) {
+export interface CommandBarHandle {
+  focus: () => void;
+}
+
+interface CommandBarProps {
+  onSubmit: (cmd: string) => void;
+}
+
+const CommandBar = forwardRef<CommandBarHandle, CommandBarProps>(function CommandBar(
+  { onSubmit },
+  ref
+) {
   const [cmd, setCmd] = useState("");
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useImperativeHandle(ref, () => ({
     focus: () => inputRef.current?.focus(),
@@ -11,7 +22,7 @@ const CommandBar = forwardRef(function CommandBar({ onSubmit }, ref) {
   return (
     <div className="command-bar-container">
       <form
-        onSubmit={(e) => {
+        onSubmit={(e: React.FormEvent<HTMLFormElement>) => {
           e.preventDefault();
           onSubmit(cmd);
           setCmd("");
@@ -25,7 +36,7 @@ const CommandBar = forwardRef(function CommandBar({ onSubmit }, ref) {
           className="input"
           placeholder="Type command:"
           value={cmd}
-          onChange={(e) => setCmd(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCmd(e.target.value)}
         />
         <button className="btn" type="submit">
           Go

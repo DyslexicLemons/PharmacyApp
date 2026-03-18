@@ -1,6 +1,8 @@
-import React from "react";
+interface BackButtonProps {
+  onBack?: () => void;
+}
 
-export default function BackButton({ onBack }) {
+export default function BackButton({ onBack }: BackButtonProps) {
   if (!onBack) return null;
 
   return (
