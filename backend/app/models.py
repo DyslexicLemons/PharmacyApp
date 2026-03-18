@@ -35,8 +35,8 @@ class Patient(Base):
     state = Column(String, nullable=True)
 
     prescriptions = relationship("Prescription", back_populates="patient", lazy="selectin")
-    refills = relationship("Refill", back_populates="patient", lazy="selectin")
-    refill_history = relationship("RefillHist", back_populates="patient", lazy="selectin")
+    refills = relationship("Refill", back_populates="patient", lazy="noload")
+    refill_history = relationship("RefillHist", back_populates="patient", lazy="noload")
     insurances = relationship("PatientInsurance", back_populates="patient", lazy="selectin")
 
 
@@ -136,7 +136,7 @@ class Prescriber(Base):
     address = Column(String)
     phone_number = Column(String)
     specialty = Column(String, nullable=True)
-    prescriptions = relationship("Prescription", back_populates="prescriber", lazy="selectin")
+    prescriptions = relationship("Prescription", back_populates="prescriber", lazy="noload")
 
 
 class Drug(Base):
@@ -150,9 +150,9 @@ class Drug(Base):
     drug_class = Column(Integer)
     description = Column(String, nullable=True)
 
-    refills = relationship("Refill", back_populates="drug", lazy="selectin")
+    refills = relationship("Refill", back_populates="drug", lazy="noload")
     stock = relationship("Stock", back_populates="drug", uselist=False)
-    refill_history = relationship("RefillHist", back_populates="drug", lazy="selectin")
+    refill_history = relationship("RefillHist", back_populates="drug", lazy="noload")
     prescriptions = relationship("Prescription", back_populates="drug")
     formulary_entries = relationship("Formulary", back_populates="drug")
 
