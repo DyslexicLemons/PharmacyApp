@@ -366,6 +366,7 @@ class PrescriptionCreate(BaseModel):
     refill_quantity: int
     total_refills: int
     npi: int
+    brand_required: bool = False
 
     @field_validator("refill_quantity")
     @classmethod
@@ -471,6 +472,7 @@ class JSONPrescriptionUpload(BaseModel):
     total_refills: int
     daw_code: int = 0
     priority: str = "normal"
+    brand_required: bool = False
 
     @field_validator("refill_quantity")
     @classmethod

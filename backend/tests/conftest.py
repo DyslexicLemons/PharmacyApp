@@ -28,11 +28,12 @@ from sqlalchemy.orm import sessionmaker
 
 # ── App imports (must come AFTER os.environ override above) ──────────────────
 from app.main import app
+from app.auth import get_current_user
 from app.database import Base, get_db
 from app.models import (
     Patient, Prescription, Refill, RefillHist,
     Drug, Stock, Prescriber, InsuranceCompany, Formulary,
-    PatientInsurance, RxState, Priority,
+    PatientInsurance, RxState, Priority, User,
 )
 
 # ---------------------------------------------------------------------------
@@ -64,8 +65,8 @@ def db_session(engine):
 @pytest.fixture(scope="function")
 def client(engine):
     """
-    FastAPI TestClient with get_db dependency overridden to use
-    the in-memory SQLite engine.
+    FastAPI TestClient with get_db and get_current_user overridden for testing.
+    Uses base_url pointing at /api/v1 so test paths match the router prefix.
     """
     TestSession = sessionmaker(bind=engine)
 
@@ -76,8 +77,13 @@ def client(engine):
         finally:
             session.close()
 
+    def override_get_current_user():
+        return User(id=None, username="test_user", hashed_password="x",
+                    is_active=True, is_admin=True)
+
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    with TestClient(app, base_url="http://testserver/api/v1") as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -155,7 +161,6 @@ def make_prescription(
         remaining_quantity=remaining_qty,
         date_received=received or date.today(),
         instructions="Take 1 tablet by mouth daily",
-        brand_required=False,
     )
     db.add(rx)
     db.flush()

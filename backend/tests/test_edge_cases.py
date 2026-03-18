@@ -472,7 +472,7 @@ class TestNioshHazardousFlag:
 
         resp = client.get("/drugs")
         assert resp.status_code == 200
-        drugs = resp.json()
+        drugs = resp.json()["items"]
         niosh_drugs = [d for d in drugs if d["niosh"] is True]
         assert len(niosh_drugs) >= 1
 
@@ -494,7 +494,7 @@ class TestRefillGetEndpoints:
 
         resp = client.get("/refills")
         assert resp.status_code == 200
-        assert len(resp.json()) == 2
+        assert len(resp.json()["items"]) == 2
 
     def test_get_refills_filter_by_state(self, client, db_session):
         db = db_session
@@ -508,8 +508,8 @@ class TestRefillGetEndpoints:
 
         resp = client.get("/refills", params={"state": "QT"})
         assert resp.status_code == 200
-        assert len(resp.json()) == 1
-        assert resp.json()[0]["state"] == "QT"
+        assert len(resp.json()["items"]) == 1
+        assert resp.json()["items"][0]["state"] == "QT"
 
     def test_get_refills_invalid_state_returns_400(self, client, db_session):
         resp = client.get("/refills", params={"state": "INVALID"})
