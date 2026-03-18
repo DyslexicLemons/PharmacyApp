@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Badge from "@/components/Badge";
 import { fetchQueue } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
@@ -25,28 +26,19 @@ function getSortValue(r, key) {
 
 export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, onSelectRefill }) {
   const { token } = useContext(AuthContext);
-  const [refills, setRefills] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [sortKey, setSortKey] = useState("due");
   const [sortDir, setSortDir] = useState("asc");
 
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true);
-    fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : undefined, token)
-      .then((data) => {
-        if (mounted) {
-          setRefills(data.items ?? data);
-          setError("");
-        }
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => mounted && setLoading(false));
-    return () => {
-      mounted = false;
-    };
-  }, [stateFilter]);
+  const { data, isLoading: loading, error: queryError } = useQuery({
+    queryKey: ["queue", stateFilter, token],
+    queryFn: () => fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : undefined, token),
+    select: (data) => data.items ?? data,
+    refetchInterval: 30_000,
+    enabled: !!token,
+  });
+
+  const refills = data ?? [];
+  const error = queryError?.message ?? "";
 
   const handleSelectRefill = (id) => {
     if (onSelectRefill) onSelectRefill(id);
