@@ -5,15 +5,15 @@ from datetime import date as date_type, timedelta
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import desc
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_admin
 from ..database import get_db
 from ..models import (
     AuditLog, Drug, Patient, Prescription, Prescriber, Priority,
-    Refill, RefillHist, RxState, User,
+    Refill, RefillHist, RxState, SystemConfig, User,
 )
 from .. import schemas
 from ..utils import _int
@@ -22,12 +22,59 @@ router = APIRouter(tags=["admin"])
 
 
 # ---------------------------------------------------------------------------
+# System config (GET for all authenticated users, PUT admin-only)
+# ---------------------------------------------------------------------------
+
+def _get_or_create_config(db: Session) -> SystemConfig:
+    cfg = db.query(SystemConfig).filter(SystemConfig.id == 1).first()
+    if cfg is None:
+        cfg = SystemConfig(id=1, bin_count=100)
+        db.add(cfg)
+        db.commit()
+        db.refresh(cfg)
+    return cfg
+
+
+@router.get("/config", response_model=schemas.SystemConfigOut)
+def get_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return current system configuration."""
+    return _get_or_create_config(db)
+
+
+@router.put("/config", response_model=schemas.SystemConfigOut)
+def update_config(
+    body: schemas.SystemConfigUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Update system configuration. Admin-only."""
+    from ..utils import _write_audit
+    cfg = _get_or_create_config(db)
+    cfg.bin_count = body.bin_count
+    _write_audit(
+        db,
+        action="CONFIG_UPDATED",
+        entity_type="system_config",
+        entity_id=1,
+        details=f"bin_count set to {body.bin_count}",
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
+    db.commit()
+    db.refresh(cfg)
+    return cfg
+
+
+# ---------------------------------------------------------------------------
 # Refill history (all users)
 # ---------------------------------------------------------------------------
 
 @router.get("/refill_hist", response_model=schemas.PaginatedResponse[schemas.RefillHistOut])
 def get_refill_hist(
-    limit: int = 100,
+    limit: int = Query(100, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -43,7 +90,7 @@ def get_refill_hist(
 
 @router.get("/audit_log", response_model=schemas.PaginatedResponse[schemas.AuditLogOut])
 def get_audit_log(
-    limit: int = 100,
+    limit: int = Query(100, le=1000),
     offset: int = 0,
     action: Optional[str] = None,
     user_id: Optional[int] = None,
@@ -79,6 +126,66 @@ def get_audit_log(
             performed_by=entry.performed_by,
         ))
     return {"items": result, "total": total, "limit": limit, "offset": offset}
+
+
+# ---------------------------------------------------------------------------
+# Queue summary (admin-only)
+# ---------------------------------------------------------------------------
+
+@router.get("/queue-summary", response_model=schemas.QueueSummaryOut)
+def get_queue_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Live queue depth and operational signals. Admin-only."""
+    from datetime import datetime, timezone
+
+    # Refill counts by state — one GROUP BY query
+    rows = (
+        db.query(Refill.state, func.count(Refill.id))
+        .group_by(Refill.state)
+        .all()
+    )
+    state_counts = {state.value: count for state, count in rows}
+
+    counts = schemas.QueueStateCounts(
+        QT=state_counts.get("QT", 0),
+        QV1=state_counts.get("QV1", 0),
+        QP=state_counts.get("QP", 0),
+        QV2=state_counts.get("QV2", 0),
+        READY=state_counts.get("READY", 0),
+        HOLD=state_counts.get("HOLD", 0),
+        SCHEDULED=state_counts.get("SCHEDULED", 0),
+        REJECTED=state_counts.get("REJECTED", 0),
+    )
+
+    total_active = counts.QT + counts.QV1 + counts.QP + counts.QV2 + counts.READY + counts.HOLD + counts.SCHEDULED
+
+    today = date_type.today()
+
+    overdue_scheduled = (
+        db.query(func.count(Refill.id))
+        .filter(Refill.state == RxState.SCHEDULED, Refill.due_date < today)
+        .scalar() or 0
+    )
+
+    expiring_soon_30d = (
+        db.query(func.count(Prescription.id))
+        .filter(
+            Prescription.is_inactive == False,  # noqa: E712
+            Prescription.expiration_date >= today,
+            Prescription.expiration_date <= today + timedelta(days=30),
+        )
+        .scalar() or 0
+    )
+
+    return schemas.QueueSummaryOut(
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        refills_by_state=counts,
+        total_active=total_active,
+        overdue_scheduled=overdue_scheduled,
+        expiring_soon_30d=expiring_soon_30d,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +328,8 @@ def generate_test_prescriptions(
                 source=random.choice(["manual", "external"]),
             )
             if state == RxState.READY:
-                refill.bin_number = random.randint(1, 100)  # type: ignore[assignment]
+                from .refills import _assign_bin
+                refill.bin_number = _assign_bin(db)  # type: ignore[assignment]
                 refill.completed_date = date_type.today() - timedelta(days=random.randint(0, 5))  # type: ignore[assignment]
             elif state == RxState.REJECTED:
                 refill.rejected_by = f"PharmD {random.choice(['Smith', 'Jones', 'Brown', 'Davis'])}"  # type: ignore[assignment]

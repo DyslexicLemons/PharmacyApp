@@ -1,7 +1,7 @@
 """Drug catalog and stock inventory endpoints."""
 
 import bcrypt as _bcrypt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -15,7 +15,7 @@ router = APIRouter(tags=["drugs"])
 
 @router.get("/drugs", response_model=schemas.PaginatedResponse[schemas.DrugOut])
 def get_drugs(
-    limit: int = 100,
+    limit: int = Query(100, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -27,7 +27,7 @@ def get_drugs(
 
 @router.get("/stock", response_model=schemas.PaginatedResponse[schemas.StockOut])
 def get_stock(
-    limit: int = 100,
+    limit: int = Query(100, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -105,7 +105,7 @@ def create_shipment(
 
 @router.get("/shipments", response_model=schemas.PaginatedResponse[schemas.ShipmentOut])
 def get_shipments(
-    limit: int = 20,
+    limit: int = Query(20, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

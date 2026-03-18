@@ -23,7 +23,11 @@
       "Bash(.venv/Scripts/python -m pytest tests/test_refill_cache.py -v)",
       "Bash(.venv/Scripts/python -m pytest tests/test_edge_cases.py::TestPurgeExpiredQuickCodes -v)",
       "Bash(.venv/Scripts/python -m pytest tests/test_security.py -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/test_edge_cases.py::TestScheduledPromotion -v)"
+      "Bash(.venv/Scripts/python -m pytest tests/test_edge_cases.py::TestScheduledPromotion -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -v -x -q)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_health.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_queue_summary.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=no -q)"
     ]
   }
 }

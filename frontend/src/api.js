@@ -327,6 +327,20 @@ export async function createUser(data, token) {
 // Admin
 // ---------------------------------------------------------------------------
 
+export async function getSystemConfig(token) {
+    const res = await fetch(`${V1}/config`, { headers: authHeaders(token) });
+    return handleResponse(res);
+}
+
+export async function updateSystemConfig(data, token) {
+    const res = await fetch(`${V1}/config`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify(data),
+    });
+    return handleResponse(res);
+}
+
 export async function generateTestPrescriptions(token) {
     const res = await fetch(`${V1}/commands/generate_test_prescriptions`, {
         method: 'POST',

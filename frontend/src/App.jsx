@@ -29,6 +29,7 @@ const UserManagementView    = lazy(() => import("@/components/UserManagementView
 const AuditLogView          = lazy(() => import("@/components/AuditLogView"));
 const ShipmentView          = lazy(() => import("@/components/ShipmentView"));
 const ShipmentHistView      = lazy(() => import("@/components/ShipmentHistView"));
+const SystemSettingsView    = lazy(() => import("@/components/SystemSettingsView"));
 
 function ViewFallback() {
   return (
@@ -272,6 +273,10 @@ function App() {
       if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
       navigateToSection({ view: "AUDIT_LOG" });
     }
+    else if (cmd === "settings") {
+      if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
+      navigateToSection({ view: "SYSTEM_SETTINGS" });
+    }
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
         generateTestPrescriptions(token)
@@ -473,6 +478,7 @@ function App() {
           )}
           {route.view === "REGISTER" && <RegisterView onBack={goBack} />}
           {route.view === "USER_MANAGEMENT" && <UserManagementView onBack={goBack} />}
+          {route.view === "SYSTEM_SETTINGS" && <SystemSettingsView onBack={goBack} />}
           {route.view === "AUDIT_LOG" && <AuditLogView onBack={goBack} page={route.page || 1} />}
           {route.view === "SHIPMENT" && (
             <ShipmentView

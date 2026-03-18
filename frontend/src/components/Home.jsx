@@ -105,6 +105,9 @@ export default function Home({ onCommand }) {
                 <code>logs</code> – View audit log
               </li>
               <li>
+                <code>settings</code> – System settings (bin count, etc.)
+              </li>
+              <li>
                 <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
               </li>
             </ul>

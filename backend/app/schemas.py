@@ -41,6 +41,19 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
 
 
+# ---- System config ----
+
+class SystemConfigOut(BaseModel):
+    bin_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class SystemConfigUpdate(BaseModel):
+    bin_count: int = Field(..., ge=60, le=300)
+
+
 # ---- Audit log output ----
 
 class AuditLogOut(BaseModel):
@@ -609,6 +622,25 @@ class ShipmentOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class QueueStateCounts(BaseModel):
+    QT: int = 0
+    QV1: int = 0
+    QP: int = 0
+    QV2: int = 0
+    READY: int = 0
+    HOLD: int = 0
+    SCHEDULED: int = 0
+    REJECTED: int = 0
+
+
+class QueueSummaryOut(BaseModel):
+    generated_at: str
+    refills_by_state: QueueStateCounts
+    total_active: int        # QT + QV1 + QP + QV2 + READY + HOLD + SCHEDULED
+    overdue_scheduled: int   # SCHEDULED with due_date < today
+    expiring_soon_30d: int   # active prescriptions expiring within 30 days
 
 
 class FillScriptRequest(BaseModel):

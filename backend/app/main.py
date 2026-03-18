@@ -13,7 +13,9 @@ load_aws_secrets()
 import ipaddress
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from datetime import datetime
 
 from fastapi import FastAPI, Request
@@ -26,11 +28,29 @@ from slowapi.util import get_remote_address
 from .cache import close_redis, init_redis
 from .routers import admin, auth, billing, drugs, insurance, patients, prescriptions, prescribers, refills
 
+# ---------------------------------------------------------------------------
+# Correlation ID — stored per-request via ContextVar so any logger anywhere
+# in the call stack automatically picks it up.
+# ---------------------------------------------------------------------------
+
+_request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
+
+
+class _RequestIdFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = _request_id_var.get()  # type: ignore[attr-defined]
+        return True
+
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s [req=%(request_id)s]: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+# Attach the filter to the root handler so every logger inherits it.
+for _h in logging.root.handlers:
+    _h.addFilter(_RequestIdFilter())
+
 logger = logging.getLogger("pharmacy.rx")
 
 # ---------------------------------------------------------------------------
@@ -90,6 +110,26 @@ limiter = Limiter(key_func=_get_client_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
+# ---------------------------------------------------------------------------
+# Correlation ID middleware
+# ---------------------------------------------------------------------------
+# Accepts an incoming X-Request-ID header (so the frontend/ALB can inject one)
+# or mints a new UUID4.  The ID is stored in a ContextVar so every log line
+# emitted during this request automatically includes it via _RequestIdFilter.
+# The same ID is echoed back in the response header.
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    token = _request_id_var.set(request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        _request_id_var.reset(token)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
+
 # Global exception handler — hides internal details from clients
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -123,4 +163,38 @@ def read_root():
 @app.get("/health")
 def health():
     from datetime import datetime, timezone
-    return {"status": "ok", "time": datetime.now(timezone.utc).isoformat()}
+    from sqlalchemy import text
+    from fastapi.responses import JSONResponse
+    from .database import SessionLocal
+    from . import cache
+
+    checks: dict = {}
+    healthy = True
+
+    # Postgres
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        checks["postgres"] = "ok"
+    except Exception as exc:
+        checks["postgres"] = f"error: {exc}"
+        healthy = False
+
+    # Redis (only checked when configured)
+    if cache.is_available():
+        try:
+            cache._client.ping()  # type: ignore[union-attr]
+            checks["redis"] = "ok"
+        except Exception as exc:
+            checks["redis"] = f"error: {exc}"
+            healthy = False
+    else:
+        checks["redis"] = "not configured"
+
+    payload = {
+        "status": "ok" if healthy else "degraded",
+        "time": datetime.now(timezone.utc).isoformat(),
+        "checks": checks,
+    }
+    return JSONResponse(content=payload, status_code=200 if healthy else 503)

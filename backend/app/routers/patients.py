@@ -2,7 +2,7 @@
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, noload
 
 from ..auth import get_current_user
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/patients", tags=["patients"])
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.PatientOut])
 def get_patients(
-    limit: int = 50,
+    limit: int = Query(50, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

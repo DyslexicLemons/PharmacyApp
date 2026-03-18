@@ -1,6 +1,6 @@
 """Prescriber endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/prescribers", tags=["prescribers"])
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.PrescriberOut])
 def get_prescribers(
-    limit: int = 100,
+    limit: int = Query(100, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

@@ -5,8 +5,8 @@ from datetime import date as date_type, timedelta
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import and_, desc
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, desc, func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from pydantic import TypeAdapter
@@ -15,7 +15,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..models import (
     Drug, Patient, Prescription, Prescriber, Priority, Refill,
-    RefillHist, RxState, PatientInsurance, User,
+    RefillHist, RxState, PatientInsurance, SystemConfig, User,
 )
 from .. import cache, schemas
 from ..utils import _int, _mask_patient_id, _parse_priority, _write_audit
@@ -34,7 +34,6 @@ _refill_ta: TypeAdapter = TypeAdapter(schemas.RefillOut)
 # ---------------------------------------------------------------------------
 
 ACTIVE_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.READY}
-BLOCKING_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.READY}
 
 TRANSITIONS = {
     RxState.QT:        [RxState.QV1, RxState.HOLD],
@@ -111,7 +110,7 @@ _REFILL_CACHE_TTL = 60  # seconds
 @router.get("", response_model=schemas.PaginatedResponse[schemas.RefillOut])
 def get_refills(
     state: Optional[str] = None,
-    limit: int = 100,
+    limit: int = Query(100, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -174,6 +173,170 @@ def get_refill(
     return rx
 
 
+# ---------------------------------------------------------------------------
+# advance_refill helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_next_state(current_state: RxState, payload: schemas.AdvanceRequest) -> RxState:
+    """Return the target state for this advance request, or raise 400."""
+    valid_next = TRANSITIONS[current_state]
+
+    if payload.action == "reject":
+        if RxState.REJECTED not in valid_next:
+            raise HTTPException(status_code=400, detail="Cannot reject from this state")
+        return RxState.REJECTED
+
+    if payload.action == "hold":
+        if RxState.HOLD not in valid_next:
+            raise HTTPException(status_code=400, detail="Cannot hold from this state")
+        return RxState.HOLD
+
+    # Default: advance to the first forward state in the transition list.
+    return valid_next[0]
+
+
+def _assign_bin(db: Session) -> int:
+    """Pick a bin using weighted random selection that favours less-loaded bins.
+
+    The bin range (1–N) is read from system_config.bin_count (default 100, range 60–300).
+    Bins with fewer current READY refills receive proportionally higher weight, so
+    load is spread across the shelf while still retaining randomness (not always
+    picking the single emptiest bin).
+    """
+    cfg = db.query(SystemConfig).filter(SystemConfig.id == 1).first()
+    bin_count = cfg.bin_count if cfg is not None else 100
+
+    rows = (
+        db.query(Refill.bin_number, func.count(Refill.id).label("cnt"))
+        .filter(Refill.state == RxState.READY, Refill.bin_number.isnot(None))
+        .group_by(Refill.bin_number)
+        .all()
+    )
+    counts: dict[int, int] = {int(row.bin_number): row.cnt for row in rows}
+
+    bins = list(range(1, bin_count + 1))
+    max_count = max(counts.values(), default=0)
+    # Weight = (max_count − occupancy + 1) so empty bins score max_count+1 and the
+    # fullest bin scores 1 (never zero, so it can still be picked occasionally).
+    weights = [max_count - counts.get(b, 0) + 1 for b in bins]
+
+    return random.choices(bins, weights=weights, k=1)[0]
+
+
+def _apply_state_entry_effects(
+    db: Session,
+    rx: Refill,
+    new_state: RxState,
+    payload: schemas.AdvanceRequest,
+) -> None:
+    """Mutate rx fields that are set as a side-effect of entering a given state."""
+    if new_state == RxState.REJECTED:
+        rx.rejected_by = payload.rejected_by or "Unknown"              # type: ignore[assignment]
+        rx.rejection_reason = payload.rejection_reason or "No reason provided"  # type: ignore[assignment]
+        rx.rejection_date = date_type.today()                          # type: ignore[assignment]
+    elif new_state == RxState.READY:
+        rx.completed_date = date_type.today()                          # type: ignore[assignment]
+        rx.bin_number = _assign_bin(db)                                # type: ignore[assignment]
+
+
+def _adjust_prescription_quantity(
+    db: Session,
+    rx: Refill,
+    current_state: RxState,
+    new_state: RxState,
+    rx_quantity: int,
+) -> None:
+    """Reserve or release prescription quantity when a fill crosses the active/inactive boundary.
+
+    SOLD is excluded: quantity was already reserved when the fill entered the active chain and
+    is consumed (not returned) on sale.
+    """
+    was_active = current_state in ACTIVE_STATES
+    will_be_active = new_state in ACTIVE_STATES
+
+    if was_active == will_be_active or new_state == RxState.SOLD:
+        return
+
+    prescription = (
+        db.query(Prescription)
+        .filter(Prescription.id == rx.prescription_id)
+        .with_for_update()
+        .first()
+    )
+    if not prescription:
+        return
+
+    remaining = _int(prescription.remaining_quantity)
+
+    if not was_active and will_be_active:
+        # Resuming from HOLD/SCHEDULED → re-reserve quantity.
+        if remaining < rx_quantity:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Insufficient remaining quantity on prescription to resume this fill "
+                    f"(remaining={remaining}, needed={rx_quantity})"
+                ),
+            )
+        prescription.remaining_quantity = max(0, remaining - rx_quantity)  # type: ignore[assignment]
+        logger.info(
+            f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+            f"{remaining} → {prescription.remaining_quantity} (resumed fill, state={new_state.value})"
+        )
+    else:
+        # Moving from active → HOLD/REJECTED → release quantity back.
+        prescription.remaining_quantity = remaining + rx_quantity  # type: ignore[assignment]
+        logger.info(
+            f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+            f"{remaining} → {prescription.remaining_quantity} (fill paused/cancelled, state={new_state.value})"
+        )
+
+
+def _archive_to_sold(
+    db: Session,
+    rx: Refill,
+    rx_quantity: int,
+    rx_days_supply: int,
+    schedule_next_fill: bool,
+) -> None:
+    """Write RefillHist and optionally create the next SCHEDULED fill."""
+    hist = RefillHist(
+        prescription_id=rx.prescription_id,
+        patient_id=rx.patient_id,
+        drug_id=rx.drug_id,
+        quantity=rx_quantity,
+        days_supply=rx_days_supply,
+        completed_date=rx.completed_date or date_type.today(),
+        sold_date=date_type.today(),
+        total_cost=Decimal(str(rx.total_cost)),
+        insurance_id=rx.insurance_id,
+        copay_amount=Decimal(str(rx.copay_amount)) if rx.copay_amount is not None else None,
+        insurance_paid=Decimal(str(rx.insurance_paid)) if rx.insurance_paid is not None else None,
+    )
+    db.add(hist)
+    logger.info(f"[RX HIST] Refill #{rx.id}: archived to RefillHist (qty={rx_quantity}, drug_id={rx.drug_id})")
+
+    if schedule_next_fill:
+        next_due = date_type.today() + timedelta(days=rx_days_supply)
+        scheduled = Refill(
+            prescription_id=rx.prescription_id,
+            patient_id=rx.patient_id,
+            drug_id=rx.drug_id,
+            due_date=next_due,
+            quantity=rx_quantity,
+            days_supply=rx_days_supply,
+            total_cost=Decimal(str(rx.total_cost)),
+            priority=rx.priority,
+            state=RxState.SCHEDULED,
+            source="auto_schedule",
+            insurance_id=rx.insurance_id,
+            copay_amount=Decimal(str(rx.copay_amount)) if rx.copay_amount is not None else None,
+            insurance_paid=Decimal(str(rx.insurance_paid)) if rx.insurance_paid is not None else None,
+        )
+        db.add(scheduled)
+        logger.info(f"[RX SCHED] Prescription #{rx.prescription_id}: next fill scheduled for {next_due}")
+
+
 @router.post("/{rx_id}/advance", response_model=schemas.RefillOut)
 def advance_refill(
     rx_id: int,
@@ -192,138 +355,38 @@ def advance_refill(
         .with_for_update(of=Refill)
         .first()
     )
-
     if not rx:
         raise HTTPException(status_code=404, detail="Refill not found")
 
     raw_state = rx.state
-    current_state_enum = raw_state if isinstance(raw_state, RxState) else RxState(str(raw_state))
+    current_state = raw_state if isinstance(raw_state, RxState) else RxState(str(raw_state))
 
-    if current_state_enum not in TRANSITIONS:
+    if current_state not in TRANSITIONS:
         raise HTTPException(status_code=400, detail="No further transition available")
 
-    valid_next_states = TRANSITIONS[current_state_enum]
-    new_state = current_state_enum
-
-    if payload.action == "reject":
-        if RxState.REJECTED in valid_next_states:
-            new_state = RxState.REJECTED
-            rx.rejected_by = payload.rejected_by or "Unknown"          # type: ignore[assignment]
-            rx.rejection_reason = payload.rejection_reason or "No reason provided"  # type: ignore[assignment]
-            rx.rejection_date = date_type.today()                      # type: ignore[assignment]
-        else:
-            raise HTTPException(status_code=400, detail="Cannot reject from this state")
-
-    elif payload.action == "hold":
-        if RxState.HOLD in valid_next_states:
-            new_state = RxState.HOLD
-        else:
-            raise HTTPException(status_code=400, detail="Cannot hold from this state")
-
-    else:
-        if current_state_enum == RxState.QV1:
-            new_state = RxState.QP
-        elif current_state_enum == RxState.QV2:
-            new_state = RxState.READY
-            rx.bin_number = random.randint(1, 100)  # type: ignore[assignment]
-        else:
-            new_state = valid_next_states[0]
-
-    if new_state == RxState.READY:
-        rx.completed_date = date_type.today()  # type: ignore[assignment]
-
-    logger.info(
-        f"[RX STATE] Refill #{rx_id} (Rx #{rx.prescription_id}, pt:{_mask_patient_id(_int(rx.patient_id))}): "
-        f"{current_state_enum.value} → {new_state.value}"
-    )
+    new_state = _resolve_next_state(current_state, payload)
+    _apply_state_entry_effects(db, rx, new_state, payload)
 
     rx_quantity = _int(rx.quantity)
     rx_days_supply = _int(rx.days_supply)
 
-    if current_state_enum not in ACTIVE_STATES and new_state in ACTIVE_STATES:
-        prescription = (
-            db.query(Prescription)
-            .filter(Prescription.id == rx.prescription_id)
-            .with_for_update()
-            .first()
-        )
-        if prescription:
-            rx_remaining = _int(prescription.remaining_quantity)
-            if rx_remaining < rx_quantity:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(
-                        "Insufficient remaining quantity on prescription to resume this fill "
-                        f"(remaining={rx_remaining}, needed={rx_quantity})"
-                    ),
-                )
-            prescription.remaining_quantity = max(0, rx_remaining - rx_quantity)  # type: ignore[assignment]
-            logger.info(
-                f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
-                f"{rx_remaining} → {prescription.remaining_quantity} (resumed fill, state={new_state.value})"
-            )
-
-    elif current_state_enum in ACTIVE_STATES and new_state not in ACTIVE_STATES and new_state != RxState.SOLD:
-        prescription = (
-            db.query(Prescription)
-            .filter(Prescription.id == rx.prescription_id)
-            .with_for_update()
-            .first()
-        )
-        if prescription:
-            old_qty = _int(prescription.remaining_quantity)
-            prescription.remaining_quantity = old_qty + rx_quantity  # type: ignore[assignment]
-            logger.info(
-                f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
-                f"{old_qty} → {prescription.remaining_quantity} (fill paused/cancelled, state={new_state.value})"
-            )
+    _adjust_prescription_quantity(db, rx, current_state, new_state, rx_quantity)
 
     rx.state = new_state  # type: ignore[assignment]
 
     if new_state == RxState.SOLD:
-        rx_completed = rx.completed_date
-        hist = RefillHist(
-            prescription_id=rx.prescription_id,
-            patient_id=rx.patient_id,
-            drug_id=rx.drug_id,
-            quantity=rx_quantity,
-            days_supply=rx_days_supply,
-            completed_date=rx_completed or date_type.today(),
-            sold_date=date_type.today(),
-            total_cost=Decimal(str(rx.total_cost)),
-            insurance_id=rx.insurance_id,
-            copay_amount=Decimal(str(rx.copay_amount)) if rx.copay_amount is not None else None,
-            insurance_paid=Decimal(str(rx.insurance_paid)) if rx.insurance_paid is not None else None,
-        )
-        db.add(hist)
-        logger.info(f"[RX HIST] Refill #{rx_id}: archived to RefillHist (qty={rx_quantity}, drug_id={rx.drug_id})")
+        _archive_to_sold(db, rx, rx_quantity, rx_days_supply, bool(payload.schedule_next_fill))
 
-        if payload.schedule_next_fill:
-            next_due = date_type.today() + timedelta(days=rx_days_supply)
-            scheduled = Refill(
-                prescription_id=rx.prescription_id,
-                patient_id=rx.patient_id,
-                drug_id=rx.drug_id,
-                due_date=next_due,
-                quantity=rx_quantity,
-                days_supply=rx_days_supply,
-                total_cost=Decimal(str(rx.total_cost)),
-                priority=rx.priority,
-                state=RxState.SCHEDULED,
-                source="auto_schedule",
-                insurance_id=rx.insurance_id,
-                copay_amount=Decimal(str(rx.copay_amount)) if rx.copay_amount is not None else None,
-                insurance_paid=Decimal(str(rx.insurance_paid)) if rx.insurance_paid is not None else None,
-            )
-            db.add(scheduled)
-            logger.info(f"[RX SCHED] Prescription #{rx.prescription_id}: next fill scheduled for {next_due}")
-
+    logger.info(
+        f"[RX STATE] Refill #{rx_id} (Rx #{rx.prescription_id}, pt:{_mask_patient_id(_int(rx.patient_id))}): "
+        f"{current_state.value} → {new_state.value}"
+    )
     _write_audit(
         db, "STATE_TRANSITION",
         entity_type="refill", entity_id=rx_id,
         prescription_id=rx.prescription_id,
         details=(
-            f"{current_state_enum.value} → {new_state.value} "
+            f"{current_state.value} → {new_state.value} "
             f"prescription_id={rx.prescription_id} patient_id={rx.patient_id}"
             + (f" rejected_by={rx.rejected_by}" if new_state == RxState.REJECTED else "")
         ),
