@@ -20,7 +20,7 @@ from app.schemas import (
     _validate_positive_int,
 )
 from app.models import RxState, Priority
-from app.main import _int, _parse_priority
+from app.utils import _int, _parse_priority
 from fastapi import HTTPException
 
 
