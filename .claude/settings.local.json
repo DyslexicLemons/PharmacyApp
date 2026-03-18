@@ -22,7 +22,8 @@
       "Bash(.venv/Scripts/python -m pip install fakeredis --quiet)",
       "Bash(.venv/Scripts/python -m pytest tests/test_refill_cache.py -v)",
       "Bash(.venv/Scripts/python -m pytest tests/test_edge_cases.py::TestPurgeExpiredQuickCodes -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/test_security.py -v)"
+      "Bash(.venv/Scripts/python -m pytest tests/test_security.py -v)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_edge_cases.py::TestScheduledPromotion -v)"
     ]
   }
 }

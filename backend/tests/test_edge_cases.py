@@ -696,6 +696,33 @@ class TestScheduledPromotion:
         db.refresh(prescription)
         assert prescription.remaining_quantity == 0
 
+    def test_promote_writes_audit_rows_in_bulk(self, db_session):
+        """Promoting N refills writes exactly N REFILL_AUTO_QUEUED audit rows."""
+        from app.models import AuditLog
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                    state=RxState.SCHEDULED, due_date=date.today() - timedelta(days=1))
+        make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                    state=RxState.SCHEDULED, due_date=date.today())
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["promoted"] == 2
+        db.expire_all()
+        audit_count = (
+            db.query(AuditLog)
+            .filter(AuditLog.action == "REFILL_AUTO_QUEUED")
+            .count()
+        )
+        assert audit_count == 2
+
 
 # ===========================================================================
 # QUICK CODE PURGE (Celery task)

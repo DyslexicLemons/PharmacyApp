@@ -16,8 +16,10 @@ from celery import shared_task
 
 from datetime import timezone
 
+from sqlalchemy import insert
+
 from .database import SessionLocal
-from .models import Prescription, QuickCode, Refill, RxState
+from .models import AuditLog, Prescription, QuickCode, Refill, RxState
 from .utils import _int, _write_audit
 
 logger = logging.getLogger("pharmacy.tasks")
@@ -110,14 +112,26 @@ def promote_scheduled_refills(self: Any) -> dict:  # type: ignore[type-arg]
                 .with_for_update(of=Refill)
                 .all()
             )
-            promoted = 0
-            for refill in due:
-                prescription = (
+            if not due:
+                return {"promoted": 0}
+
+            # Bulk-fetch all referenced prescriptions in one query instead of N individual ones.
+            prescription_ids = {refill.prescription_id for refill in due}
+            prescription_map = {
+                p.id: p
+                for p in (
                     db.query(Prescription)
-                    .filter(Prescription.id == refill.prescription_id)
+                    .filter(Prescription.id.in_(prescription_ids))
                     .with_for_update()
-                    .first()
+                    .all()
                 )
+            }
+
+            promoted = 0
+            now = datetime.now(timezone.utc)
+            audit_rows: list[dict] = []
+            for refill in due:
+                prescription = prescription_map.get(refill.prescription_id)
                 if prescription is None:
                     logger.warning(
                         "promote_scheduled_refills: prescription %d not found for refill %d — skipping",
@@ -140,19 +154,24 @@ def promote_scheduled_refills(self: Any) -> dict:  # type: ignore[type-arg]
 
                 prescription.remaining_quantity = remaining - rx_quantity  # type: ignore[assignment]
                 refill.state = RxState.QT  # type: ignore[assignment]
-                _write_audit(
-                    db,
-                    "REFILL_AUTO_QUEUED",
-                    entity_type="refill",
-                    entity_id=_int(refill.id),
-                    prescription_id=_int(refill.prescription_id),
-                    details=f"auto-promoted from SCHEDULED to QT: due_date={refill.due_date}",
-                )
+                audit_rows.append({
+                    "timestamp": now,
+                    "action": "REFILL_AUTO_QUEUED",
+                    "entity_type": "refill",
+                    "entity_id": _int(refill.id),
+                    "prescription_id": _int(refill.prescription_id),
+                    "details": f"auto-promoted from SCHEDULED to QT: due_date={refill.due_date}",
+                    "user_id": None,
+                    "performed_by": None,
+                })
                 promoted += 1
-            if due:
-                db.commit()
-                if promoted:
-                    logger.info("Auto-queued %d scheduled refill(s) into QT", promoted)
+
+            if audit_rows:
+                # Single INSERT for all audit rows instead of N individual db.add() calls.
+                db.execute(insert(AuditLog), audit_rows)
+            db.commit()
+            if promoted:
+                logger.info("Auto-queued %d scheduled refill(s) into QT", promoted)
             return {"promoted": promoted}
         finally:
             db.close()
