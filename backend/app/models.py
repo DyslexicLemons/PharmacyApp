@@ -264,6 +264,14 @@ class InventoryShipmentItem(Base):
     drug = relationship("Drug", lazy="joined")
 
 
+class SystemConfig(Base):
+    """Singleton table (always id=1) holding pharmacy-wide configuration."""
+    __tablename__ = "system_config"
+
+    id = Column(Integer, primary_key=True, default=1)
+    bin_count = Column(Integer, nullable=False, default=100)
+
+
 class AuditLog(Base):
     """Immutable audit trail for all significant pharmacy actions."""
     __tablename__ = "audit_log"

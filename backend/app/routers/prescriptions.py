@@ -8,7 +8,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 import bcrypt as _bcrypt
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -64,7 +64,7 @@ def serve_upload(
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.PrescriptionOut])
 def get_prescriptions(
-    limit: int = 50,
+    limit: int = Query(50, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

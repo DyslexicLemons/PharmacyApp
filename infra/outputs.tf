@@ -45,3 +45,8 @@ output "rds_endpoint" {
   description = "RDS host (already included in DATABASE_URL in Secrets Manager)"
   value       = aws_db_instance.main.address
 }
+
+output "alerts_sns_topic_arn" {
+  description = "SNS topic ARN for CloudWatch alarms — subscribe additional endpoints here"
+  value       = aws_sns_topic.alerts.arn
+}

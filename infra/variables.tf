@@ -69,3 +69,10 @@ variable "backend_desired_count" {
   type        = number
   default     = 1
 }
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+
+variable "alert_email" {
+  description = "Email address that receives CloudWatch alarm notifications"
+  type        = string
+}
