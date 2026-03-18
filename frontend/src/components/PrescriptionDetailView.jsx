@@ -303,6 +303,7 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
     setShowInactivate(false);
     addNotification("Prescription has been inactivated.", "success");
     onPrescriptionUpdated?.(updated);
+    onBack?.();
   };
 
   const handleHold = async () => {
