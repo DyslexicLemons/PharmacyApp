@@ -6,6 +6,7 @@ import NotificationPanel from "@/components/NotificationPanel";
 import CommandBar from "@/components/CommandBar";
 
 import { searchPatients, generateTestPrescriptions, getPrescription } from "@/api";
+import QueueSidebar from "@/components/QueueSidebar";
 
 // Route-level components are lazy-loaded so each view becomes its own chunk.
 // LoginForm and CommandBar stay eager — they are needed before/after any route.
@@ -328,7 +329,8 @@ function App() {
         <QuickCodeBanner quickCode={quickCode} onDismiss={clearQuickCode} />
       )}
 
-      <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", height: "calc(100vh - 120px)" }}>
+      <div style={{ display: "flex", gap: "16px", height: "calc(100vh - 120px)", alignItems: "stretch" }}>
+      <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", flex: 1, minWidth: 0, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px", minHeight: 0 }}>
           <Suspense fallback={<ViewFallback />}>
           {route.view === "HOME" && showHelp && <Home onCommand={handleCommand} />}
@@ -503,6 +505,8 @@ function App() {
           </Suspense>
         </div>
         {!showLoginModal && <CommandBar ref={cmdBarRef} onSubmit={handleCommand} />}
+      </div>
+      {isAuthenticated && <QueueSidebar />}
       </div>
       <footer>
         <strong>JoeMed</strong> Pharmacy Management System | API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}
