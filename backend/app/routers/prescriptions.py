@@ -1,5 +1,6 @@
 """Prescription CRUD and image upload endpoints."""
 
+import mimetypes
 import os
 import uuid
 from datetime import date as date_type, timedelta
@@ -8,6 +9,7 @@ from typing import List, Optional
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -33,11 +35,31 @@ PRESCRIPTIONS_UPLOAD_DIR = os.path.join(UPLOAD_DIR, "prescriptions")
 
 
 def _build_picture_url(request: Request, picture_path: Optional[str]) -> Optional[str]:
-    """Build absolute URL for a stored prescription image."""
+    """Build absolute URL for a stored prescription image (requires auth)."""
     if not picture_path:
         return None
     base = str(request.base_url).rstrip("/")
-    return f"{base}/static/{picture_path}"
+    return f"{base}/api/v1/prescriptions/uploads/{picture_path}"
+
+
+@router.get("/uploads/{file_path:path}")
+def serve_upload(
+    file_path: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Serve an uploaded prescription image. Requires a valid JWT."""
+    # Prevent path traversal
+    safe_path = os.path.normpath(file_path).lstrip("/\\")
+    if ".." in safe_path.split(os.sep):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    full_path = os.path.join(UPLOAD_DIR, safe_path)
+    if not os.path.isfile(full_path):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    media_type, _ = mimetypes.guess_type(full_path)
+    return FileResponse(full_path, media_type=media_type or "application/octet-stream")
 
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.PrescriptionOut])
@@ -184,7 +206,6 @@ async def update_prescription_picture(
         f.write(content)
 
     prescription.picture_path = rel_path  # type: ignore[assignment]
-    prescription.picture = None           # clear legacy base64 field
     db.commit()
     db.refresh(prescription)
     prescription.picture_url = _build_picture_url(request, rel_path)  # type: ignore[attr-defined]

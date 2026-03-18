@@ -18,7 +18,7 @@ from ..models import (
     RefillHist, RxState, PatientInsurance, User,
 )
 from .. import cache, schemas
-from ..utils import _int, _parse_priority, _write_audit
+from ..utils import _int, _mask_patient_id, _parse_priority, _write_audit
 import logging
 
 logger = logging.getLogger("pharmacy.rx")
@@ -233,7 +233,7 @@ def advance_refill(
         rx.completed_date = date_type.today()  # type: ignore[assignment]
 
     logger.info(
-        f"[RX STATE] Refill #{rx_id} (Rx #{rx.prescription_id}, patient #{rx.patient_id}): "
+        f"[RX STATE] Refill #{rx_id} (Rx #{rx.prescription_id}, pt:{_mask_patient_id(_int(rx.patient_id))}): "
         f"{current_state_enum.value} → {new_state.value}"
     )
 
@@ -569,7 +569,6 @@ def create_manual_prescription(
         expiration_date=expiration,
         daw_code=data.daw_code,
         instructions=data.instructions,
-        picture=data.picture,
     )
     db.add(prescription)
     db.flush()

@@ -2,6 +2,9 @@
 Shared utility functions used across multiple routers.
 """
 
+import hashlib
+import hmac
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -9,6 +12,16 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .models import AuditLog, Priority
+
+
+def _mask_patient_id(patient_id: int) -> str:
+    """Return a short, non-reversible HMAC token for a patient ID, safe to log.
+
+    The same patient_id always produces the same token (allowing log correlation)
+    but the token cannot be reversed to recover the ID without the LOG_SALT secret.
+    """
+    salt = os.environ.get("LOG_SALT", "dev-salt").encode()
+    return hmac.new(salt, str(patient_id).encode(), hashlib.sha256).hexdigest()[:12]
 
 
 def _int(val) -> int:  # type: ignore[no-untyped-def]

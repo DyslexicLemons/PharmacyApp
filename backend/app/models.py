@@ -51,7 +51,6 @@ class Prescription(Base):
     date_received = Column(Date)
     expiration_date = Column(Date, nullable=True)
     instructions = Column(String, nullable=True)  # sig/directions for the dispensed drug
-    picture = Column(String, nullable=True)       # base64 data URL (legacy — use picture_path instead)
     picture_path = Column(String, nullable=True)  # filesystem path relative to uploads/ dir
 
     is_inactive = Column(Boolean, default=False, nullable=False, server_default="false")

@@ -300,7 +300,6 @@ class PrescriptionOut(PrescriptionBase):
     remaining_quantity: int
     date_received: date
     expiration_date: Optional[date] = None
-    picture: Optional[str] = None
     picture_path: Optional[str] = None
     picture_url: Optional[str] = None
 
@@ -317,7 +316,6 @@ class PrescriptionOut2(PrescriptionBase):
     remaining_quantity: int
     date_received: date
     expiration_date: Optional[date] = None
-    picture: Optional[str] = None
     picture_path: Optional[str] = None
     picture_url: Optional[str] = None
     latest_refill: Optional[LatestRefillOut] = None
@@ -344,10 +342,6 @@ class InactivateRequest(BaseModel):
 class PrescriptionUpdate(BaseModel):
     expiration_date: Optional[date] = None
     instructions: Optional[str] = None
-
-
-class PrescriptionPictureUpdate(BaseModel):
-    picture: str  # base64 data URL, e.g. "data:image/jpeg;base64,..."
 
 
 class PrescriptionDetailOut(PrescriptionOut2):
@@ -505,7 +499,6 @@ class ManualPrescriptionCreate(BaseModel):
     due_date: Optional[datetime] = None
     expiration_date: Optional[date] = None
     instructions: str
-    picture: Optional[str] = None
 
     @field_validator("quantity")
     @classmethod
