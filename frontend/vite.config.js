@@ -4,6 +4,12 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    // Proxy /api to the backend when running `npm run dev` outside Docker
+    proxy: {
+      '/api': 'http://localhost:8000',
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

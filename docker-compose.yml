@@ -19,6 +19,18 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ── FastAPI backend ──────────────────────────────────────────────────────────
   backend:
     build:
@@ -32,10 +44,52 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-before-prod}
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost
       UPLOAD_DIR: /app/uploads
+      REDIS_URL: redis://redis:6379
     volumes:
       - uploads_data:/app/uploads
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery worker ─────────────────────────────────────────────────────────────
+  # Scale freely: docker compose up --scale celery-worker=N
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      DATABASE_URL: postgresql://postgres:localpassword@postgres:5432/pharmacy_db
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-before-prod}
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── Celery Beat scheduler ──────────────────────────────────────────────────
+  # MUST remain a single replica — running two Beat instances causes duplicate
+  # task dispatch. The Redis lock inside each task is a safety net only.
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A app.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    environment:
+      DATABASE_URL: postgresql://postgres:localpassword@postgres:5432/pharmacy_db
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-before-prod}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   # ── React frontend (production build served by nginx) ────────────────────────
@@ -44,8 +98,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        VITE_API_URL: http://localhost:8000
     restart: unless-stopped
     ports:
       - "80:80"

@@ -11,6 +11,7 @@ PyJWT>=2.8.0
 slowapi>=0.1.9
 python-dotenv>=1.0.0
 redis>=5.0.0
+celery[redis]>=5.4.0
 
 # ── AWS (optional — only needed in production / ECS) ──────────────────────
 boto3>=1.34.0          # Secrets Manager; omit if not deploying to AWS
@@ -19,3 +20,4 @@ boto3>=1.34.0          # Secrets Manager; omit if not deploying to AWS
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 httpx>=0.27.0          # required by FastAPI TestClient
+fakeredis>=2.20.0      # in-memory Redis for unit/integration tests

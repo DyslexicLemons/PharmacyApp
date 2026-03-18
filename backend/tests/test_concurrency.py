@@ -380,3 +380,106 @@ class TestQuantityIntegrityInvariants:
 
         db.refresh(prescription)
         assert prescription.remaining_quantity <= prescription.original_quantity
+
+
+# ===========================================================================
+# EDIT REFILL — row-lock correctness
+# ===========================================================================
+
+class TestEditRefill:
+    """
+    Verify that edit_refill correctly updates quantity and adjusts
+    prescription.remaining_quantity. These also serve as regression tests
+    confirming the with_for_update(of=Refill) lock doesn't break normal behavior.
+    """
+
+    def test_edit_qt_refill_quantity_down(self, client, db_session):
+        """
+        Editing a QT refill's quantity downward returns the difference to
+        remaining_quantity.
+        """
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        # prescription remaining=60 after fill of 30
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QT)
+        db.commit()
+
+        resp = client.patch(f"/refills/{refill.id}/edit", json={"quantity": 20})
+        assert resp.status_code == 200
+        assert resp.json()["quantity"] == 20
+
+        db.refresh(prescription)
+        # available = 60 + 30 = 90; new remaining = 90 - 20 = 70
+        assert prescription.remaining_quantity == 70
+
+    def test_edit_qt_refill_quantity_up(self, client, db_session):
+        """
+        Editing a QT refill's quantity upward deducts the extra from
+        remaining_quantity.
+        """
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QT)
+        db.commit()
+
+        resp = client.patch(f"/refills/{refill.id}/edit", json={"quantity": 40})
+        assert resp.status_code == 200
+
+        db.refresh(prescription)
+        # available = 60 + 30 = 90; new remaining = 90 - 40 = 50
+        assert prescription.remaining_quantity == 50
+
+    def test_edit_qt_refill_quantity_exceeds_available_rejected(self, client, db_session):
+        """Requesting more than available quantity returns 422."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 30, 0)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QT)
+        db.commit()
+
+        # available = 0 + 30 = 30; requesting 31 should fail
+        resp = client.patch(f"/refills/{refill.id}/edit", json={"quantity": 31})
+        assert resp.status_code == 422
+
+    def test_edit_noneditable_state_rejected(self, client, db_session):
+        """Editing a refill in QV1 (non-editable) returns 400."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QV1)
+        db.commit()
+
+        resp = client.patch(f"/refills/{refill.id}/edit", json={"quantity": 20})
+        assert resp.status_code == 400
+
+    def test_edit_hold_refill_quantity(self, client, db_session):
+        """
+        HOLD is NOT in ACTIVE_STATES — going to HOLD returns quantity to the
+        prescription. So remaining=90 when the refill sits in HOLD.
+        Editing a HOLD refill deducts the new quantity and promotes to QT.
+        """
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        # remaining=90: the 30 that was in-flight has been returned when held
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.HOLD)
+        db.commit()
+
+        resp = client.patch(f"/refills/{refill.id}/edit", json={"quantity": 25})
+        assert resp.status_code == 200
+
+        db.refresh(prescription)
+        # HOLD not in ACTIVE_STATES → remaining - new_qty = 90 - 25 = 65
+        assert prescription.remaining_quantity == 65

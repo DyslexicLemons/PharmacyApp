@@ -71,7 +71,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     }
     try {
       const updated = await advanceRx(refillId, {}, token);
-      addNotification(`Prescription advanced to ${updated.state}`, "success");
+      addNotification(`RX# ${updated.prescription.id} advanced to ${updated.state}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
@@ -82,7 +82,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   const handleConfirmSell = async () => {
     try {
       const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill }, token);
-      addNotification(`Prescription marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`, "success");
+      addNotification(`Rx #${updated.prescription.id} marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
@@ -367,7 +367,8 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
             <div className="card" style={{ padding: "2rem", maxWidth: "480px", width: "90%" }}>
               <h3 style={{ marginTop: 0 }}>Confirm Sale</h3>
               <p style={{ marginBottom: "1.25rem" }}>
-                Mark <strong>{refill.drug.drug_name}</strong> for{" "}
+                Mark <strong>Rx #{refill.prescription.id}</strong> —{" "}
+                <strong>{refill.drug.drug_name}</strong> for{" "}
                 <strong>{refill.patient.first_name.toUpperCase()} {refill.patient.last_name.toUpperCase()}</strong> as sold?
               </p>
 

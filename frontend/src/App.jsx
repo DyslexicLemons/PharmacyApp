@@ -282,7 +282,10 @@ function App() {
           .catch((e) => addNotification(`Error: ${e.message}`, "error"));
       }
     }
-    else addNotification("Unknown command", "warning");
+    else {
+      const display = cmd.length > 30 ? cmd.slice(0, 30) + "…" : cmd;
+      addNotification(`Unknown command: "${display}"`, "warning");
+    }
   }
 
   // First-time visit (never logged in) — show full-screen login, nothing behind it.

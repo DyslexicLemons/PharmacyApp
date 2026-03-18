@@ -8,10 +8,8 @@ RUN npm ci
 
 COPY . .
 
-# VITE_API_URL is injected at build time (e.g. your ALB/ECS URL or CloudFront origin)
-ARG VITE_API_URL
-ENV VITE_API_URL=$VITE_API_URL
-
+# No build-time env vars needed — API calls use relative URLs proxied by nginx (Docker)
+# or a CloudFront behavior for /api/* pointing to the ALB (prod).
 RUN npm run build
 
 # ── Stage 2: serve via nginx ──────────────────────────────────────────────────

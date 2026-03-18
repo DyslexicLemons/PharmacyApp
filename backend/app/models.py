@@ -130,7 +130,7 @@ class Prescriber(Base):
     __tablename__ = "prescribers"
 
     id = Column(Integer, primary_key=True, index=True)
-    npi = Column(BigInteger)
+    npi = Column(BigInteger, unique=True, index=True)
     first_name = Column(String, index=True)
     last_name = Column(String, index=True)
     address = Column(String)
