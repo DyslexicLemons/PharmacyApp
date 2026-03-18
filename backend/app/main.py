@@ -10,6 +10,7 @@ and provides the health-check endpoints. All business logic lives in routers/.
 from .secrets import load_aws_secrets
 load_aws_secrets()
 
+import ipaddress
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -59,8 +60,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Rate-limit key function
+# ---------------------------------------------------------------------------
+# Behind an ALB every request arrives from the ALB's IP, so all users would
+# share one rate-limit bucket if we keyed on the TCP peer.  When ALB_TRUSTED_CIDR
+# is set we trust X-Forwarded-For — but only when the direct peer actually falls
+# inside that CIDR, so a spoofed header from the public internet is ignored.
+_ALB_TRUSTED_CIDR = os.environ.get("ALB_TRUSTED_CIDR", "")
+
+
+def _get_client_ip(request: Request) -> str:
+    """Return the real client IP, honouring X-Forwarded-For only from trusted ALB."""
+    if _ALB_TRUSTED_CIDR:
+        peer_ip = request.client.host if request.client else ""
+        try:
+            if ipaddress.ip_address(peer_ip) in ipaddress.ip_network(_ALB_TRUSTED_CIDR, strict=False):
+                forwarded_for = request.headers.get("X-Forwarded-For", "")
+                client_ip = forwarded_for.split(",")[0].strip()
+                if client_ip:
+                    return client_ip
+        except ValueError:
+            pass
+    return get_remote_address(request)
+
+
 # Rate limiting (login endpoints apply @limiter.limit in the router)
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=_get_client_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
