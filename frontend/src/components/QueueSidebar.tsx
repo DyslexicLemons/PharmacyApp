@@ -2,61 +2,78 @@ import { useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchQueue } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
+import type { Refill } from "@/types";
 
-const QUEUES = ["QT", "QV1", "QP", "QV2"];
+const QUEUES = ["QT", "QV1", "QP", "QV2"] as const;
+type QueueKey = typeof QUEUES[number];
 
-const QUEUE_COLORS = {
+const QUEUE_COLORS: Record<QueueKey, { bg: string; text: string }> = {
   QT:  { bg: "#fbbf24", text: "#1a2332" },
   QV1: { bg: "#ffd166", text: "#1a2332" },
   QP:  { bg: "#00b4d8", text: "#ffffff" },
   QV2: { bg: "#a78bfa", text: "#ffffff" },
 };
 
-// Each item falls into exactly one bucket (past due takes precedence over priority).
-const BUCKETS = [
+interface Bucket {
+  key: string;
+  label: string;
+  short: string;
+  color: string;
+}
+
+const BUCKETS: Bucket[] = [
   { key: "pastdue", label: "Past Due", short: "PD",  color: "#ef476f" },
   { key: "stat",   label: "< 15 min", short: "<15",  color: "#fb923c" },
   { key: "high",   label: "< 30 min", short: "<30",  color: "#f5b800" },
   { key: "normal", label: "< 60 min", short: "<60",  color: "#006494" },
 ];
 
-function today() {
+function today(): Date {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
-function bucketKey(r) {
+type RefillWithDue = Refill & { due_date: string; priority?: string };
+
+function bucketKey(r: RefillWithDue): string {
   const due = new Date(r.due_date + "T00:00:00");
   if (due < today()) return "pastdue";
   const p = r.priority?.toLowerCase();
   if (p === "stat")   return "stat";
   if (p === "high")   return "high";
-  return "normal"; // "normal", "low", or anything else
+  return "normal";
 }
 
-function formatDue(dueDateStr) {
+interface DueLabel {
+  label: string;
+  overdue: boolean;
+}
+
+function formatDue(dueDateStr: string): DueLabel {
   const t = today();
   const due = new Date(dueDateStr + "T00:00:00");
-  const diff = Math.round((due - t) / 86_400_000);
+  const diff = Math.round((due.getTime() - t.getTime()) / 86_400_000);
   if (diff < 0)   return { label: `${Math.abs(diff)}d overdue`, overdue: true };
   if (diff === 0) return { label: "Today",    overdue: false };
   if (diff === 1) return { label: "Tomorrow", overdue: false };
   return { label: `${diff}d`, overdue: false };
 }
 
+type QueueData = Record<QueueKey, RefillWithDue[]>;
+
 export default function QueueSidebar() {
   const { token } = useContext(AuthContext);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<QueueData>({
     queryKey: ["queue-sidebar", token],
     queryFn: () =>
-      Promise.all(QUEUES.map((q) => fetchQueue(q, token, 200, 0))).then(
+      Promise.all(QUEUES.map((q) => fetchQueue(q, token!, 200, 0))).then(
         ([qt, qv1, qp, qv2]) => ({
-          QT:  qt.items  ?? qt,
-          QV1: qv1.items ?? qv1,
-          QP:  qp.items  ?? qp,
-          QV2: qv2.items ?? qv2,
+          QT:  (qt.items  ?? qt)  as RefillWithDue[],
+          QV1: (qv1.items ?? qv1) as RefillWithDue[],
+          QP:  (qp.items  ?? qp)  as RefillWithDue[],
+          QV2: (qv2.items ?? qv2) as RefillWithDue[],
         })
       ),
     refetchInterval: 30_000,
@@ -98,11 +115,13 @@ export default function QueueSidebar() {
       ) : (
         <div>
           {QUEUES.map((q) => {
-            const refills = data?.[q] ?? [];
+            const refills: RefillWithDue[] = data?.[q] ?? [];
             const { bg, text } = QUEUE_COLORS[q];
 
             // Group items into buckets
-            const grouped = Object.fromEntries(BUCKETS.map((b) => [b.key, []]));
+            const grouped: Record<string, RefillWithDue[]> = Object.fromEntries(
+              BUCKETS.map((b) => [b.key, [] as RefillWithDue[]])
+            );
             refills.forEach((r) => grouped[bucketKey(r)].push(r));
 
             return (

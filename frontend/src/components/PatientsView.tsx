@@ -1,12 +1,24 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getPatients } from "@/api";
+import type { Patient, PaginatedResponse } from "@/types";
 
 const PAGE_SIZE = 15;
 
-export default function PatientsView({ onBack, onSelectPatient, page = 1 }) {
+interface PatientWithExtra extends Patient {
+  city?: string;
+  state?: string;
+}
+
+interface PatientsViewProps {
+  onBack?: () => void;
+  onSelectPatient?: (id: number) => void;
+  page?: number;
+}
+
+export default function PatientsView({ onBack, onSelectPatient, page = 1 }: PatientsViewProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ items: [], total: 0 });
+  const [data, setData] = useState<PaginatedResponse<PatientWithExtra>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -16,7 +28,7 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1 }) {
     const offset = (page - 1) * PAGE_SIZE;
     getPatients(token, PAGE_SIZE, offset)
       .then(setData)
-      .catch((e) => setError(e.message))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page]);
 

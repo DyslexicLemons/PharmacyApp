@@ -1,7 +1,32 @@
-import { useState, useContext, useEffect, useRef } from "react";
+import React, { useState, useContext, useEffect, useRef } from "react";
 import { AuthContext } from "@/context/AuthContext";
 
-export default function LoginForm({ isModal = false }) {
+interface LoginFormProps {
+  isModal?: boolean;
+}
+
+interface ErrorBoxProps {
+  message: string;
+}
+
+function ErrorBox({ message }: ErrorBoxProps) {
+  return (
+    <div
+      style={{
+        background: "rgba(239, 71, 111, 0.1)",
+        border: "1px solid var(--danger)",
+        borderRadius: 8,
+        padding: "8px 12px",
+        fontSize: "0.85rem",
+        color: "var(--danger)",
+      }}
+    >
+      {message}
+    </div>
+  );
+}
+
+export default function LoginForm({ isModal = false }: LoginFormProps) {
   const { login, loginByCode, timedOut, quickCode, clearQuickCode } = useContext(AuthContext);
   const [tab, setTab] = useState("code"); // "credentials" | "code"
   const [username, setUsername] = useState("");
@@ -9,15 +34,15 @@ export default function LoginForm({ isModal = false }) {
   const [codeInput, setCodeInput] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const usernameRef = useRef(null);
-  const codeRef = useRef(null);
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (tab === "credentials") usernameRef.current?.focus();
     else codeRef.current?.focus();
   }, [tab]);
 
-  async function handleCredentialsSubmit(e) {
+  async function handleCredentialsSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -31,14 +56,14 @@ export default function LoginForm({ isModal = false }) {
     }
   }
 
-  async function handleCodeSubmit(e) {
+  async function handleCodeSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
       await loginByCode(codeInput);
     } catch (err) {
-      setError(err.message || "Invalid or expired code.");
+      setError((err as Error).message || "Invalid or expired code.");
       setCodeInput("");
     } finally {
       setLoading(false);
@@ -46,11 +71,11 @@ export default function LoginForm({ isModal = false }) {
   }
 
   // Remaining seconds for the quick code
-  const [remaining, setRemaining] = useState(null);
+  const [remaining, setRemaining] = useState<number | null>(null);
   useEffect(() => {
     if (!quickCode) { setRemaining(null); return; }
     function tick() {
-      const secs = Math.max(0, Math.round((quickCode.expiresAt - Date.now()) / 1000));
+      const secs = Math.max(0, Math.round((quickCode!.expiresAt - Date.now()) / 1000));
       setRemaining(secs);
       if (secs === 0) clearQuickCode();
     }
@@ -90,7 +115,7 @@ export default function LoginForm({ isModal = false }) {
       )}
 
       {/* Quick code display (shown when a code is active after login in same session) */}
-      {quickCode && remaining > 0 && (
+      {quickCode && remaining != null && remaining > 0 && (
         <div
           style={{
             background: "rgba(6, 214, 160, 0.1)",
@@ -114,7 +139,7 @@ export default function LoginForm({ isModal = false }) {
 
       {/* Tab switcher */}
       <div style={{ display: "flex", borderBottom: "1px solid var(--border)", gap: 0 }}>
-        {[["code", "Quick Code"], ["credentials", "Sign In"]].map(([key, label]) => (
+        {([["code", "Quick Code"], ["credentials", "Sign In"]] as [string, string][]).map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -148,7 +173,7 @@ export default function LoginForm({ isModal = false }) {
               className="input"
               type="text"
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
               autoComplete="username"
               required
             />
@@ -162,7 +187,7 @@ export default function LoginForm({ isModal = false }) {
               className="input"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
               autoComplete="current-password"
               required
             />
@@ -185,7 +210,7 @@ export default function LoginForm({ isModal = false }) {
               className="input"
               type="text"
               value={codeInput}
-              onChange={(e) => setCodeInput(e.target.value.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 3))}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCodeInput(e.target.value.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 3))}
               placeholder="ABC"
               maxLength={3}
               autoComplete="off"
@@ -217,23 +242,6 @@ export default function LoginForm({ isModal = false }) {
   return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
       {card}
-    </div>
-  );
-}
-
-function ErrorBox({ message }) {
-  return (
-    <div
-      style={{
-        background: "rgba(239, 71, 111, 0.1)",
-        border: "1px solid var(--danger)",
-        borderRadius: 8,
-        padding: "8px 12px",
-        fontSize: "0.85rem",
-        color: "var(--danger)",
-      }}
-    >
-      {message}
     </div>
   );
 }

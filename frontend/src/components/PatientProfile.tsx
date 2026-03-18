@@ -1,25 +1,65 @@
-import React, { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { getPatient } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import Badge from "@/components/Badge";
 
 const PAGE_SIZE = 15;
 
-export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1 }) {
+interface LatestRefill {
+  quantity: number;
+  days_supply: number;
+  sold_date?: string | null;
+  total_cost?: number | string | null;
+  completed_date?: string | null;
+  next_pickup?: string | null;
+  state?: string | null;
+}
+
+interface PrescriptionRow {
+  id: number;
+  drug: { drug_name: string; ndc?: string | null };
+  remaining_quantity: number;
+  date_received: string;
+  expiration_date?: string | null;
+  is_inactive?: boolean;
+  is_expired?: boolean;
+  latest_refill?: LatestRefill | null;
+}
+
+interface PatientData {
+  id: number;
+  first_name: string;
+  last_name: string;
+  dob: string;
+  address: string;
+  city?: string;
+  state?: string;
+  prescriptions: PrescriptionRow[];
+}
+
+interface PatientProfileProps {
+  pid: number;
+  onBack?: () => void;
+  onFill?: (prescription: PrescriptionRow, patient: PatientData) => void;
+  onDataLoaded?: (data: PatientData) => void;
+  page?: number;
+}
+
+export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1 }: PatientProfileProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState(null);
+  const [data, setData] = useState<PatientData | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let mounted = true;
 
     getPatient(pid, token)
-      .then((d) => {
+      .then((d: PatientData) => {
         if (!mounted) return;
         setData(d);
         onDataLoaded?.(d);
       })
-      .catch((e) => setError(e.message));
+      .catch((e: Error) => setError(e.message));
 
     return () => {
       mounted = false;
@@ -50,7 +90,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
         <div>
           {data.address.toUpperCase()}
           {(data.city || data.state) && (
-            <span>, {[data.city, data.state].filter(Boolean).map(s => s.toUpperCase()).join(", ")}</span>
+            <span>, {[data.city, data.state].filter(Boolean).map(s => s!.toUpperCase()).join(", ")}</span>
           )}
         </div>
       </div>
@@ -94,7 +134,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
 
               const fillBlocked =
                 r.latest_refill &&
-                BLOCKING_STATES.includes(r.latest_refill.state);
+                BLOCKING_STATES.includes(r.latest_refill.state ?? "");
 
               const noQuantityRemaining = r.remaining_quantity <= 0;
 
@@ -135,26 +175,19 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
 
                       <td>
                         {r.latest_refill.sold_date
-                          ? new Date(
-                              r.latest_refill.sold_date
-                            ).toLocaleDateString()
+                          ? new Date(r.latest_refill.sold_date).toLocaleDateString()
                           : "—"}
                       </td>
 
                       <td>
                         {r.latest_refill.total_cost
-                          ? "$" +
-                            Number(
-                              r.latest_refill.total_cost
-                            ).toFixed(2)
+                          ? "$" + Number(r.latest_refill.total_cost).toFixed(2)
                           : "—"}
                       </td>
 
                       <td>
                         {r.latest_refill.completed_date
-                          ? new Date(
-                              r.latest_refill.completed_date
-                            ).toLocaleDateString()
+                          ? new Date(r.latest_refill.completed_date).toLocaleDateString()
                           : "—"}
                       </td>
 
@@ -170,9 +203,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
                         ) : r.is_expired ? (
                           <Badge state="EXPIRED" />
                         ) : r.latest_refill.next_pickup ? (
-                          new Date(
-                            r.latest_refill.next_pickup
-                          ).toLocaleDateString()
+                          new Date(r.latest_refill.next_pickup).toLocaleDateString()
                         ) : r.latest_refill.state ? (
                           <Badge state={r.latest_refill.state} />
                         ) : (

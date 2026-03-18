@@ -1,10 +1,12 @@
-import { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import Badge from "@/components/Badge";
 import { advanceRx, getStock, getRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import type { Refill, RxState } from "@/types";
+import { APPROVABLE_STATES, HOLDABLE_STATES, REJECTABLE_STATES, EDITABLE_STATES } from "@/types";
 
-const DAW_CODES = {
+const DAW_CODES: Record<number, string> = {
   0: "No product selection indicated (generic substitution allowed)",
   1: "Substitution not allowed by prescriber (brand medically necessary)",
   2: "Patient requested brand",
@@ -17,15 +19,24 @@ const DAW_CODES = {
   9: "Other",
 };
 
-export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, keyCmd, onKeyCmdHandled }) {
+interface RefillDetailViewProps {
+  refillId: number;
+  onBack?: () => void;
+  onUpdate?: (updated: Refill) => void;
+  onEdit?: () => void;
+  keyCmd?: string | null;
+  onKeyCmdHandled?: () => void;
+}
+
+export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, keyCmd, onKeyCmdHandled }: RefillDetailViewProps) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
-  const [refill, setRefill] = useState(null);
+  const [refill, setRefill] = useState<Refill | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showSellConfirm, setShowSellConfirm] = useState(false);
   const [scheduleNextFill, setScheduleNextFill] = useState(false);
-  const [stockQty, setStockQty] = useState(null);
+  const [stockQty, setStockQty] = useState<number | null>(null);
   const [showHoldConfirm, setShowHoldConfirm] = useState(false);
   const [holdIsQV2, setHoldIsQV2] = useState(false);
 
@@ -35,10 +46,8 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
 
   useEffect(() => {
     if (!keyCmd || !refill) return;
-    const approveStates = ["QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED"];
-    const holdStates = ["QT", "QV1", "QP", "QV2"];
-    if (keyCmd === "approve" && approveStates.includes(refill.state)) handleApprove();
-    if (keyCmd === "hold" && holdStates.includes(refill.state)) handleHold();
+    if (keyCmd === "approve" && APPROVABLE_STATES.includes(refill.state)) handleApprove();
+    if (keyCmd === "hold" && HOLDABLE_STATES.includes(refill.state)) handleHold();
     onKeyCmdHandled?.();
   }, [keyCmd]);
 
@@ -49,23 +58,24 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
       setRefill(found);
       setError("");
     } catch (e) {
-      setError(e.message);
+      setError((e as Error).message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleApprove = async () => {
+    if (!refill) return;
     if (refill.state === "READY") {
       try {
         const stocks = await getStock(token);
         const items = Array.isArray(stocks) ? stocks : (stocks.items ?? []);
-        const entry = items.find(s => s.drug_id === refill.drug_id);
+        const entry = items.find((s: { drug_id: number; quantity: number }) => s.drug_id === refill.drug_id);
         setStockQty(entry ? entry.quantity : 0);
         setScheduleNextFill(false);
         setShowSellConfirm(true);
       } catch (e) {
-        addNotification(`Error fetching stock: ${e.message}`, "error");
+        addNotification(`Error fetching stock: ${(e as Error).message}`, "error");
       }
       return;
     }
@@ -75,7 +85,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      addNotification(`Error: ${e.message}`, "error");
+      addNotification(`Error: ${(e as Error).message}`, "error");
     }
   };
 
@@ -86,7 +96,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      addNotification(`Error: ${e.message}`, "error");
+      addNotification(`Error: ${(e as Error).message}`, "error");
     }
   };
 
@@ -106,11 +116,12 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      addNotification(`Error: ${e.message}`, "error");
+      addNotification(`Error: ${(e as Error).message}`, "error");
     }
   };
 
   const handleHold = () => {
+    if (!refill) return;
     setHoldIsQV2(refill.state === "QV2");
     setShowHoldConfirm(true);
   };
@@ -127,7 +138,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
-      addNotification(`Error: ${e.message}`, "error");
+      addNotification(`Error: ${(e as Error).message}`, "error");
     }
   };
 
@@ -135,10 +146,10 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   if (error) return <div className="vstack"><p style={{ color: "var(--danger)" }}>{error}</p></div>;
   if (!refill) return <div className="vstack"><p>Refill not found</p></div>;
 
-  const canApprove = ["QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED"].includes(refill.state);
-  const canReject = ["QV1", "HOLD"].includes(refill.state);
-  const canHold = ["QT", "QV1", "QP", "QV2"].includes(refill.state);
-  const canEdit = ["QT", "QP", "HOLD"].includes(refill.state);
+  const canApprove = APPROVABLE_STATES.includes(refill.state);
+  const canReject = REJECTABLE_STATES.includes(refill.state);
+  const canHold = HOLDABLE_STATES.includes(refill.state);
+  const canEdit = EDITABLE_STATES.includes(refill.state);
 
   return (
     <div className="vstack">
@@ -174,7 +185,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
         <div style={{ marginBottom: "0.75rem", paddingBottom: "0.6rem", borderBottom: "2px solid var(--bg-light)", display: "flex", gap: "2rem", alignItems: "baseline", flexWrap: "wrap" }}>
           <h3 style={{ margin: 0, fontSize: "1rem", flexShrink: 0 }}>Patient</h3>
           <span><strong>{refill.patient.first_name.toUpperCase()} {refill.patient.last_name.toUpperCase()}</strong></span>
-          <span style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>DOB: {refill.patient.dob}</span>
+          <span style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>DOB: {(refill.patient as unknown as Record<string, string>).dob}</span>
           <span style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>{refill.patient.address}</span>
         </div>
 
@@ -326,7 +337,6 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
             </div>
           )}
         </div>
-
       </div>
 
       {showHoldConfirm && (
@@ -376,7 +386,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
                 <input
                   type="checkbox"
                   checked={scheduleNextFill}
-                  onChange={e => setScheduleNextFill(e.target.checked)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduleNextFill(e.target.checked)}
                   style={{ width: "1.1rem", height: "1.1rem" }}
                 />
                 Schedule next fill

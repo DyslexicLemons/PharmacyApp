@@ -3,22 +3,31 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthContext } from "@/context/AuthContext";
 import LoginForm from "@/components/LoginForm";
+import type { AuthState } from "@/stores/authStore";
 
 // The label elements in LoginForm are not htmlFor-associated with their inputs,
 // so we query by placeholder text, role, or input type instead of getByLabelText.
 
-function makeAuthValue(overrides = {}) {
+function makeAuthValue(overrides: Partial<AuthState> = {}): AuthState {
   return {
+    isAuthenticated: false,
+    timedOut: false,
+    shouldResetToHome: false,
+    authUser: null,
+    quickCode: null,
+    token: null,
     login: vi.fn(),
     loginByCode: vi.fn(),
-    timedOut: false,
-    quickCode: null,
+    logout: vi.fn(),
     clearQuickCode: vi.fn(),
+    clearHomeReset: vi.fn(),
+    resetTimer: vi.fn(),
+    _applyLoginData: vi.fn(),
     ...overrides,
   };
 }
 
-function renderLoginForm(authOverrides = {}, props = {}) {
+function renderLoginForm(authOverrides: Partial<AuthState> = {}, props: { isModal?: boolean } = {}) {
   const value = makeAuthValue(authOverrides);
   const result = render(
     <AuthContext.Provider value={value}>
@@ -55,10 +64,10 @@ describe("LoginForm", () => {
     await user.click(screen.getByRole("button", { name: /^sign in$/i }));
 
     await user.type(screen.getByRole("textbox"), "alice");
-    await user.type(document.querySelector('input[type="password"]'), "secret");
+    await user.type(document.querySelector('input[type="password"]') as HTMLElement, "secret");
 
     // Use the submit button (type="submit") specifically to avoid the tab ambiguity
-    const submitBtn = document.querySelector('button[type="submit"]');
+    const submitBtn = document.querySelector('button[type="submit"]') as HTMLElement;
     await user.click(submitBtn);
 
     await waitFor(() => expect(login).toHaveBeenCalledWith("alice", "secret"));
@@ -71,9 +80,9 @@ describe("LoginForm", () => {
 
     await user.click(screen.getByRole("button", { name: /^sign in$/i }));
     await user.type(screen.getByRole("textbox"), "baduser");
-    await user.type(document.querySelector('input[type="password"]'), "wrong");
+    await user.type(document.querySelector('input[type="password"]') as HTMLElement, "wrong");
 
-    const submitBtn = document.querySelector('button[type="submit"]');
+    const submitBtn = document.querySelector('button[type="submit"]') as HTMLElement;
     await user.click(submitBtn);
 
     await waitFor(() =>

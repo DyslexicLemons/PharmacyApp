@@ -1,16 +1,43 @@
-import { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { fillScript, getPrescribers, getPatientInsurance, calculateBilling } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import type { Prescriber, BillingResult } from "@/types";
 
-const TIER_LABELS = {
-  1: "Tier 1 – Preferred Generic",
-  2: "Tier 2 – Preferred Brand",
-  3: "Tier 3 – Non-Preferred",
-  4: "Tier 4 – Specialty"
-};
+// Extended prescription type with runtime fields not in the base type
+interface LatestRefill {
+  quantity: number;
+  days_supply: number;
+  sold_date?: string | null;
+  state?: string | null;
+}
 
-function getFillType(prescription) {
+interface PrescriptionWithRuntime {
+  id: number;
+  remaining_quantity: number;
+  instructions: string | null;
+  drug_id: number;
+  patient_id?: number;
+  prescriber_id?: number;
+  drug: { drug_name: string; manufacturer: string; niosh?: boolean; cost?: number | string };
+  latest_refill?: LatestRefill | null;
+}
+
+interface PatientInsuranceItem {
+  id: number;
+  is_active: boolean;
+  [key: string]: unknown;
+}
+
+interface FillForm {
+  quantity: number | string;
+  days_supply: number | string;
+  priority: string;
+  scheduled: boolean;
+  due_date: string;
+}
+
+function getFillType(prescription: PrescriptionWithRuntime): string {
   const lr = prescription.latest_refill;
   if (!lr || !lr.sold_date) return "new_fill";
   if (lr.state) return "active";
@@ -22,7 +49,7 @@ function getFillType(prescription) {
   return daysSince > lr.days_supply - 7 ? "new_fill" : "schedule_refill";
 }
 
-function nextPickupDate(prescription) {
+function nextPickupDate(prescription: PrescriptionWithRuntime): string {
   const lr = prescription.latest_refill;
   if (!lr?.sold_date || lr.state) return "";
 
@@ -32,7 +59,7 @@ function nextPickupDate(prescription) {
   return d.toISOString().split("T")[0];
 }
 
-function daysEarly(prescription) {
+function daysEarly(prescription: PrescriptionWithRuntime): number {
   const lr = prescription.latest_refill;
   if (!lr?.sold_date) return 0;
 
@@ -43,16 +70,23 @@ function daysEarly(prescription) {
   return lr.days_supply - daysSince;
 }
 
-export default function FillScriptView({ prescription, patientName, patientId, onBack }) {
+interface FillScriptViewProps {
+  prescription: PrescriptionWithRuntime;
+  patientName: string;
+  patientId?: number;
+  onBack: () => void;
+}
+
+export default function FillScriptView({ prescription, patientName, patientId, onBack }: FillScriptViewProps) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
-  const [prescribers, setPrescribers] = useState([]);
-  const [patientInsurance, setPatientInsurance] = useState([]);
+  const [prescribers, setPrescribers] = useState<Prescriber[]>([]);
+  const [patientInsurance, setPatientInsurance] = useState<PatientInsuranceItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const [selectedInsuranceId, setSelectedInsuranceId] = useState("");
-  const [billing, setBilling] = useState(null);
+  const [billing, setBilling] = useState<BillingResult | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
 
   const lr = prescription.latest_refill;
@@ -66,7 +100,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
 
   const isExhausted = prescription.remaining_quantity <= 0;
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<FillForm>({
     quantity: lr?.quantity ?? "",
     days_supply: lr?.days_supply ?? "",
     priority: "normal",
@@ -86,7 +120,6 @@ export default function FillScriptView({ prescription, patientName, patientId, o
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
 
   useEffect(() => {
-
     if (!selectedInsuranceId || !form.quantity || !form.days_supply) {
       setBilling(null);
       return;
@@ -97,8 +130,8 @@ export default function FillScriptView({ prescription, patientName, patientId, o
     calculateBilling({
       drug_id: prescription.drug_id,
       insurance_id: parseInt(selectedInsuranceId),
-      quantity: parseInt(form.quantity),
-      days_supply: parseInt(form.days_supply),
+      quantity: parseInt(String(form.quantity)),
+      days_supply: parseInt(String(form.days_supply)),
     }, token)
       .then(setBilling)
       .catch(() => setBilling(null))
@@ -106,12 +139,10 @@ export default function FillScriptView({ prescription, patientName, patientId, o
 
   }, [selectedInsuranceId, form.quantity, form.days_supply]);
 
-  const handleChange = (e) => {
-
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
 
     if (name === "quantity") {
-
       const qty = parseInt(value);
 
       if (qty > prescription.remaining_quantity) {
@@ -141,9 +172,8 @@ export default function FillScriptView({ prescription, patientName, patientId, o
   };
 
   const handleSubmit = async () => {
-
-    const qty = parseInt(form.quantity);
-    const days = parseInt(form.days_supply);
+    const qty = parseInt(String(form.quantity));
+    const days = parseInt(String(form.days_supply));
 
     if (!qty || qty <= 0) {
       setError("Quantity must be greater than 0.");
@@ -166,10 +196,9 @@ export default function FillScriptView({ prescription, patientName, patientId, o
     setError("");
 
     try {
-
       const result = await fillScript(prescription.id, {
         quantity: qty,
-        days_supply: parseInt(form.days_supply),
+        days_supply: parseInt(String(form.days_supply)),
         priority: form.priority,
         scheduled: form.scheduled,
         due_date: form.due_date || null,
@@ -178,38 +207,30 @@ export default function FillScriptView({ prescription, patientName, patientId, o
 
       let msg = `Fill created!\nRX#: ${prescription.id}\nState: ${result.state}`;
 
-      if (result.copay_amount != null) {
-        msg += `\n\nBilling Summary:
-Cash Price:      $${result.cash_price.toFixed(2)}
-Patient Copay:   $${result.copay_amount.toFixed(2)}
-Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
+      if ((result as Record<string, unknown>).copay_amount != null) {
+        const r = result as Record<string, number>;
+        msg += `\n\nBilling Summary:\nCash Price:      $${r.cash_price.toFixed(2)}\nPatient Copay:   $${r.copay_amount.toFixed(2)}\nInsurance Pays:  $${r.insurance_paid.toFixed(2)}`;
       }
 
       addNotification(msg, "success");
       onBack();
 
     } catch (e) {
-
-      setError(e.message);
-
+      setError((e as Error).message);
     } finally {
-
       setSubmitting(false);
-
     }
   };
 
   const cashPrice =
     form.quantity && prescription.drug?.cost
-      ? (parseFloat(prescription.drug.cost) * parseInt(form.quantity)).toFixed(2)
+      ? (parseFloat(String(prescription.drug.cost)) * parseInt(String(form.quantity))).toFixed(2)
       : null;
 
   const activeInsurance = patientInsurance.filter(i => i.is_active);
 
   return (
-
     <div className="vstack">
-
       <div className="hstack" style={{ alignItems: "center", gap: "1rem" }}>
         <h2 style={{ margin: 0 }}>Fill Script</h2>
       </div>
@@ -229,7 +250,6 @@ Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
       )}
 
       <div className="card vstack" style={{ gap: "0.5rem" }}>
-
         <h3 style={{ margin: 0 }}>Script Details</h3>
 
         <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
@@ -251,20 +271,14 @@ Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
             <strong>Remaining Qty on Script:</strong> {prescription.remaining_quantity}
           </div>
         </div>
-        
-
-
       </div>
 
       <div className="card vstack" style={{ gap: "1rem" }}>
-
         <h3 style={{ margin: 0 }}>Fill Details</h3>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-
           <label>
             <strong>Quantity</strong>
-
             <input
               type="number"
               name="quantity"
@@ -274,11 +288,9 @@ Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
               max={prescription.remaining_quantity}
               style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
             />
-
             <div style={{ color: "var(--text-light)", fontSize: "0.85rem" }}>
               Qty remaining: {prescription.remaining_quantity}
             </div>
-
           </label>
 
           <label>
@@ -317,15 +329,12 @@ Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
               style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
             />
           </label>
-
         </div>
-
       </div>
 
       {error && <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p>}
 
       <div style={{ display: "flex", gap: "1rem" }}>
-
         <button
           className="btn btn-secondary"
           onClick={onBack}
@@ -345,9 +354,7 @@ Insurance Pays:  $${result.insurance_paid.toFixed(2)}`;
         >
           {submitting ? "Creating..." : "Create Fill"}
         </button>
-
       </div>
-
     </div>
   );
 }

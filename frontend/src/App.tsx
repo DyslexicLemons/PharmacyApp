@@ -7,6 +7,7 @@ import CommandBar from "@/components/CommandBar";
 
 import { searchPatients, generateTestPrescriptions, getPrescription } from "@/api";
 import QueueSidebar from "@/components/QueueSidebar";
+import type { RouteState, QuickCode } from "@/types";
 
 // Route-level components are lazy-loaded so each view becomes its own chunk.
 // LoginForm and CommandBar stay eager — they are needed before/after any route.
@@ -53,15 +54,15 @@ export default function AppRoot() {
 function App() {
   const { isAuthenticated, shouldResetToHome, clearHomeReset, authUser, quickCode, clearQuickCode, token, logout } = useContext(AuthContext);
   const { addNotification } = useNotification();
-  const [route, setRoute] = useState({ view: "HOME" });
-  const [history, setHistory] = useState([]);
-  const [currentPatientData, setCurrentPatientData] = useState(null);
-  const [queueSelectRow, setQueueSelectRow] = useState(null);
-  const [patientSelectRow, setPatientSelectRow] = useState(null);
-  const [refillKeyCmd, setRefillKeyCmd] = useState(null);
-  const [shipmentKeyCmd, setShipmentKeyCmd] = useState(null);
+  const [route, setRoute] = useState<RouteState>({ view: "HOME" });
+  const [history, setHistory] = useState<RouteState[]>([]);
+  const [currentPatientData, setCurrentPatientData] = useState<{ id: number; first_name: string; last_name: string; prescriptions: unknown[] } | null>(null);
+  const [queueSelectRow, setQueueSelectRow] = useState<number | null>(null);
+  const [patientSelectRow, setPatientSelectRow] = useState<number | null>(null);
+  const [refillKeyCmd, setRefillKeyCmd] = useState<string | null>(null);
+  const [shipmentKeyCmd, setShipmentKeyCmd] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(true);
-  const cmdBarRef = useRef(null);
+  const cmdBarRef = useRef<{ focus: () => void } | null>(null);
   // Track whether auth has ever been established in this session.
   // False = first-time login (show full-screen form), true = timeout (show modal overlay).
   const hasEverLoggedInRef = useRef(false);
@@ -81,13 +82,13 @@ function App() {
   }, [route]);
 
   // Drill-down navigation: pushes current route to history so `q` can go back
-  function navigateTo(newRoute) {
+  function navigateTo(newRoute: RouteState) {
     setHistory((prev) => [...prev, route]);
     setRoute(newRoute);
   }
 
   // Section navigation: clears history so `q` cannot return to a previous form/edit view
-  function navigateToSection(newRoute) {
+  function navigateToSection(newRoute: RouteState) {
     setHistory([]);
     setRoute(newRoute);
   }
@@ -105,10 +106,10 @@ function App() {
     }
   }
 
-  function handleCommand(input) {
+  function handleCommand(input: string) {
     const tempCmd = input.toLowerCase();
     if (tempCmd === " ") {
-            if (route.view !== "HOME" && route.view !== "PATIENT") return;
+      if (route.view !== "HOME" && route.view !== "PATIENT") return;
       navigateTo({
         view: "CREATE_PRESCRIPTION",
         patientId: route.view === "PATIENT" ? route.pid : undefined,
@@ -127,7 +128,7 @@ function App() {
     const rxMatch = cmd.match(/^rx(\d+)$/);
     if (rxMatch) {
       const rxId = parseInt(rxMatch[1], 10);
-      getPrescription(rxId, token)
+      getPrescription(rxId, token!)
         .then((prescription) => {
           const p = prescription.patient;
           navigateTo({
@@ -144,7 +145,6 @@ function App() {
     // Check if input is a number (row selection)
     const rowNum = parseInt(cmd, 10);
     if (!isNaN(rowNum) && rowNum > 0) {
-      // Handle row selection based on current view
       if (route.view === "QUEUE") {
         setQueueSelectRow(rowNum);
         return;
@@ -157,11 +157,11 @@ function App() {
         if (currentPatientData) {
           const page = route.page || 1;
           const idx = (page - 1) * PATIENT_PAGE_SIZE + (rowNum - 1);
-          const prescription = currentPatientData.prescriptions[idx];
+          const prescription = (currentPatientData.prescriptions as unknown[])[idx];
           if (prescription) {
             navigateTo({
               view: "VIEW_PRESCRIPTION",
-              prescription,
+              prescription: prescription as import("@/types").Prescription,
               patientName: `${currentPatientData.last_name}, ${currentPatientData.first_name}`,
               patientId: currentPatientData.id,
             });
@@ -179,12 +179,12 @@ function App() {
     }
 
     if (cmd === "n") {
-      setRoute((prev) => ({ ...prev, page: (prev.page || 1) + 1 }));
+      setRoute((prev) => ({ ...prev, page: (("page" in prev ? prev.page : undefined) || 1) + 1 }));
       return;
     }
     if (cmd === "p") {
       setRoute((prev) => {
-        const current = prev.page || 1;
+        const current = ("page" in prev ? prev.page : undefined) || 1;
         return current > 1 ? { ...prev, page: current - 1 } : prev;
       });
       return;
@@ -225,7 +225,7 @@ function App() {
         addNotification("Please enter at least 3 characters for both first and last name.", "warning");
         return;
       }
-      searchPatients(input, token)
+      searchPatients(input, token!)
         .then((list) => {
           if (list.length === 0) {
             navigateTo({ view: "NO_MATCH", query: input.trim() });
@@ -235,7 +235,7 @@ function App() {
             navigateTo({ view: "PATIENT_SELECT", patients: list, query: input.trim() });
           }
         })
-        .catch((e) => addNotification(e.message, "error"));
+        .catch((e: Error) => addNotification(e.message, "error"));
       return;
     }
 
@@ -280,12 +280,12 @@ function App() {
     }
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
-        generateTestPrescriptions(token)
+        generateTestPrescriptions(token!)
           .then((result) => {
             addNotification(`Created ${result.prescriptions_created} prescriptions\nActive refills: ${result.active_refills_created}\nSold refills: ${result.sold_prescriptions}`, "success");
             navigateTo({ view: "HOME" });
           })
-          .catch((e) => addNotification(`Error: ${e.message}`, "error"));
+          .catch((e: Error) => addNotification(`Error: ${e.message}`, "error"));
       }
     }
     else {
@@ -407,7 +407,6 @@ function App() {
               onBack={goBack}
               page={route.page || 1}
               onSelectDrug={(drugId) => {
-                // Future: navigate to drug detail view
                 addNotification(`Drug ID: ${drugId}`, "info");
               }}
             />
@@ -426,7 +425,6 @@ function App() {
               onBack={goBack}
               page={route.page || 1}
               onSelectStock={(drugId) => {
-                // Future: navigate to stock detail view
                 addNotification(`Drug ID: ${drugId}`, "info");
               }}
             />
@@ -437,7 +435,6 @@ function App() {
               onBack={goBack}
               page={route.page || 1}
               onSelectPrescriber={(prescriberId) => {
-                // Future: navigate to prescriber detail view
                 addNotification(`Prescriber ID: ${prescriberId}`, "info");
               }}
             />
@@ -520,8 +517,8 @@ function App() {
   );
 }
 
-function QuickCodeBanner({ quickCode, onDismiss }) {
-  const [remaining, setRemaining] = useState(null);
+function QuickCodeBanner({ quickCode, onDismiss }: { quickCode: QuickCode; onDismiss: () => void }) {
+  const [remaining, setRemaining] = useState<number | null>(null);
 
   useEffect(() => {
     function tick() {

@@ -1,11 +1,12 @@
-import { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { getRefill, editRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import type { Refill } from "@/types";
 
 const PRIORITIES = ["low", "normal", "high", "stat"];
 
-const DAW_CODES = {
+const DAW_CODES: Record<number, string> = {
   0: "No product selection indicated (generic substitution allowed)",
   1: "Substitution not allowed by prescriber (brand medically necessary)",
   2: "Patient requested brand",
@@ -18,10 +19,16 @@ const DAW_CODES = {
   9: "Other",
 };
 
-export default function EditRefillView({ refillId, onBack, onSaved }) {
+interface EditRefillViewProps {
+  refillId: number;
+  onBack?: () => void;
+  onSaved?: (updated: Refill) => void;
+}
+
+export default function EditRefillView({ refillId, onBack, onSaved }: EditRefillViewProps) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
-  const [refill, setRefill] = useState(null);
+  const [refill, setRefill] = useState<Refill | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -36,7 +43,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
 
   useEffect(() => {
     getRefill(refillId, token)
-      .then((r) => {
+      .then((r: Refill & { priority: string; due_date: string }) => {
         setRefill(r);
         setQuantity(String(r.quantity));
         setDaysSupply(String(r.days_supply));
@@ -46,16 +53,16 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
         setDawCode(r.prescription.daw_code ?? 0);
         setError("");
       })
-      .catch((e) => setError(e.message))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [refillId]);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaving(true);
     setError("");
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       quantity: parseInt(quantity, 10),
       days_supply: parseInt(daysSupply, 10),
       priority,
@@ -73,7 +80,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
       addNotification(msg, "success");
       if (onSaved) onSaved(updated);
     } catch (e) {
-      setError(e.message);
+      setError((e as Error).message);
     } finally {
       setSaving(false);
     }
@@ -113,7 +120,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
                 type="number"
                 min="1"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)}
                 required
                 style={{ width: "100%", padding: "0.5rem", background: "var(--bg-light)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)" }}
               />
@@ -127,7 +134,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
                 type="number"
                 min="1"
                 value={daysSupply}
-                onChange={(e) => setDaysSupply(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDaysSupply(e.target.value)}
                 required
                 style={{ width: "100%", padding: "0.5rem", background: "var(--bg-light)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)" }}
               />
@@ -139,7 +146,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
               </label>
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPriority(e.target.value)}
                 style={{ width: "100%", padding: "0.5rem", background: "var(--bg-light)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)" }}
               >
                 {PRIORITIES.map((p) => (
@@ -155,7 +162,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
               <input
                 type="date"
                 value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDueDate(e.target.value)}
                 required
                 style={{ width: "100%", padding: "0.5rem", background: "var(--bg-light)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)" }}
               />
@@ -168,7 +175,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
             </label>
             <textarea
               value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInstructions(e.target.value)}
               rows={3}
               style={{ width: "100%", padding: "0.5rem", background: "var(--bg-light)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)", resize: "vertical", boxSizing: "border-box" }}
             />
@@ -180,7 +187,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }) {
             </label>
             <select
               value={dawCode}
-              onChange={(e) => setDawCode(parseInt(e.target.value, 10))}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDawCode(parseInt(e.target.value, 10))}
               style={{ width: "100%", padding: "0.5rem", background: "var(--bg-light)", border: "1px solid var(--border)", borderRadius: "6px", color: "var(--text)" }}
             >
               {Object.entries(DAW_CODES).map(([code, desc]) => (

@@ -6,14 +6,35 @@
  * The context value shape is intentionally identical to the old one so every
  * consumer (PrescriptionForm, EditRefillView, etc.) works without changes.
  */
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDrugs, getPrescribers } from "@/api";
 import { AuthContext } from "./AuthContext";
+import type { Drug, Prescriber, PaginatedResponse } from "@/types";
 
-export const DataContext = createContext();
+interface DataContextValue {
+  drugs: Drug[];
+  prescribers: Prescriber[];
+  loadingDrugs: boolean;
+  loadingPrescribers: boolean;
+  errorDrugs: string;
+  errorPrescribers: string;
+}
 
-export const DataProvider = ({ children }) => {
+export const DataContext = createContext<DataContextValue>({
+  drugs: [],
+  prescribers: [],
+  loadingDrugs: false,
+  loadingPrescribers: false,
+  errorDrugs: "",
+  errorPrescribers: "",
+});
+
+function unwrapItems<T>(data: PaginatedResponse<T> | T[]): T[] {
+  return Array.isArray(data) ? data : data.items;
+}
+
+export const DataProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, token } = useContext(AuthContext);
 
   const {
@@ -22,10 +43,10 @@ export const DataProvider = ({ children }) => {
     error: drugsError,
   } = useQuery({
     queryKey: ["drugs", token],
-    queryFn: () => getDrugs(token),
+    queryFn: () => getDrugs(token!),
     enabled: isAuthenticated && !!token,
     // Unwrap paginated response shape or plain array
-    select: (data) => data.items ?? data,
+    select: unwrapItems<Drug>,
     // Drugs change rarely — keep the cache fresh for 5 minutes
     staleTime: 5 * 60 * 1000,
   });
@@ -36,9 +57,9 @@ export const DataProvider = ({ children }) => {
     error: prescribersError,
   } = useQuery({
     queryKey: ["prescribers", token],
-    queryFn: () => getPrescribers(token),
+    queryFn: () => getPrescribers(token!),
     enabled: isAuthenticated && !!token,
-    select: (data) => data.items ?? data,
+    select: unwrapItems<Prescriber>,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -49,8 +70,8 @@ export const DataProvider = ({ children }) => {
         prescribers,
         loadingDrugs,
         loadingPrescribers,
-        errorDrugs: drugsError?.message ?? "",
-        errorPrescribers: prescribersError?.message ?? "",
+        errorDrugs: (drugsError as Error)?.message ?? "",
+        errorPrescribers: (prescribersError as Error)?.message ?? "",
       }}
     >
       {children}

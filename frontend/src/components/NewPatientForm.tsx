@@ -1,12 +1,29 @@
-import { useState, useContext } from "react";
+import React, { useState, useContext } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { createPatient } from "@/api";
+import type { Patient } from "@/types";
 
-export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, onBack }) {
+interface NewPatientFormProps {
+  prefillLast?: string;
+  prefillFirst?: string;
+  onCreated: (patient: Patient) => void;
+  onBack: () => void;
+}
+
+interface PatientForm {
+  first_name: string;
+  last_name: string;
+  dob: string;
+  address: string;
+  city: string;
+  state: string;
+}
+
+export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, onBack }: NewPatientFormProps) {
   const { token } = useContext(AuthContext);
   const UPPERCASE_FIELDS = ["first_name", "last_name", "address", "city", "state"];
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<PatientForm>({
     first_name: (prefillFirst || "").toUpperCase(),
     last_name: (prefillLast || "").toUpperCase(),
     dob: "",
@@ -17,7 +34,7 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  function handleChange(e) {
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const { name, value } = e.target;
     setForm((prev) => ({
       ...prev,
@@ -25,7 +42,7 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
     }));
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     setSubmitting(true);
@@ -33,7 +50,7 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
       const patient = await createPatient(form, token);
       onCreated(patient);
     } catch (err) {
-      setError(err.message);
+      setError((err as Error).message);
     } finally {
       setSubmitting(false);
     }

@@ -1,6 +1,14 @@
 import { useNotification } from "@/context/NotificationContext";
+import type { NotificationType } from "@/types";
 
-const TYPE_STYLES = {
+interface TypeStyle {
+  background: string;
+  border: string;
+  iconColor: string;
+  icon: string;
+}
+
+const TYPE_STYLES: Record<NotificationType, TypeStyle> = {
   success: {
     background: "rgba(6, 214, 160, 0.15)",
     border: "1px solid var(--success, #06d6a0)",

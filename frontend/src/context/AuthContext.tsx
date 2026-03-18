@@ -8,12 +8,13 @@
  * work unchanged. New code can also import `useAuthStore` directly from
  * @/stores/authStore for selector-based subscriptions.
  */
-import { createContext, useEffect } from "react";
+import { createContext, useEffect, type ReactNode } from "react";
 import { useAuthStore } from "@/stores/authStore";
+import type { AuthState } from "@/stores/authStore";
 
-export const AuthContext = createContext();
+export const AuthContext = createContext<AuthState>({} as AuthState);
 
-export function AuthProvider({ children }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const store = useAuthStore();
   const { isAuthenticated, resetTimer, logout } = store;
 

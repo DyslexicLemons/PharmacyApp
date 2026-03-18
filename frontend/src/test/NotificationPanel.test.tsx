@@ -3,10 +3,11 @@ import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import NotificationPanel from "@/components/NotificationPanel";
+import type { NotificationType } from "@/types";
 
 // Helper: renders NotificationPanel inside the provider along with a button
 // that can fire addNotification so we can test from the outside.
-function TestHarness({ message = "Test message", type = "info" }) {
+function TestHarness({ message = "Test message", type = "info" as NotificationType }) {
   const { addNotification } = useNotification();
   return (
     <>
@@ -16,7 +17,7 @@ function TestHarness({ message = "Test message", type = "info" }) {
   );
 }
 
-function renderPanel(props = {}) {
+function renderPanel(props: { message?: string; type?: NotificationType } = {}) {
   return render(
     <NotificationProvider>
       <TestHarness {...props} />
@@ -73,7 +74,7 @@ describe("NotificationPanel", () => {
   it("renders warning and error notification types", async () => {
     const user = userEvent.setup();
 
-    for (const [type, icon] of [["warning", "⚠"], ["error", "✕"]]) {
+    for (const [type, icon] of [["warning", "⚠"], ["error", "✕"]] as [NotificationType, string][]) {
       const { unmount } = render(
         <NotificationProvider>
           <TestHarness message={`${type} msg`} type={type} />

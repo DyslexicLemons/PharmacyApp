@@ -27,7 +27,14 @@
       "Bash(.venv/Scripts/python -m pytest tests/ -v -x -q)",
       "Bash(.venv/Scripts/python -m pytest tests/test_health.py -v)",
       "Bash(.venv/Scripts/python -m pytest tests/test_queue_summary.py -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=no -q)"
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=no -q)",
+      "Bash(npm install:*)",
+      "Bash(mv AuditLogView.jsx AuditLogView.tsx)",
+      "Bash(mv BackButton.jsx BackButton.tsx)",
+      "Bash(mv Badge.jsx Badge.tsx)",
+      "Bash(mv CommandBar.jsx CommandBar.tsx)",
+      "Bash(mv DrugsView.jsx DrugsView.tsx)",
+      "Bash(ls C:UsersjmajoVSProjectsPharmacyAppfrontendsrccomponents*.tsx)"
     ]
   }
 }

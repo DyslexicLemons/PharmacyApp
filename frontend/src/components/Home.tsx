@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+interface HomeProps {
+  onCommand?: (cmd: string) => void;
+}
 
-export default function Home({ onCommand }) {
+export default function Home({ onCommand }: HomeProps) {
   return (
     <div className="vstack">
       <h1>💊 JoeMed</h1>

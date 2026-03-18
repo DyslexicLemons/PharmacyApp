@@ -1,18 +1,29 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getAuditLog } from "@/api";
+import type { AuditLogEntry, PaginatedResponse } from "@/types";
 
 const PAGE_SIZE = 15;
 
-export default function AuditLogView({ onBack, page = 1 }) {
+interface AuditFilters {
+  username?: string;
+  prescriptionId?: string;
+}
+
+interface AuditLogViewProps {
+  onBack?: () => void;
+  page?: number;
+}
+
+export default function AuditLogView({ onBack, page = 1 }: AuditLogViewProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ items: [], total: 0 });
+  const [data, setData] = useState<PaginatedResponse<AuditLogEntry>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const [usernameInput, setUsernameInput] = useState("");
   const [rxInput, setRxInput] = useState("");
-  const [filters, setFilters] = useState({});
+  const [filters, setFilters] = useState<AuditFilters>({});
 
   useEffect(() => {
     if (!token) return;
@@ -20,13 +31,13 @@ export default function AuditLogView({ onBack, page = 1 }) {
     const offset = (page - 1) * PAGE_SIZE;
     getAuditLog(token, PAGE_SIZE, offset, filters)
       .then(setData)
-      .catch((e) => setError(e.message))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page, filters]);
 
-  function applyFilters(e) {
+  function applyFilters(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const next = {};
+    const next: AuditFilters = {};
     if (usernameInput.trim()) next.username = usernameInput.trim();
     if (rxInput.trim()) next.prescriptionId = rxInput.trim();
     setFilters(next);
@@ -59,7 +70,7 @@ export default function AuditLogView({ onBack, page = 1 }) {
           <input
             className="input"
             value={usernameInput}
-            onChange={(e) => setUsernameInput(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsernameInput(e.target.value)}
             placeholder="e.g. jsmith"
             style={{ width: "160px" }}
           />
@@ -69,7 +80,7 @@ export default function AuditLogView({ onBack, page = 1 }) {
           <input
             className="input"
             value={rxInput}
-            onChange={(e) => setRxInput(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRxInput(e.target.value)}
             placeholder="e.g. 42"
             type="number"
             min="1"
@@ -138,7 +149,7 @@ export default function AuditLogView({ onBack, page = 1 }) {
                   <td style={{ fontSize: "0.85rem", maxWidth: "300px", wordBreak: "break-word" }}>
                     {entry.details ?? "—"}
                   </td>
-                  <td>{entry.performed_by ?? "—"}</td>
+                  <td>{(entry as AuditLogEntry & { performed_by?: string }).performed_by ?? "—"}</td>
                 </tr>
               );
             })}
