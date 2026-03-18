@@ -8,14 +8,16 @@ no-op rather than a double-write.
 
 import logging
 import os
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import redis as _redis
 from celery import shared_task
 
+from datetime import timezone
+
 from .database import SessionLocal
-from .models import Prescription, Refill, RxState
+from .models import Prescription, QuickCode, Refill, RxState
 from .utils import _int, _write_audit
 
 logger = logging.getLogger("pharmacy.tasks")
@@ -156,4 +158,38 @@ def promote_scheduled_refills(self: Any) -> dict:  # type: ignore[type-arg]
             db.close()
     except Exception as exc:
         logger.exception("Error in promote_scheduled_refills task")
+        raise self.retry(exc=exc, countdown=60)
+
+
+@shared_task(name="app.tasks.purge_expired_quick_codes", bind=True, max_retries=3)
+def purge_expired_quick_codes(self: Any) -> dict:  # type: ignore[type-arg]
+    """Delete QuickCode rows that expired more than one hour ago.
+
+    The DB-backed quick-code path (Redis fallback) never deletes rows on its own,
+    so without this task the quick_codes table grows unboundedly with stale rows.
+    A one-hour grace window is kept so that any in-flight lookups at the moment
+    of expiry are not affected.
+    """
+    if not _acquire_lock("lock:purge_expired_quick_codes"):
+        logger.info("purge_expired_quick_codes: lock held by another worker — skipping")
+        return {"skipped": True}
+
+    try:
+        db = SessionLocal()
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+            # Use a bulk DELETE for efficiency — no need to load rows into memory.
+            deleted = (
+                db.query(QuickCode)
+                .filter(QuickCode.expires_at < cutoff)
+                .delete(synchronize_session=False)
+            )
+            if deleted:
+                db.commit()
+                logger.info("Purged %d expired quick code(s)", deleted)
+            return {"deleted": deleted}
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.exception("Error in purge_expired_quick_codes task")
         raise self.retry(exc=exc, countdown=60)

@@ -427,3 +427,23 @@ class TestStateTransitionAuditLog:
             AuditLog.details.contains("TestRPh")
         ).first()
         assert log is not None
+
+    def test_rejection_reason_too_long_is_rejected(self, client, db_session):
+        """rejection_reason over 500 chars must be rejected at the schema level."""
+        _, refill = setup_refill(db_session, RxState.QV1)
+        resp = advance(
+            client, refill.id,
+            action="reject",
+            rejection_reason="x" * 501,
+        )
+        assert resp.status_code == 422
+
+    def test_rejected_by_too_long_is_rejected(self, client, db_session):
+        """rejected_by over 200 chars must be rejected at the schema level."""
+        _, refill = setup_refill(db_session, RxState.QV1)
+        resp = advance(
+            client, refill.id,
+            action="reject",
+            rejected_by="x" * 201,
+        )
+        assert resp.status_code == 422
