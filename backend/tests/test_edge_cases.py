@@ -7,6 +7,7 @@ patient safety issues if not properly handled.
 import pytest
 from decimal import Decimal
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from app.models import RxState, Priority, Refill, Prescription, RefillHist
 from tests.conftest import (
@@ -558,3 +559,139 @@ class TestAutoScheduleNextFill:
         ).first()
         expected_due = date.today() + timedelta(days=30)
         assert scheduled.due_date == expected_due
+
+
+# ===========================================================================
+# SCHEDULED → QT PROMOTION (Celery task quantity invariant)
+# ===========================================================================
+
+class TestScheduledPromotion:
+    """
+    Verify that promote_scheduled_refills correctly deducts remaining_quantity
+    when auto-promoting SCHEDULED refills into QT.
+
+    The task creates its own SessionLocal() session, so test data must be
+    committed before calling it, and test objects must be refreshed after.
+    """
+
+    def test_promote_deducts_quantity(self, db_session):
+        """Promoting a SCHEDULED refill to QT decrements remaining_quantity."""
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                    state=RxState.SCHEDULED, due_date=date.today())
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["promoted"] == 1
+        db.expire_all()
+        db.refresh(prescription)
+        assert prescription.remaining_quantity == 60  # 90 - 30
+
+    def test_promote_sets_state_to_qt(self, db_session):
+        """Promoting a SCHEDULED refill sets its state to QT."""
+        from app.models import Refill as RefillModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                             state=RxState.SCHEDULED, due_date=date.today())
+        db.commit()
+        refill_id = refill.id
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            promote_scheduled_refills()
+
+        db.expire_all()
+        promoted = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
+        assert promoted.state == RxState.QT
+
+    def test_promote_skips_when_insufficient_quantity(self, db_session):
+        """A SCHEDULED refill is not promoted when remaining_quantity < refill.quantity."""
+        from app.models import Refill as RefillModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 30, 0)  # 0 remaining
+        refill = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                             state=RxState.SCHEDULED, due_date=date.today())
+        db.commit()
+        refill_id = refill.id
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["promoted"] == 0
+        db.expire_all()
+        skipped = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
+        assert skipped.state == RxState.SCHEDULED  # unchanged
+        db.refresh(prescription)
+        assert prescription.remaining_quantity == 0  # unchanged
+
+    def test_promote_skips_future_due_date(self, db_session):
+        """A SCHEDULED refill whose due_date is in the future is not promoted."""
+        from app.models import Refill as RefillModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                             state=RxState.SCHEDULED, due_date=date.today() + timedelta(days=7))
+        db.commit()
+        refill_id = refill.id
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["promoted"] == 0
+        db.expire_all()
+        future = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
+        assert future.state == RxState.SCHEDULED
+
+    def test_promote_multiple_refills_same_prescription(self, db_session):
+        """
+        Two SCHEDULED refills on the same prescription — only the first is
+        promoted if the prescription has enough quantity for one but not both.
+        """
+        from app.models import Refill as RefillModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 30)  # only 30 left
+        r1 = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                         state=RxState.SCHEDULED, due_date=date.today() - timedelta(days=1))
+        r2 = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                         state=RxState.SCHEDULED, due_date=date.today())
+        db.commit()
+        r1_id, r2_id = r1.id, r2.id
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["promoted"] == 1
+        db.expire_all()
+        states = {
+            r.id: r.state
+            for r in db.query(RefillModel).filter(RefillModel.id.in_([r1_id, r2_id])).all()
+        }
+        qt_count = sum(1 for s in states.values() if s == RxState.QT)
+        scheduled_count = sum(1 for s in states.values() if s == RxState.SCHEDULED)
+        assert qt_count == 1
+        assert scheduled_count == 1
+        db.refresh(prescription)
+        assert prescription.remaining_quantity == 0

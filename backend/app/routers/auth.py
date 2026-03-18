@@ -32,7 +32,7 @@ def _verify_password(plain: str, hashed: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Quick code helpers — 6 alphanumeric characters (36^6 ≈ 2.18 billion combos)
+# Quick code helpers — 3 uppercase letters only (26^3 = 17,576 combos)
 # ---------------------------------------------------------------------------
 
 _QUICK_CODE_ALPHABET = string.ascii_uppercase

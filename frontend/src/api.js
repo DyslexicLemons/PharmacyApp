@@ -1,5 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
-const V1 = `${BASE}/api/v1`;
+const V1 = '/api/v1';
 
 // ---------------------------------------------------------------------------
 // Internal helpers

@@ -18,7 +18,9 @@
       "Bash(npm test:*)",
       "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp -type f -name *.env* -o -name .env)",
       "Bash(.venv/Scripts/python -m pytest tests/ -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/)"
+      "Bash(.venv/Scripts/python -m pytest tests/)",
+      "Bash(.venv/Scripts/python -m pip install fakeredis --quiet)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_refill_cache.py -v)"
     ]
   }
 }

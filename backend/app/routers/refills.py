@@ -7,7 +7,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, desc
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
+
+from pydantic import TypeAdapter
 
 from ..auth import get_current_user
 from ..database import get_db
@@ -15,13 +17,17 @@ from ..models import (
     Drug, Patient, Prescription, Prescriber, Priority, Refill,
     RefillHist, RxState, PatientInsurance, User,
 )
-from .. import schemas
+from .. import cache, schemas
 from ..utils import _int, _parse_priority, _write_audit
 import logging
 
 logger = logging.getLogger("pharmacy.rx")
 
 router = APIRouter(prefix="/refills", tags=["refills"])
+
+# TypeAdapters are built once at import time — reused for every cache write.
+_queue_ta: TypeAdapter = TypeAdapter(schemas.PaginatedResponse[schemas.RefillOut])  # type: ignore[type-arg]
+_refill_ta: TypeAdapter = TypeAdapter(schemas.RefillOut)
 
 # ---------------------------------------------------------------------------
 # State machine constants
@@ -98,6 +104,10 @@ def check_refill_conflict(
     )
 
 
+_QUEUE_CACHE_TTL = 30   # seconds — short because staff actively works the queue
+_REFILL_CACHE_TTL = 60  # seconds
+
+
 @router.get("", response_model=schemas.PaginatedResponse[schemas.RefillOut])
 def get_refills(
     state: Optional[str] = None,
@@ -106,6 +116,11 @@ def get_refills(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    cache_key = f"refills:queue:{state or 'ALL'}:{limit}:{offset}"
+    cached = cache.cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(Refill)
     if state and state != "ALL":
         try:
@@ -114,8 +129,23 @@ def get_refills(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid state: {state}")
     total = query.count()
-    items = query.offset(offset).limit(limit).all()
-    return {"items": items, "total": total, "limit": limit, "offset": offset}
+    items = (
+        query
+        .options(
+            joinedload(Refill.prescription).joinedload(Prescription.patient),
+            joinedload(Refill.prescription).joinedload(Prescription.drug),
+        )
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    result = {"items": items, "total": total, "limit": limit, "offset": offset}
+    cache.cache_set(
+        cache_key,
+        _queue_ta.validate_python(result, from_attributes=True).model_dump(mode="json"),
+        _QUEUE_CACHE_TTL,
+    )
+    return result
 
 
 @router.get("/{rx_id}", response_model=schemas.RefillOut)
@@ -124,6 +154,11 @@ def get_refill(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    cache_key = f"refills:id:{rx_id}"
+    cached = cache.cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     rx = db.query(Refill).options(
         joinedload(Refill.patient),
         joinedload(Refill.drug),
@@ -131,6 +166,11 @@ def get_refill(
     ).filter(Refill.id == rx_id).first()
     if not rx:
         raise HTTPException(status_code=404, detail="Refill not found")
+    cache.cache_set(
+        cache_key,
+        _refill_ta.validate_python(rx, from_attributes=True).model_dump(mode="json"),
+        _REFILL_CACHE_TTL,
+    )
     return rx
 
 
@@ -141,11 +181,17 @@ def advance_refill(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rx = db.query(Refill).options(
-        joinedload(Refill.patient),
-        joinedload(Refill.drug),
-        joinedload(Refill.prescription).joinedload(Prescription.prescriber),
-    ).filter(Refill.id == rx_id).first()
+    rx = (
+        db.query(Refill)
+        .options(
+            selectinload(Refill.patient),
+            selectinload(Refill.drug),
+            selectinload(Refill.prescription).selectinload(Prescription.prescriber),
+        )
+        .filter(Refill.id == rx_id)
+        .with_for_update(of=Refill)
+        .first()
+    )
 
     if not rx:
         raise HTTPException(status_code=404, detail="Refill not found")
@@ -285,6 +331,8 @@ def advance_refill(
         performed_by=current_user.username,
     )
     db.commit()
+    cache.cache_delete(f"refills:id:{rx_id}")
+    cache.cache_delete_pattern("refills:queue:*")
     db.refresh(rx)
     return rx
 
@@ -299,11 +347,17 @@ def edit_refill(
     """Edit a refill in QT, QP, or HOLD state."""
     EDITABLE_STATES = {RxState.QT, RxState.QP, RxState.HOLD}
 
-    rx = db.query(Refill).options(
-        joinedload(Refill.patient),
-        joinedload(Refill.drug),
-        joinedload(Refill.prescription).joinedload(Prescription.prescriber),
-    ).filter(Refill.id == rx_id).first()
+    rx = (
+        db.query(Refill)
+        .options(
+            selectinload(Refill.patient),
+            selectinload(Refill.drug),
+            selectinload(Refill.prescription).selectinload(Prescription.prescriber),
+        )
+        .filter(Refill.id == rx_id)
+        .with_for_update(of=Refill)
+        .first()
+    )
 
     if not rx:
         raise HTTPException(status_code=404, detail="Refill not found")
@@ -388,6 +442,8 @@ def edit_refill(
         performed_by=current_user.username,
     )
     db.commit()
+    cache.cache_delete(f"refills:id:{rx_id}")
+    cache.cache_delete_pattern("refills:queue:*")
     db.refresh(rx)
     return rx
 
@@ -474,6 +530,7 @@ def upload_json_prescription(
         performed_by=current_user.username,
     )
     db.commit()
+    cache.cache_delete_pattern("refills:queue:*")
     db.refresh(refill)
     return {"message": "Prescription uploaded successfully", "refill_id": refill.id, "state": "QT"}
 
@@ -551,5 +608,6 @@ def create_manual_prescription(
         performed_by=current_user.username,
     )
     db.commit()
+    cache.cache_delete_pattern("refills:queue:*")
     db.refresh(refill)
     return {"message": "Prescription created successfully", "RX#": prescription.id, "state": str(initial_state)}

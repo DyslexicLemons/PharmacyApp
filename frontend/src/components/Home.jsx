@@ -88,6 +88,27 @@ export default function Home({ onCommand }) {
               </li>
             </ul>
           </section>
+
+          {/* Admin Commands */}
+          <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(220, 20, 60, 0.1) 0%, rgba(178, 34, 34, 0.1) 100%)" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              ⚙️ Admin Commands
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>register</code> – Register a new user account
+              </li>
+              <li>
+                <code>users</code> – Manage users (create accounts, assign roles)
+              </li>
+              <li>
+                <code>logs</code> – View audit log
+              </li>
+              <li>
+                <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
+              </li>
+            </ul>
+          </section>
         </div>
 
         {/* Right Column */}
@@ -133,27 +154,6 @@ export default function Home({ onCommand }) {
             <ul style={{ margin: 0 }}>
               <li>
                 <code>refill_hist</code> – View fill history
-              </li>
-            </ul>
-          </section>
-
-          {/* Admin Commands */}
-          <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(220, 20, 60, 0.1) 0%, rgba(178, 34, 34, 0.1) 100%)" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              ⚙️ Admin Commands
-            </h3>
-            <ul style={{ margin: 0 }}>
-              <li>
-                <code>register</code> – Register a new user account
-              </li>
-              <li>
-                <code>users</code> – Manage users (create accounts, assign roles)
-              </li>
-              <li>
-                <code>logs</code> – View audit log
-              </li>
-              <li>
-                <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
               </li>
             </ul>
           </section>

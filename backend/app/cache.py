@@ -1,16 +1,18 @@
-"""Redis cache client — used for quick-code storage and future caching needs.
+"""Redis cache client — quick-code storage and query result caching.
 
-When REDIS_URL is set, quick codes are stored in Redis with a 10-minute TTL
-instead of the `quick_codes` database table. This removes write load from
-Postgres for transient data and gives sub-millisecond lookups.
+When REDIS_URL is set:
+- Quick codes are stored with a 10-minute TTL instead of the quick_codes table.
+- Hot read endpoints (refill queue, individual refills) cache results with
+  short TTLs (30–60 s) and are actively invalidated on writes.
 
 If REDIS_URL is not configured (local dev without Redis), all operations
 return False / None so callers fall back to the database transparently.
 """
 
+import json
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 import redis as _redis
 
@@ -100,3 +102,51 @@ def consume_quick_code(code: str) -> Optional[int]:
     except Exception as exc:
         logger.warning("Redis consume_quick_code failed: %s", exc)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Generic query-result cache
+# ---------------------------------------------------------------------------
+
+def cache_get(key: str) -> Optional[Any]:
+    """Return a previously cached value, or None if missing / Redis unavailable."""
+    if _client is None:
+        return None
+    try:
+        raw = _client.get(key)
+        return json.loads(raw) if raw else None
+    except Exception as exc:
+        logger.warning("cache_get failed for %s: %s", key, exc)
+        return None
+
+
+def cache_set(key: str, data: Any, ttl: int = 60) -> None:
+    """Store *data* (must be JSON-serialisable) under *key* with a TTL in seconds."""
+    if _client is None:
+        return
+    try:
+        _client.setex(key, ttl, json.dumps(data))
+    except Exception as exc:
+        logger.warning("cache_set failed for %s: %s", key, exc)
+
+
+def cache_delete(key: str) -> None:
+    """Delete a single cache key."""
+    if _client is None:
+        return
+    try:
+        _client.delete(key)
+    except Exception as exc:
+        logger.warning("cache_delete failed for %s: %s", key, exc)
+
+
+def cache_delete_pattern(pattern: str) -> None:
+    """Delete all keys matching a glob pattern (e.g. 'refills:queue:*')."""
+    if _client is None:
+        return
+    try:
+        keys = list(_client.scan_iter(pattern, count=100))
+        if keys:
+            _client.delete(*keys)
+    except Exception as exc:
+        logger.warning("cache_delete_pattern failed for %s: %s", pattern, exc)
