@@ -8,9 +8,9 @@ replica. Workers can scale freely; the Redis lock inside each task ensures
 a duplicate invocation (e.g. from a mis-configured second Beat) is a no-op.
 
 Schedule (all times UTC):
-  - expire-prescriptions-daily        — 00:00 UTC
-  - promote-scheduled-refills-daily   — 03:00 UTC
-  - purge-expired-quick-codes-hourly  — :30 every hour
+  - expire-prescriptions-daily          — 00:00 UTC
+  - promote-scheduled-refills-halfhour  — every 30 minutes
+  - purge-expired-quick-codes-hourly    — :30 every hour
 """
 
 import os
@@ -36,9 +36,9 @@ celery_app.conf.update(
             "task": "app.tasks.expire_prescriptions",
             "schedule": crontab(hour=0, minute=0),
         },
-        "promote-scheduled-refills-daily": {
+        "promote-scheduled-refills-halfhour": {
             "task": "app.tasks.promote_scheduled_refills",
-            "schedule": crontab(hour=3, minute=0),
+            "schedule": crontab(minute="*/30"),
         },
         "purge-expired-quick-codes-hourly": {
             "task": "app.tasks.purge_expired_quick_codes",

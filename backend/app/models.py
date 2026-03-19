@@ -222,11 +222,11 @@ class User(Base):
 
 
 class QuickCode(Base):
-    """Short-lived 6-character login codes generated after successful authentication."""
+    """Short-lived 3-character login codes generated after successful authentication."""
     __tablename__ = "quick_codes"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String(6), nullable=False, index=True)
+    code = Column(String(3), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used = Column(Boolean, default=False)

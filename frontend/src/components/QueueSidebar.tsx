@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchQueue } from "@/api";
+import { fetchQueue, fetchQueueSummary } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import type { Refill, PaginatedResponse } from "@/types";
 
@@ -52,7 +52,8 @@ function extractItems(result: PaginatedResponse<Refill> | Refill[]): RefillWithD
 type QueueData = Record<QueueKey, RefillWithDue[]>;
 
 export default function QueueSidebar() {
-  const { token } = useContext(AuthContext);
+  const { token, authUser } = useContext(AuthContext);
+  const isAdmin = authUser?.isAdmin ?? false;
 
   const { data, isLoading } = useQuery<QueueData>({
     queryKey: ["queue-sidebar", token],
@@ -67,6 +68,13 @@ export default function QueueSidebar() {
       ),
     refetchInterval: 30_000,
     enabled: !!token,
+  });
+
+  const { data: summary } = useQuery({
+    queryKey: ["queue-summary", token],
+    queryFn: () => fetchQueueSummary(token!),
+    refetchInterval: 60_000,
+    enabled: !!token && isAdmin,
   });
 
   return (
@@ -175,6 +183,21 @@ export default function QueueSidebar() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {isAdmin && summary && summary.overdue_scheduled > 0 && (
+        <div style={{
+          margin: "8px 10px",
+          padding: "6px 10px",
+          background: "#ef476f22",
+          border: "1px solid #ef476f",
+          borderRadius: 6,
+          fontSize: "0.72rem",
+          color: "#ef476f",
+          fontWeight: 600,
+        }}>
+          ⚠ {summary.overdue_scheduled} overdue scheduled refill{summary.overdue_scheduled !== 1 ? "s" : ""} pending promotion
         </div>
       )}
     </div>
