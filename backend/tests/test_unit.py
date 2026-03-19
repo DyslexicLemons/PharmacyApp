@@ -21,6 +21,7 @@ from app.schemas import (
 )
 from app.models import RxState, Priority
 from app.utils import _int, _mask_patient_id, _parse_priority
+from app.routers.refills import _adjust_prescription_reservation
 from fastapi import HTTPException
 
 
@@ -423,6 +424,80 @@ class TestPriorityEnum:
     def test_priority_from_name(self):
         assert Priority["low"] == Priority.low
         assert Priority["stat"] == Priority.stat
+
+
+# ===========================================================================
+# _adjust_prescription_reservation (quantity accounting helper)
+# ===========================================================================
+
+class _FakePrescription:
+    """Minimal stub — only remaining_quantity is needed by the helper."""
+    def __init__(self, remaining: int):
+        self.remaining_quantity = remaining
+
+
+class TestAdjustPrescriptionReservation:
+    def test_reserve_increases_delta_decreases_remaining(self):
+        """inactive → active: new_reserved=30, old_reserved=0 → remaining drops by 30."""
+        p = _FakePrescription(60)
+        _adjust_prescription_reservation(p, old_reserved=0, new_reserved=30)
+        assert p.remaining_quantity == 30
+
+    def test_release_decreases_delta_increases_remaining(self):
+        """active → HOLD/REJECTED: old_reserved=30, new_reserved=0 → remaining rises by 30."""
+        p = _FakePrescription(30)
+        _adjust_prescription_reservation(p, old_reserved=30, new_reserved=0)
+        assert p.remaining_quantity == 60
+
+    def test_no_change_when_equal(self):
+        """Same quantity in both directions → remaining_quantity unchanged."""
+        p = _FakePrescription(45)
+        _adjust_prescription_reservation(p, old_reserved=20, new_reserved=20)
+        assert p.remaining_quantity == 45
+
+    def test_quantity_increase_during_edit(self):
+        """Edit active fill: old=30, new=60 → remaining decreases by 30."""
+        p = _FakePrescription(60)
+        _adjust_prescription_reservation(p, old_reserved=30, new_reserved=60)
+        assert p.remaining_quantity == 30
+
+    def test_quantity_decrease_during_edit(self):
+        """Edit active fill: old=30, new=10 → remaining increases by 20."""
+        p = _FakePrescription(10)
+        _adjust_prescription_reservation(p, old_reserved=30, new_reserved=10)
+        assert p.remaining_quantity == 30
+
+    def test_exact_remaining_available_passes(self):
+        """Reserving exactly the remaining available quantity should succeed."""
+        p = _FakePrescription(30)
+        _adjust_prescription_reservation(p, old_reserved=0, new_reserved=30)
+        assert p.remaining_quantity == 0
+
+    def test_exceeds_remaining_raises_409(self):
+        """Requesting more than remaining must raise 409."""
+        p = _FakePrescription(20)
+        with pytest.raises(HTTPException) as exc_info:
+            _adjust_prescription_reservation(p, old_reserved=0, new_reserved=30)
+        assert exc_info.value.status_code == 409
+
+    def test_exceeds_remaining_by_one_raises_409(self):
+        """Boundary: one unit over remaining is still blocked."""
+        p = _FakePrescription(29)
+        with pytest.raises(HTTPException):
+            _adjust_prescription_reservation(p, old_reserved=0, new_reserved=30)
+
+    def test_release_never_raises(self):
+        """Releasing quantity (old > new) never raises regardless of remaining."""
+        p = _FakePrescription(0)
+        _adjust_prescription_reservation(p, old_reserved=90, new_reserved=0)
+        assert p.remaining_quantity == 90
+
+    def test_remaining_quantity_set_correctly_on_raise(self):
+        """On 409, prescription.remaining_quantity must not be mutated."""
+        p = _FakePrescription(10)
+        with pytest.raises(HTTPException):
+            _adjust_prescription_reservation(p, old_reserved=0, new_reserved=30)
+        assert p.remaining_quantity == 10  # unchanged
 
 
 # ===========================================================================
