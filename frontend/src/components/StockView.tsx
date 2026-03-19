@@ -40,6 +40,8 @@ export default function StockView({ onBack, onSelectStock, page = 1 }) {
             <th>Quantity</th>
             <th>Full Containers</th>
             <th>Partial Container</th>
+            <th>RTS Count</th>
+            <th>RTS Units</th>
             <th>NIOSH</th>
           </tr>
         </thead>
@@ -58,6 +60,16 @@ export default function StockView({ onBack, onSelectStock, page = 1 }) {
               <td>{s.quantity}</td>
               <td>{Math.floor(s.quantity / s.package_size)}</td>
               <td>{s.quantity % s.package_size > 0 ? `${s.quantity % s.package_size} / ${s.package_size}` : "—"}</td>
+              <td style={{ fontFamily: "monospace" }}>
+                {s.rts_count > 0 ? (
+                  <span style={{ color: "var(--warning, #ffbe0b)" }}>{s.rts_count}</span>
+                ) : "—"}
+              </td>
+              <td style={{ fontFamily: "monospace" }}>
+                {s.rts_quantity > 0 ? (
+                  <span style={{ color: "var(--warning, #ffbe0b)" }}>{s.rts_quantity}</span>
+                ) : "—"}
+              </td>
               <td>{s.drug.niosh ? "✔️" : "—"}</td>
             </tr>
           ))}

@@ -11,7 +11,8 @@ export type RxState =
   | "HOLD"
   | "SCHEDULED"
   | "REJECTED"
-  | "SOLD";
+  | "SOLD"
+  | "RTS";
 
 /** States where Approve & Advance is valid */
 export const APPROVABLE_STATES: RxState[] = ["QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED"];
@@ -119,6 +120,26 @@ export interface PatientInsurance {
   rx_pcn: string | null;
 }
 
+export interface RTSLookup {
+  refill_id: number;
+  drug_name: string;
+  ndc: string | null;
+  quantity: number;
+  patient_name: string;
+  bin_number: number | null;
+  completed_date: string | null;
+}
+
+export interface ReturnToStock {
+  id: number;
+  refill_id: number;
+  drug_id: number;
+  drug: Drug;
+  quantity: number;
+  returned_at: string;
+  returned_by: string;
+}
+
 export interface AuditLogEntry {
   id: number;
   timestamp: string;
@@ -218,4 +239,7 @@ export type RouteState =
   | { view: "AUDIT_LOG"; page?: number }
   | { view: "SHIPMENT" }
   | { view: "SHIPMENT_HIST"; page?: number }
-  | { view: "SYSTEM_SETTINGS" };
+  | { view: "SYSTEM_SETTINGS" }
+  | { view: "ADMIN_CONSOLE" }
+  | { view: "RTS_LOOKUP"; refillId?: number }
+  | { view: "RTS_HIST"; page?: number };

@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models import Drug, InventoryShipment, InventoryShipmentItem, Stock, User
+from sqlalchemy import func
+from ..models import Drug, InventoryShipment, InventoryShipmentItem, ReturnToStock, Stock, User
 from ..utils import _write_audit
 from .. import schemas
 
@@ -33,7 +34,34 @@ def get_stock(
     current_user: User = Depends(get_current_user),
 ):
     total = db.query(Stock).count()
-    items = db.query(Stock).offset(offset).limit(limit).all()
+    stock_items = db.query(Stock).offset(offset).limit(limit).all()
+
+    # Aggregate RTS totals per drug for display in stock view
+    rts_agg = (
+        db.query(
+            ReturnToStock.drug_id,
+            func.count(ReturnToStock.id).label("rts_count"),
+            func.sum(ReturnToStock.quantity).label("rts_quantity"),
+        )
+        .group_by(ReturnToStock.drug_id)
+        .all()
+    )
+    rts_map = {
+        row.drug_id: {"rts_count": row.rts_count, "rts_quantity": int(row.rts_quantity or 0)}
+        for row in rts_agg
+    }
+
+    items = [
+        schemas.StockOut(
+            drug_id=s.drug_id,
+            quantity=s.quantity,
+            package_size=s.package_size,
+            drug=schemas.DrugOut.model_validate(s.drug),
+            rts_count=rts_map.get(s.drug_id, {}).get("rts_count", 0),
+            rts_quantity=rts_map.get(s.drug_id, {}).get("rts_quantity", 0),
+        )
+        for s in stock_items
+    ]
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 

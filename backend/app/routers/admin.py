@@ -189,6 +189,309 @@ def get_queue_summary(
 
 
 # ---------------------------------------------------------------------------
+# Test data generator helpers
+# ---------------------------------------------------------------------------
+
+_FIRST_NAMES = [
+    "Alice", "Bob", "Carol", "David", "Emily", "Frank", "Grace", "Henry",
+    "Isabel", "James", "Karen", "Leo", "Maria", "Nathan", "Olivia", "Paul",
+    "Quinn", "Rachel", "Samuel", "Teresa", "Ursula", "Victor", "Wendy",
+    "Xander", "Yvonne", "Zachary", "Angela", "Brian", "Catherine", "Derek",
+    "Elena", "Finn", "Georgia", "Harold", "Irene", "Julian",
+]
+
+_LAST_NAMES = [
+    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller",
+    "Davis", "Wilson", "Moore", "Taylor", "Anderson", "Thomas", "Jackson",
+    "White", "Harris", "Martin", "Thompson", "Martinez", "Robinson", "Clark",
+    "Rodriguez", "Lewis", "Lee", "Walker", "Hall", "Allen", "Young", "King",
+    "Scott", "Green", "Adams", "Baker", "Nelson", "Carter", "Mitchell",
+]
+
+_STREETS = [
+    "Elm St", "Oak Ave", "Pine Blvd", "Maple Dr", "Birch Ln", "Cedar Rd",
+    "Spruce Ct", "Willow Way", "Aspen Pl", "Walnut St", "Hickory Ave",
+    "Poplar Blvd", "Chestnut Dr", "Sycamore Ln", "Magnolia Rd",
+]
+
+_CITIES = ["Springfield", "Riverside", "Georgetown", "Lakewood", "Fairview",
+           "Hillcrest", "Maplewood", "Oakdale", "Pinehurst", "Cedarville"]
+
+_STATES_ABBR = ["AL", "AZ", "CA", "CO", "FL", "GA", "IL", "MI", "NY", "OH",
+                "OR", "PA", "TX", "WA", "WI"]
+
+_SPECIALTIES = [
+    "Internal Medicine", "Family Medicine", "Cardiology", "Oncology",
+    "Endocrinology", "Neurology", "Psychiatry", "Pediatrics", "Geriatrics",
+    "Rheumatology",
+]
+
+_INSTRUCTIONS_POOL = [
+    "Take 1 tablet by mouth once daily in the morning",
+    "Take 1 tablet by mouth twice daily with food",
+    "Take 2 tablets by mouth every 4 to 6 hours as needed for pain",
+    "Take 1 capsule by mouth three times daily until finished",
+    "Take 1 tablet by mouth every 8 hours with food as needed for pain",
+    "Take 1 tablet by mouth once daily for blood pressure",
+    "Take 1 tablet by mouth daily for cardiovascular protection",
+    "Take 1 tablet by mouth three times daily with meals",
+    "Take 1 tablet by mouth daily, INR monitoring required",
+    "Take 1 tablet by mouth once daily at bedtime",
+    "Take 1 tablet by mouth every 12 hours",
+    "Take 1 capsule by mouth once daily on an empty stomach",
+    "Inject 10 units subcutaneously once daily before breakfast",
+    "Apply 1 patch to skin once weekly, rotate sites",
+    "Inhale 2 puffs by mouth every 4 to 6 hours as needed",
+    "Take 1 tablet by mouth once daily at the same time each day",
+    "Take 1 tablet by mouth twice daily, do not crush or chew",
+]
+
+
+def _rand_address() -> str:
+    num = random.randint(100, 9999)
+    street = random.choice(_STREETS)
+    city = random.choice(_CITIES)
+    state = random.choice(_STATES_ABBR)
+    return f"{num} {street}, {city}, {state}"
+
+
+def _rand_phone() -> str:
+    return f"({random.randint(200,999)}) {random.randint(100,999)}-{random.randint(1000,9999)}"
+
+
+def _unique_npi(db: Session) -> int:
+    """Generate a random unique 9-digit NPI not already in the database."""
+    for _ in range(50):
+        npi = random.randint(100_000_000, 999_999_999)
+        if not db.query(Prescriber).filter(Prescriber.npi == npi).first():
+            return npi
+    raise HTTPException(status_code=500, detail="Could not generate unique NPI")
+
+
+# ---------------------------------------------------------------------------
+# Admin console commands
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as _BaseModel
+
+
+class _GenerateCountRequest(_BaseModel):
+    count: int
+
+
+class _GeneratePrescriptionsRequest(_BaseModel):
+    count: int
+    state: str  # any RxState value, or "RANDOM"
+
+
+@router.post("/commands/generate_prescribers")
+def generate_prescribers(
+    body: _GenerateCountRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Generate N random prescribers. Admin-only."""
+    count = max(1, min(body.count, 100))
+    created = []
+    for _ in range(count):
+        prescriber = Prescriber(
+            npi=_unique_npi(db),
+            first_name=random.choice(_FIRST_NAMES),
+            last_name=random.choice(_LAST_NAMES),
+            phone_number=_rand_phone(),
+            address=_rand_address(),
+            specialty=random.choice(_SPECIALTIES),
+        )
+        db.add(prescriber)
+        created.append(prescriber)
+    db.commit()
+    return {"prescribers_created": len(created)}
+
+
+@router.post("/commands/generate_patients")
+def generate_patients(
+    body: _GenerateCountRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Generate N random patients. Admin-only."""
+    count = max(1, min(body.count, 200))
+    from datetime import date as _date
+    created = []
+    for _ in range(count):
+        year = random.randint(1940, 2005)
+        month = random.randint(1, 12)
+        day = random.randint(1, 28)
+        patient = Patient(
+            first_name=random.choice(_FIRST_NAMES),
+            last_name=random.choice(_LAST_NAMES),
+            dob=_date(year, month, day),
+            address=_rand_address(),
+        )
+        db.add(patient)
+        created.append(patient)
+    db.commit()
+    return {"patients_created": len(created)}
+
+
+@router.post("/commands/generate_prescriptions")
+def generate_prescriptions_command(
+    body: _GeneratePrescriptionsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Generate N prescriptions, each with a refill in the requested state.
+    state must be one of: QT, QV1, QP, QV2, READY, HOLD, SCHEDULED, REJECTED, SOLD, RANDOM.
+    RANDOM distributes across all states proportionally.
+    Admin-only.
+    """
+    valid_states = {s.value for s in RxState}
+    state_arg = body.state.upper()
+    if state_arg != "RANDOM" and state_arg not in valid_states:
+        raise HTTPException(status_code=400, detail=f"Invalid state '{body.state}'. Valid: {sorted(valid_states)} or RANDOM")
+
+    count = max(1, min(body.count, 500))
+
+    patients = db.query(Patient).all()
+    prescribers = db.query(Prescriber).all()
+    drugs = db.query(Drug).all()
+
+    if not patients or not prescribers or not drugs:
+        raise HTTPException(status_code=400, detail="Need patients, prescribers, and drugs in database first")
+
+    priorities = [Priority.low, Priority.normal, Priority.high, Priority.stat]
+    random_state_pool = [
+        RxState.QT, RxState.QT, RxState.QT,
+        RxState.QV1, RxState.QV1,
+        RxState.QP, RxState.QP, RxState.QP,
+        RxState.QV2, RxState.QV2,
+        RxState.READY, RxState.READY,
+        RxState.HOLD,
+        RxState.REJECTED,
+        RxState.SOLD,
+    ]
+
+    created_prescriptions = 0
+    created_refills = 0
+    created_hists = 0
+
+    for _ in range(count):
+        patient = random.choice(patients)
+        prescriber = random.choice(prescribers)
+        drug = random.choice(drugs)
+
+        refill_quantity = random.choice([30, 60, 90])
+        total_refills = random.randint(1, 12)
+        days_supply = random.choice([7, 14, 30, 60, 90])
+        days_ago = random.randint(0, 90)
+        date_received = date_type.today() - timedelta(days=days_ago)
+        expiration_date = date_received.replace(year=date_received.year + 1)
+
+        prescription = Prescription(
+            drug_id=drug.id,
+            daw_code=random.randint(0, 9),
+            original_quantity=refill_quantity * total_refills,
+            remaining_quantity=refill_quantity * total_refills,
+            date_received=date_received,
+            expiration_date=expiration_date,
+            patient_id=patient.id,
+            prescriber_id=prescriber.id,
+            instructions=random.choice(_INSTRUCTIONS_POOL),
+        )
+        db.add(prescription)
+        db.flush()
+        created_prescriptions += 1
+
+        if state_arg == "RANDOM":
+            state = random.choice(random_state_pool)
+        else:
+            state = RxState(state_arg)
+
+        quantity = random.choice([refill_quantity // 2, refill_quantity, refill_quantity * 2])
+        quantity = min(max(quantity, 1), refill_quantity * total_refills)
+        due_date = date_type.today() + timedelta(days=random.randint(-10, 30))
+        total_cost = Decimal(str(drug.cost)) * quantity
+
+        if state == RxState.SOLD:
+            completed_days_ago = random.randint(5, 60)
+            completed_date = date_type.today() - timedelta(days=completed_days_ago)
+            sold_date = date_type.today() - timedelta(days=random.randint(0, max(0, completed_days_ago - 1)))
+            refill_hist = RefillHist(
+                prescription_id=prescription.id,
+                patient_id=patient.id,
+                drug_id=drug.id,
+                quantity=quantity,
+                days_supply=days_supply,
+                completed_date=completed_date,
+                sold_date=sold_date,
+                total_cost=total_cost,
+            )
+            db.add(refill_hist)
+            created_hists += 1
+            prescription.remaining_quantity = max(0, _int(prescription.remaining_quantity) - quantity)  # type: ignore[assignment]
+        else:
+            refill = Refill(
+                prescription_id=prescription.id,
+                patient_id=patient.id,
+                drug_id=drug.id,
+                due_date=due_date,
+                quantity=quantity,
+                days_supply=days_supply,
+                total_cost=total_cost,
+                priority=random.choice(priorities),
+                state=state,
+                source=random.choice(["manual", "external"]),
+            )
+            if state == RxState.READY:
+                from .refills import _assign_bin
+                refill.bin_number = _assign_bin(db)  # type: ignore[assignment]
+                refill.completed_date = date_type.today() - timedelta(days=random.randint(0, 5))  # type: ignore[assignment]
+            elif state == RxState.REJECTED:
+                refill.rejected_by = f"PharmD {random.choice(['Smith', 'Jones', 'Brown', 'Davis'])}"  # type: ignore[assignment]
+                refill.rejection_reason = random.choice([  # type: ignore[assignment]
+                    "Incorrect quantity — prescriber authorization needed",
+                    "Patient allergy on file",
+                    "Duplicate therapy detected",
+                    "Insurance rejection — prior authorization required",
+                    "Incorrect dosage form",
+                ])
+                refill.rejection_date = date_type.today() - timedelta(days=random.randint(0, 10))  # type: ignore[assignment]
+            db.add(refill)
+            created_refills += 1
+            if state != RxState.REJECTED:
+                prescription.remaining_quantity = max(0, _int(prescription.remaining_quantity) - quantity)  # type: ignore[assignment]
+
+    db.commit()
+    return {
+        "prescriptions_created": created_prescriptions,
+        "refills_created": created_refills,
+        "refill_history_created": created_hists,
+        "state": state_arg,
+    }
+
+
+@router.post("/commands/clear_prescriptions")
+def clear_prescriptions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Delete ALL refills, refill history, and prescriptions. Admin-only. Destructive."""
+    refill_count = db.query(Refill).count()
+    hist_count = db.query(RefillHist).count()
+    rx_count = db.query(Prescription).count()
+    db.query(Refill).delete()
+    db.query(RefillHist).delete()
+    db.query(Prescription).delete()
+    db.commit()
+    return {
+        "refills_deleted": refill_count,
+        "refill_history_deleted": hist_count,
+        "prescriptions_deleted": rx_count,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Test data generator (admin-only — destructive!)
 # ---------------------------------------------------------------------------
 

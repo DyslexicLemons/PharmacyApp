@@ -26,7 +26,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from .cache import close_redis, init_redis
-from .routers import admin, auth, billing, drugs, insurance, patients, prescriptions, prescribers, refills
+from .routers import admin, auth, billing, drugs, insurance, patients, prescriptions, prescribers, refills, rts
 
 # ---------------------------------------------------------------------------
 # Correlation ID — stored per-request via ContextVar so any logger anywhere
@@ -150,6 +150,7 @@ app.include_router(prescribers.router,   prefix=API_PREFIX)
 app.include_router(insurance.router,     prefix=API_PREFIX)
 app.include_router(billing.router,       prefix=API_PREFIX)
 app.include_router(admin.router,         prefix=API_PREFIX)
+app.include_router(rts.router,           prefix=API_PREFIX)
 
 # ---------------------------------------------------------------------------
 # Health / root
