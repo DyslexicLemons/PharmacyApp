@@ -436,7 +436,7 @@ class TestEditRefill:
         assert prescription.remaining_quantity == 50
 
     def test_edit_qt_refill_quantity_exceeds_available_rejected(self, client, db_session):
-        """Requesting more than available quantity returns 422."""
+        """Requesting more than available quantity returns 409."""
         db = db_session
         prescriber = make_prescriber(db)
         drug = make_drug(db)
@@ -447,7 +447,7 @@ class TestEditRefill:
 
         # available = 0 + 30 = 30; requesting 31 should fail
         resp = client.patch(f"/refills/{refill.id}/edit", json={"quantity": 31})
-        assert resp.status_code == 422
+        assert resp.status_code == 409
 
     def test_edit_noneditable_state_rejected(self, client, db_session):
         """Editing a refill in QV1 (non-editable) returns 400."""
@@ -464,9 +464,11 @@ class TestEditRefill:
 
     def test_edit_hold_refill_quantity(self, client, db_session):
         """
-        HOLD is NOT in ACTIVE_STATES — going to HOLD returns quantity to the
-        prescription. So remaining=90 when the refill sits in HOLD.
-        Editing a HOLD refill deducts the new quantity and promotes to QT.
+        HOLD fills are inactive — they hold no reservation.
+        Editing a HOLD refill's quantity must NOT change prescription.remaining_quantity;
+        the new quantity is reserved only when the fill is resumed (HOLD → QP).
+        This prevents the double-deduction that would occur if we reserved at edit
+        time AND again at resume time.
         """
         db = db_session
         prescriber = make_prescriber(db)
@@ -481,5 +483,5 @@ class TestEditRefill:
         assert resp.status_code == 200
 
         db.refresh(prescription)
-        # HOLD not in ACTIVE_STATES → remaining - new_qty = 90 - 25 = 65
-        assert prescription.remaining_quantity == 65
+        # Reservation deferred to resume — remaining_quantity must be unchanged.
+        assert prescription.remaining_quantity == 90

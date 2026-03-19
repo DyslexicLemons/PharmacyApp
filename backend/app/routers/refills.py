@@ -238,6 +238,30 @@ def _assign_bin(db: Session) -> int:
     return random.choices(bins, weights=weights, k=1)[0]
 
 
+def _adjust_prescription_reservation(
+    prescription: Prescription,
+    old_reserved: int,
+    new_reserved: int,
+) -> None:
+    """Adjust prescription.remaining_quantity by the change in reserved quantity.
+
+    old_reserved: units this fill currently holds against the prescription (0 if inactive).
+    new_reserved: units it will hold after the change (0 if it becomes inactive).
+    Raises 409 if the prescription doesn't have enough remaining to cover an increase.
+    """
+    delta = new_reserved - old_reserved
+    remaining = _int(prescription.remaining_quantity)
+    if delta > 0 and remaining < delta:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Insufficient remaining quantity on prescription "
+                f"(remaining={remaining}, needed={delta})"
+            ),
+        )
+    prescription.remaining_quantity = remaining - delta
+
+
 def _apply_state_entry_effects(
     db: Session,
     rx: Refill,
@@ -281,30 +305,17 @@ def _adjust_prescription_quantity(
     if not prescription:
         return
 
-    remaining = _int(prescription.remaining_quantity)
-
-    if not was_active and will_be_active:
-        # Resuming from HOLD/SCHEDULED → re-reserve quantity.
-        if remaining < rx_quantity:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Insufficient remaining quantity on prescription to resume this fill "
-                    f"(remaining={remaining}, needed={rx_quantity})"
-                ),
-            )
-        prescription.remaining_quantity = max(0, remaining - rx_quantity)  # type: ignore[assignment]
-        logger.info(
-            f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
-            f"{remaining} → {prescription.remaining_quantity} (resumed fill, state={new_state.value})"
-        )
-    else:
-        # Moving from active → HOLD/REJECTED → release quantity back.
-        prescription.remaining_quantity = remaining + rx_quantity  # type: ignore[assignment]
-        logger.info(
-            f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
-            f"{remaining} → {prescription.remaining_quantity} (fill paused/cancelled, state={new_state.value})"
-        )
+    remaining_before = _int(prescription.remaining_quantity)
+    _adjust_prescription_reservation(
+        prescription,
+        old_reserved=rx_quantity if was_active else 0,
+        new_reserved=rx_quantity if will_be_active else 0,
+    )
+    logger.info(
+        f"[RX QTY] Prescription #{prescription.id}: remaining_quantity "
+        f"{remaining_before} → {prescription.remaining_quantity} "
+        f"(state {current_state.value} → {new_state.value}, qty={rx_quantity})"
+    )
 
 
 def _archive_to_sold(
@@ -470,22 +481,12 @@ def edit_refill(
     )
 
     if prescription:
-        remaining = _int(prescription.remaining_quantity)
-        if current_state in ACTIVE_STATES:
-            available = remaining + old_quantity
-            if new_quantity > available:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Requested quantity ({new_quantity}) exceeds authorized remaining ({available})",
-                )
-            prescription.remaining_quantity = available - new_quantity  # type: ignore[assignment]
-        else:
-            if new_quantity > remaining:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"Requested quantity ({new_quantity}) exceeds remaining authorized quantity ({remaining})",
-                )
-            prescription.remaining_quantity = remaining - new_quantity  # type: ignore[assignment]
+        is_active = current_state in ACTIVE_STATES
+        _adjust_prescription_reservation(
+            prescription,
+            old_reserved=old_quantity if is_active else 0,
+            new_reserved=new_quantity if is_active else 0,
+        )
 
         if payload.instructions is not None:
             prescription.instructions = payload.instructions  # type: ignore[assignment]

@@ -447,3 +447,82 @@ class TestStateTransitionAuditLog:
             rejected_by="x" * 201,
         )
         assert resp.status_code == 422
+
+
+# ===========================================================================
+# EDIT ENDPOINT — quantity accounting
+# ===========================================================================
+
+def edit(client, refill_id, **fields):
+    return client.patch(f"/refills/{refill_id}/edit", json=fields)
+
+
+class TestEditQuantityAccounting:
+    def test_increase_qty_active_state_deducts_from_remaining(self, client, db_session):
+        """Increasing fill quantity in an active state (QT) must reduce remaining_quantity."""
+        db = db_session
+        prescription, refill = setup_refill(db, RxState.QT, quantity=30, remaining_qty=30)
+        # remaining was already reduced by 30 when the fill was created (active state)
+        db.refresh(prescription)
+        remaining_before = int(prescription.remaining_quantity)
+
+        resp = edit(client, refill.id, quantity=50)
+        assert resp.status_code == 200
+
+        db.refresh(prescription)
+        # net change: old_reserved=30 → new_reserved=50, delta=+20
+        assert int(prescription.remaining_quantity) == remaining_before - 20
+
+    def test_decrease_qty_active_state_releases_to_remaining(self, client, db_session):
+        """Decreasing fill quantity in an active state must return units to remaining."""
+        db = db_session
+        prescription, refill = setup_refill(db, RxState.QT, quantity=30, remaining_qty=30)
+        db.refresh(prescription)
+        remaining_before = int(prescription.remaining_quantity)
+
+        resp = edit(client, refill.id, quantity=10)
+        assert resp.status_code == 200
+
+        db.refresh(prescription)
+        # net change: old_reserved=30 → new_reserved=10, delta=-20
+        assert int(prescription.remaining_quantity) == remaining_before + 20
+
+    def test_qty_exceeds_available_active_state_returns_409(self, client, db_session):
+        """Requesting more than (remaining + old_reserved) must return 409.
+
+        The fixture sets remaining_qty=0, so available = 0 + 30 = 30.
+        Editing to 31 exceeds available and must be blocked.
+        """
+        db = db_session
+        prescription, refill = setup_refill(db, RxState.QT, quantity=30, remaining_qty=0)
+        resp = edit(client, refill.id, quantity=31)
+        assert resp.status_code == 409
+
+    def test_edit_hold_fill_does_not_change_remaining(self, client, db_session):
+        """Editing a HOLD fill must not touch prescription.remaining_quantity.
+
+        HOLD fills are inactive — they hold no reservation. Changing the quantity
+        of a HOLD fill has no effect on remaining until the fill is resumed.
+        Validation of the new quantity is deferred to the resume (advance) step.
+        """
+        db = db_session
+        prescription, refill = setup_refill(db, RxState.HOLD, quantity=30, remaining_qty=60)
+        db.refresh(prescription)
+        remaining_before = int(prescription.remaining_quantity)
+
+        resp = edit(client, refill.id, quantity=20)
+        assert resp.status_code == 200
+
+        db.refresh(prescription)
+        assert int(prescription.remaining_quantity) == remaining_before  # no change
+
+    def test_edit_hold_fill_large_qty_succeeds_validation_deferred(self, client, db_session):
+        """Editing a HOLD fill to qty > remaining succeeds at edit time.
+
+        Overfill protection for inactive fills is enforced at resume (HOLD → QP),
+        not at edit time, so this must return 200.
+        """
+        db = db_session
+        prescription, refill = setup_refill(db, RxState.HOLD, quantity=30, remaining_qty=10)
+        resp = edit(client, refill.id, quantity=20)
+        assert resp.status_code == 200
