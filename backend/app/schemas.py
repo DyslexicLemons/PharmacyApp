@@ -187,6 +187,8 @@ class StockOut(BaseModel):
     quantity: int
     package_size: int
     drug: DrugOut
+    rts_count: int = 0
+    rts_quantity: int = 0
 
     class Config:
         from_attributes = True
@@ -666,3 +668,32 @@ class FillScriptRequest(BaseModel):
     @classmethod
     def priority_must_be_valid(cls, v: str) -> str:
         return _validate_priority(v)
+
+
+# ---- Return to Stock ----
+
+class RTSRequest(BaseModel):
+    refill_id: int
+
+
+class RTSLookupOut(BaseModel):
+    refill_id: int
+    drug_name: str
+    ndc: Optional[str] = None
+    quantity: int
+    patient_name: str
+    bin_number: Optional[int] = None
+    completed_date: Optional[date] = None
+
+
+class ReturnToStockOut(BaseModel):
+    id: int
+    refill_id: int
+    drug_id: int
+    drug: DrugOut
+    quantity: int
+    returned_at: datetime
+    returned_by: str
+
+    class Config:
+        from_attributes = True

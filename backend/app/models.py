@@ -22,6 +22,7 @@ class RxState(str, enum.Enum):
     SCHEDULED = "SCHEDULED" # Scheduled for future fill
     REJECTED = "REJECTED" # Rejected/Failed Verification
     SOLD = "SOLD"
+    RTS = "RTS"  # Returned to Stock
 
 
 class Patient(Base):
@@ -270,6 +271,27 @@ class SystemConfig(Base):
 
     id = Column(Integer, primary_key=True, default=1)
     bin_count = Column(Integer, nullable=False, default=100)
+
+
+class ReturnToStock(Base):
+    """Record of a filled prescription returned to stock from the READY bin."""
+    __tablename__ = "return_to_stock"
+
+    id = Column(Integer, primary_key=True, index=True)
+    refill_id = Column(Integer, ForeignKey("refills.id"), nullable=False, index=True)
+    drug_id = Column(Integer, ForeignKey("drugs.id"), nullable=False, index=True)
+    quantity = Column(Integer, nullable=False)
+    returned_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    returned_by = Column(String, nullable=False)
+    returned_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    refill = relationship("Refill", lazy="joined")
+    drug = relationship("Drug", lazy="joined")
 
 
 class AuditLog(Base):

@@ -462,6 +462,53 @@ export async function generateTestPrescriptions(
   return handleResponse(res);
 }
 
+export async function adminGeneratePrescribers(
+  count: number,
+  token: string,
+): Promise<{ prescribers_created: number }> {
+  const res = await fetch(`${V1}/commands/generate_prescribers`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ count }),
+  });
+  return handleResponse(res);
+}
+
+export async function adminGeneratePatients(
+  count: number,
+  token: string,
+): Promise<{ patients_created: number }> {
+  const res = await fetch(`${V1}/commands/generate_patients`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ count }),
+  });
+  return handleResponse(res);
+}
+
+export async function adminGeneratePrescriptions(
+  count: number,
+  state: string,
+  token: string,
+): Promise<{ prescriptions_created: number; refills_created: number; refill_history_created: number; state: string }> {
+  const res = await fetch(`${V1}/commands/generate_prescriptions`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ count, state }),
+  });
+  return handleResponse(res);
+}
+
+export async function adminClearPrescriptions(
+  token: string,
+): Promise<{ refills_deleted: number; refill_history_deleted: number; prescriptions_deleted: number }> {
+  const res = await fetch(`${V1}/commands/clear_prescriptions`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return handleResponse(res);
+}
+
 export async function getAuditLog(
   token: string,
   limit = 100,
@@ -473,5 +520,46 @@ export async function getAuditLog(
   if (username) params.set('username', username);
   if (prescriptionId) params.set('prescription_id', String(prescriptionId));
   const res = await fetch(`${V1}/audit_log?${params}`, { headers: authHeaders(token) });
+  return handleResponse(res);
+}
+
+// ---------------------------------------------------------------------------
+// Return to Stock (RTS)
+// ---------------------------------------------------------------------------
+
+export async function rtsLookup(
+  refillId: number,
+  token: string,
+): Promise<import('@/types').RTSLookup> {
+  const res = await fetch(`${V1}/rts/lookup/${refillId}`, { headers: authHeaders(token) });
+  return handleResponse(res);
+}
+
+export async function rtsLookupByRx(
+  prescriptionId: number,
+  token: string,
+): Promise<import('@/types').RTSLookup> {
+  const res = await fetch(`${V1}/rts/lookup/rx/${prescriptionId}`, { headers: authHeaders(token) });
+  return handleResponse(res);
+}
+
+export async function processRTS(
+  refillId: number,
+  token: string,
+): Promise<import('@/types').ReturnToStock> {
+  const res = await fetch(`${V1}/rts`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ refill_id: refillId }),
+  });
+  return handleResponse(res);
+}
+
+export async function getRTSHistory(
+  token: string,
+  limit = 20,
+  offset = 0,
+): Promise<PaginatedResponse<import('@/types').ReturnToStock>> {
+  const res = await fetch(`${V1}/rts?limit=${limit}&offset=${offset}`, { headers: authHeaders(token) });
   return handleResponse(res);
 }

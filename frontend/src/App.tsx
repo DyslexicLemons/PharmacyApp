@@ -32,6 +32,9 @@ const AuditLogView          = lazy(() => import("@/components/AuditLogView"));
 const ShipmentView          = lazy(() => import("@/components/ShipmentView"));
 const ShipmentHistView      = lazy(() => import("@/components/ShipmentHistView"));
 const SystemSettingsView    = lazy(() => import("@/components/SystemSettingsView"));
+const AdminConsoleView      = lazy(() => import("@/components/AdminConsoleView"));
+const RTSView               = lazy(() => import("@/components/RTSView"));
+const RTSHistView           = lazy(() => import("@/components/RTSHistView"));
 
 function ViewFallback() {
   return (
@@ -121,6 +124,21 @@ function App() {
     // Toggle help panel
     if (cmd === "?") {
       setShowHelp((prev) => !prev);
+      return;
+    }
+
+    // Return-to-stock: rts<id> goes directly to confirm, rts alone opens lookup
+    const rtsMatch = cmd.match(/^rts(\d+)$/);
+    if (rtsMatch) {
+      navigateToSection({ view: "RTS_LOOKUP", refillId: parseInt(rtsMatch[1], 10) });
+      return;
+    }
+    if (cmd === "rts") {
+      navigateToSection({ view: "RTS_LOOKUP" });
+      return;
+    }
+    if (cmd === "rts_hist") {
+      navigateToSection({ view: "RTS_HIST" });
       return;
     }
 
@@ -277,6 +295,10 @@ function App() {
     else if (cmd === "settings") {
       if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
       navigateToSection({ view: "SYSTEM_SETTINGS" });
+    }
+    else if (cmd === "admin") {
+      if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
+      navigateToSection({ view: "ADMIN_CONSOLE" });
     }
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
@@ -478,6 +500,15 @@ function App() {
           {route.view === "REGISTER" && <RegisterView onBack={goBack} />}
           {route.view === "USER_MANAGEMENT" && <UserManagementView onBack={goBack} />}
           {route.view === "SYSTEM_SETTINGS" && <SystemSettingsView onBack={goBack} />}
+          {route.view === "ADMIN_CONSOLE" && <AdminConsoleView onBack={goBack} />}
+          {route.view === "RTS_LOOKUP" && (
+            <RTSView
+              initialRefillId={route.refillId}
+              onBack={goBack}
+              onDone={() => navigateToSection({ view: "STOCK" })}
+            />
+          )}
+          {route.view === "RTS_HIST" && <RTSHistView onBack={goBack} page={route.page || 1} />}
           {route.view === "AUDIT_LOG" && <AuditLogView onBack={goBack} page={route.page || 1} />}
           {route.view === "SHIPMENT" && (
             <ShipmentView

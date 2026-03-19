@@ -393,7 +393,7 @@ class TestBillingCalculateRequest:
 
 class TestRxStateEnum:
     def test_all_states_defined(self):
-        expected = {"QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED", "REJECTED", "SOLD"}
+        expected = {"QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED", "REJECTED", "SOLD", "RTS"}
         actual = {s.value for s in RxState}
         assert expected == actual
 

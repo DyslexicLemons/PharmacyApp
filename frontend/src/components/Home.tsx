@@ -62,7 +62,7 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>&lt;space&gt;</code> – Create new prescription
               </li>
               <li>
-                <code>rx&lt;id&gt;</code> – Look up prescription by Rx ID (e.g., <code>rx42</code>)
+                <code>rx&lt;id&gt;</code> – Look up prescription by Rx ID (e.g., <code>rx1701234</code>)
               </li>
               <li>
                 <code>prescribers</code> – View all prescribers
@@ -110,6 +110,9 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>settings</code> – System settings (bin count, etc.)
               </li>
               <li>
+                <code>admin</code> – Admin console (generate test data, clear prescriptions)
+              </li>
+              <li>
                 <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
               </li>
             </ul>
@@ -128,7 +131,7 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>drugs</code> – View drug catalog
               </li>
               <li>
-                <code>stock</code> – View current inventory
+                <code>stock</code> – View current inventory (includes RTS totals)
               </li>
             </ul>
           </section>
@@ -147,6 +150,24 @@ export default function Home({ onCommand }: HomeProps) {
               </li>
               <li>
                 <code>f</code> / <code>finished</code> – Finish current shipment (in Shipment view)
+              </li>
+            </ul>
+          </section>
+
+          {/* Return to Stock */}
+          <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(255, 190, 11, 0.08) 0%, rgba(200, 100, 0, 0.08) 100%)" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              ↩ Return to Stock
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>rts</code> – Return a READY prescription to stock
+              </li>
+              <li>
+                <code>rts&lt;id&gt;</code> – RTS a specific refill (e.g., <code>rts1042</code>)
+              </li>
+              <li>
+                <code>rts_hist</code> – View all return-to-stock history
               </li>
             </ul>
           </section>

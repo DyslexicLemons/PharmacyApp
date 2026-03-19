@@ -2,7 +2,7 @@ import { useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchQueue } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
-import type { Refill } from "@/types";
+import type { Refill, PaginatedResponse } from "@/types";
 
 const QUEUES = ["QT", "QV1", "QP", "QV2"] as const;
 type QueueKey = typeof QUEUES[number];
@@ -17,15 +17,14 @@ const QUEUE_COLORS: Record<QueueKey, { bg: string; text: string }> = {
 interface Bucket {
   key: string;
   label: string;
-  short: string;
   color: string;
 }
 
 const BUCKETS: Bucket[] = [
-  { key: "pastdue", label: "Past Due", short: "PD",  color: "#ef476f" },
-  { key: "stat",   label: "< 15 min", short: "<15",  color: "#fb923c" },
-  { key: "high",   label: "< 30 min", short: "<30",  color: "#f5b800" },
-  { key: "normal", label: "< 60 min", short: "<60",  color: "#006494" },
+  { key: "pastdue", label: "Past Due", color: "#ef476f" },
+  { key: "stat",   label: "STAT",     color: "#fb923c" },
+  { key: "high",   label: "High",     color: "#f5b800" },
+  { key: "normal", label: "Normal",   color: "#006494" },
 ];
 
 function today(): Date {
@@ -40,24 +39,14 @@ function bucketKey(r: RefillWithDue): string {
   const due = new Date(r.due_date + "T00:00:00");
   if (due < today()) return "pastdue";
   const p = r.priority?.toLowerCase();
-  if (p === "stat")   return "stat";
-  if (p === "high")   return "high";
+  if (p === "stat") return "stat";
+  if (p === "high") return "high";
   return "normal";
 }
 
-interface DueLabel {
-  label: string;
-  overdue: boolean;
-}
-
-function formatDue(dueDateStr: string): DueLabel {
-  const t = today();
-  const due = new Date(dueDateStr + "T00:00:00");
-  const diff = Math.round((due.getTime() - t.getTime()) / 86_400_000);
-  if (diff < 0)   return { label: `${Math.abs(diff)}d overdue`, overdue: true };
-  if (diff === 0) return { label: "Today",    overdue: false };
-  if (diff === 1) return { label: "Tomorrow", overdue: false };
-  return { label: `${diff}d`, overdue: false };
+function extractItems(result: PaginatedResponse<Refill> | Refill[]): RefillWithDue[] {
+  if (Array.isArray(result)) return result as RefillWithDue[];
+  return (result.items ?? []) as RefillWithDue[];
 }
 
 type QueueData = Record<QueueKey, RefillWithDue[]>;
@@ -70,10 +59,10 @@ export default function QueueSidebar() {
     queryFn: () =>
       Promise.all(QUEUES.map((q) => fetchQueue(q, token!, 200, 0))).then(
         ([qt, qv1, qp, qv2]) => ({
-          QT:  (qt.items  ?? qt)  as RefillWithDue[],
-          QV1: (qv1.items ?? qv1) as RefillWithDue[],
-          QP:  (qp.items  ?? qp)  as RefillWithDue[],
-          QV2: (qv2.items ?? qv2) as RefillWithDue[],
+          QT:  extractItems(qt),
+          QV1: extractItems(qv1),
+          QP:  extractItems(qp),
+          QV2: extractItems(qv2),
         })
       ),
     refetchInterval: 30_000,
@@ -84,7 +73,7 @@ export default function QueueSidebar() {
     <div
       className="card"
       style={{
-        width: 252,
+        width: 220,
         flexShrink: 0,
         padding: 0,
         display: "flex",
@@ -118,181 +107,70 @@ export default function QueueSidebar() {
             const refills: RefillWithDue[] = data?.[q] ?? [];
             const { bg, text } = QUEUE_COLORS[q];
 
-            // Group items into buckets
-            const grouped: Record<string, RefillWithDue[]> = Object.fromEntries(
-              BUCKETS.map((b) => [b.key, [] as RefillWithDue[]])
+            const counts: Record<string, number> = Object.fromEntries(
+              BUCKETS.map((b) => [b.key, 0])
             );
-            refills.forEach((r) => grouped[bucketKey(r)].push(r));
+            refills.forEach((r) => counts[bucketKey(r)]++);
 
             return (
-              <div key={q} style={{ borderBottom: "1px solid var(--border)" }}>
-                {/* Queue header row */}
-                <div
-                  style={{
-                    padding: "7px 14px",
-                    background: `${bg}22`,
-                    borderLeft: `3px solid ${bg}`,
-                  }}
-                >
-                  {/* Queue name + total */}
-                  <div
+              <div key={q} style={{ borderBottom: "1px solid var(--border)", padding: "8px 14px", background: `${bg}18`, borderLeft: `3px solid ${bg}` }}>
+                {/* Queue name + total */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: refills.length > 0 ? 6 : 0 }}>
+                  <span style={{ fontWeight: 700, fontSize: "0.8rem", color: "var(--primary)" }}>
+                    {q}
+                  </span>
+                  <span
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: refills.length > 0 ? 5 : 0,
+                      background: bg,
+                      color: text,
+                      borderRadius: 999,
+                      padding: "1px 8px",
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
                     }}
                   >
-                    <span style={{ fontWeight: 700, fontSize: "0.8rem", color: "var(--primary)" }}>
-                      {q}
-                    </span>
-                    <span
-                      style={{
-                        background: bg,
-                        color: text,
-                        borderRadius: 999,
-                        padding: "1px 8px",
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                      }}
-                    >
-                      {refills.length}
-                    </span>
-                  </div>
-
-                  {/* Bucket count breakdown */}
-                  {refills.length > 0 && (
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {BUCKETS.map(({ key, short, color }) => {
-                        const count = grouped[key].length;
-                        if (count === 0) return null;
-                        return (
-                          <span
-                            key={key}
-                            style={{
-                              fontSize: "0.62rem",
-                              fontWeight: 700,
-                              color,
-                              background: `${color}18`,
-                              border: `1px solid ${color}55`,
-                              borderRadius: 4,
-                              padding: "1px 5px",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            {short}: {count}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
+                    {refills.length}
+                  </span>
                 </div>
 
-                {/* Item listings per bucket */}
+                {/* Priority breakdown rows */}
                 {refills.length === 0 ? (
-                  <div
-                    style={{
-                      padding: "5px 14px 7px",
-                      fontSize: "0.72rem",
-                      color: "var(--text-light)",
-                      fontStyle: "italic",
-                    }}
-                  >
+                  <div style={{ fontSize: "0.72rem", color: "var(--text-light)", fontStyle: "italic" }}>
                     Empty
                   </div>
                 ) : (
-                  BUCKETS.map(({ key, label, color }) => {
-                    const items = grouped[key];
-                    if (items.length === 0) return null;
-                    return (
-                      <div key={key} style={{ padding: "5px 14px" }}>
-                        {/* Bucket label */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    {BUCKETS.map(({ key, label, color }) => {
+                      const count = counts[key];
+                      if (count === 0) return null;
+                      return (
                         <div
+                          key={key}
                           style={{
-                            fontSize: "0.65rem",
-                            fontWeight: 700,
-                            color,
-                            textTransform: "uppercase",
-                            letterSpacing: "0.06em",
-                            marginBottom: 3,
                             display: "flex",
                             alignItems: "center",
-                            gap: 5,
+                            justifyContent: "space-between",
+                            fontSize: "0.7rem",
                           }}
                         >
-                          <span
-                            style={{
-                              display: "inline-block",
-                              width: 6,
-                              height: 6,
-                              borderRadius: "50%",
-                              background: color,
-                              flexShrink: 0,
-                            }}
-                          />
-                          {label}
-                          <span style={{ marginLeft: "auto", color: "var(--text-light)", fontWeight: 400 }}>
-                            {items.length}
-                          </span>
-                        </div>
-
-                        {/* Item rows */}
-                        {items.map((r) => {
-                          const due = formatDue(r.due_date);
-                          return (
-                            <div
-                              key={r.id}
+                          <span style={{ display: "flex", alignItems: "center", gap: 5, color }}>
+                            <span
                               style={{
-                                fontSize: "0.7rem",
-                                padding: "2px 0 2px 11px",
-                                borderLeft: "2px solid var(--border)",
-                                marginBottom: 2,
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                gap: 4,
+                                display: "inline-block",
+                                width: 6,
+                                height: 6,
+                                borderRadius: "50%",
+                                background: color,
+                                flexShrink: 0,
                               }}
-                            >
-                              <div style={{ minWidth: 0, flex: 1 }}>
-                                <div
-                                  style={{
-                                    fontWeight: 600,
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {r.patient.last_name}, {r.patient.first_name[0]}.
-                                </div>
-                                <div
-                                  style={{
-                                    color: "var(--text-light)",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                    fontSize: "0.65rem",
-                                  }}
-                                >
-                                  {r.drug.drug_name}
-                                </div>
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "0.62rem",
-                                  color: due.overdue ? "#ef476f" : "var(--text-light)",
-                                  fontWeight: due.overdue ? 700 : 400,
-                                  whiteSpace: "nowrap",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                {due.label}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })
+                            />
+                            {label}
+                          </span>
+                          <span style={{ fontWeight: 700, color }}>{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             );
