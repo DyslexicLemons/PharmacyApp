@@ -30,12 +30,14 @@ class CreateUserRequest(BaseModel):
     username: str
     password: str
     is_admin: bool = False
+    role: str = "technician"  # admin | pharmacist | technician
 
 
 class LoginResponse(BaseModel):
     success: bool
     username: str
     is_admin: bool
+    role: str
     quick_code: str
     access_token: str
     token_type: str = "bearer"
@@ -119,6 +121,19 @@ class PatientCreate(PatientBase):
     pass
 
 class PatientOut(PatientBase):
+    id: int
+    first_name: str
+    last_name: str
+    class Config:
+        from_attributes = True
+
+
+class PatientSearchResult(BaseModel):
+    """Redacted patient record returned by list/search endpoints.
+
+    DOB and address are omitted intentionally — full demographics are only
+    available via GET /patients/{pid} (individual lookup with audit logging).
+    """
     id: int
     first_name: str
     last_name: str

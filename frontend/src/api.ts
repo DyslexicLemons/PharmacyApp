@@ -1,6 +1,7 @@
 import type {
   Refill,
   Patient,
+  PatientSearchResult,
   PatientInsurance,
   Prescription,
   Drug,
@@ -169,7 +170,7 @@ export async function createManualPrescription(
 // Patients
 // ---------------------------------------------------------------------------
 
-export async function searchPatients(q: string, token: string): Promise<Patient[]> {
+export async function searchPatients(q: string, token: string): Promise<PatientSearchResult[]> {
   const res = await fetch(`${V1}/patients/search?name=${encodeURIComponent(q)}`, {
     headers: authHeaders(token),
   });
@@ -185,7 +186,7 @@ export async function getPatients(
   token: string,
   limit = 50,
   offset = 0,
-): Promise<PaginatedResponse<Patient> | Patient[]> {
+): Promise<PaginatedResponse<PatientSearchResult>> {
   const res = await fetch(`${V1}/patients?limit=${limit}&offset=${offset}`, {
     headers: authHeaders(token),
   });

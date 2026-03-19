@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from pydantic import TypeAdapter
 
-from ..auth import get_current_user
+from ..auth import get_current_user, require_pharmacist
 from ..database import get_db
 from ..models import (
     Drug, Patient, Prescription, Prescriber, Priority, Refill,
@@ -34,6 +34,10 @@ _refill_ta: TypeAdapter = TypeAdapter(schemas.RefillOut)
 # ---------------------------------------------------------------------------
 
 ACTIVE_STATES = {RxState.QT, RxState.QV1, RxState.QP, RxState.QV2, RxState.READY}
+
+# States that a pharmacist (RPh) must be the actor advancing *from*.
+# QV1 and QV2 are pharmacist verification steps — a technician may not complete them.
+PHARMACIST_REQUIRED_STATES = {RxState.QV1, RxState.QV2}
 
 TRANSITIONS = {
     RxState.QT:        [RxState.QV1, RxState.HOLD],
@@ -105,6 +109,17 @@ def check_refill_conflict(
 
 _QUEUE_CACHE_TTL = 30   # seconds — short because staff actively works the queue
 _REFILL_CACHE_TTL = 60  # seconds
+
+
+def _invalidate_queue_for_states(states: set[str]) -> None:
+    """Invalidate queue cache keys only for the affected states (plus ALL).
+
+    More targeted than nuking refills:queue:* — a QT→QV1 transition only
+    affects pharmacists watching the QT or QV1 filtered views, not every
+    cached page variant.
+    """
+    for state in states | {"ALL"}:
+        cache.cache_delete_pattern(f"refills:queue:{state}:*")
 
 
 @router.get("", response_model=schemas.PaginatedResponse[schemas.RefillOut])
@@ -365,6 +380,16 @@ def advance_refill(
         raise HTTPException(status_code=400, detail="No further transition available")
 
     new_state = _resolve_next_state(current_state, payload)
+
+    # Pharmacist-only steps: QV1 and QV2 may only be advanced by an RPh or admin.
+    if current_state in PHARMACIST_REQUIRED_STATES:
+        user_role = getattr(current_user, "role", None) or ""
+        if user_role not in ("pharmacist", "admin"):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Pharmacist verification required to advance from {current_state.value}",
+            )
+
     _apply_state_entry_effects(db, rx, new_state, payload)
 
     rx_quantity = _int(rx.quantity)
@@ -395,7 +420,7 @@ def advance_refill(
     )
     db.commit()
     cache.cache_delete(f"refills:id:{rx_id}")
-    cache.cache_delete_pattern("refills:queue:*")
+    _invalidate_queue_for_states({current_state.value, new_state.value})
     db.refresh(rx)
     return rx
 
@@ -506,7 +531,7 @@ def edit_refill(
     )
     db.commit()
     cache.cache_delete(f"refills:id:{rx_id}")
-    cache.cache_delete_pattern("refills:queue:*")
+    _invalidate_queue_for_states({old_state_str, new_state.value})
     db.refresh(rx)
     return rx
 
@@ -593,7 +618,7 @@ def upload_json_prescription(
         performed_by=current_user.username,
     )
     db.commit()
-    cache.cache_delete_pattern("refills:queue:*")
+    _invalidate_queue_for_states({"QT"})
     db.refresh(refill)
     return {"message": "Prescription uploaded successfully", "refill_id": refill.id, "state": "QT"}
 
@@ -670,6 +695,6 @@ def create_manual_prescription(
         performed_by=current_user.username,
     )
     db.commit()
-    cache.cache_delete_pattern("refills:queue:*")
+    _invalidate_queue_for_states({initial_state.value})
     db.refresh(refill)
     return {"message": "Prescription created successfully", "RX#": prescription.id, "state": str(initial_state)}

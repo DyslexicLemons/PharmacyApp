@@ -56,7 +56,7 @@ class Prescription(Base):
 
     is_inactive = Column(Boolean, default=False, nullable=False, server_default="false")
 
-    patient_id = Column(Integer, ForeignKey("patients.id"))
+    patient_id = Column(Integer, ForeignKey("patients.id"), index=True)
     patient = relationship("Patient", back_populates="prescriptions")
     prescriber_id = Column(Integer, ForeignKey("prescribers.id"))
     prescriber = relationship("Prescriber", back_populates="prescriptions")
@@ -70,7 +70,7 @@ class Refill(Base):
     __tablename__ = "refills"
 
     id = Column(Integer, primary_key=True, index=True)
-    prescription_id = Column(Integer, ForeignKey("prescriptions.id"))
+    prescription_id = Column(Integer, ForeignKey("prescriptions.id"), index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), index=True)
     drug_id = Column(Integer, ForeignKey("drugs.id"))
     due_date = Column(Date)
@@ -219,6 +219,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    role = Column(String, nullable=False, default="technician")  # admin | pharmacist | technician
 
 
 class QuickCode(Base):

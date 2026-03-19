@@ -14,14 +14,16 @@ from ..utils import _write_audit, _int
 router = APIRouter(prefix="/patients", tags=["patients"])
 
 
-@router.get("", response_model=schemas.PaginatedResponse[schemas.PatientOut])
+@router.get("", response_model=schemas.PaginatedResponse[schemas.PatientSearchResult])
 def get_patients(
     limit: int = Query(50, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List patients with server-side pagination."""
+    """List patients with server-side pagination. Admin-only."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     total = db.query(Patient).count()
     items = db.query(Patient).options(noload("*")).order_by(Patient.last_name, Patient.first_name).offset(offset).limit(limit).all()
     return {"items": items, "total": total, "limit": limit, "offset": offset}
@@ -53,7 +55,7 @@ def create_patient(
     return patient
 
 
-@router.get("/search", response_model=List[schemas.PatientOut])
+@router.get("/search", response_model=List[schemas.PatientSearchResult])
 def search_patient(
     name: str,
     db: Session = Depends(get_db),
@@ -61,7 +63,9 @@ def search_patient(
 ):
     """Search patients by 'lastname,firstname' or 'firstname,lastname'.
     Requires at least 3 characters for each part. Returns exact prefix matches
-    first, then near-matches (2-char prefix) not already in exact results."""
+    first, then near-matches (2-char prefix) not already in exact results.
+    Returns redacted records (name + id only); full demographics require a
+    direct patient lookup via GET /patients/{pid}."""
     if "," not in name:
         raise HTTPException(status_code=400, detail="Name must be 'lastname,firstname' or 'firstname,lastname'")
     a, b = [s.strip() for s in name.split(",", 1)]
@@ -93,7 +97,16 @@ def search_patient(
     near_primary = run_query(last=a2, first=b2)
     near_secondary = run_query(last=b2, first=a2)
 
-    return primary + secondary + near_primary + near_secondary
+    results = primary + secondary + near_primary + near_secondary
+    _write_audit(
+        db, "PATIENT_SEARCH",
+        entity_type="patient", entity_id=None,
+        details=f"query={name!r} results={len(results)}",
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
+    db.commit()
+    return results
 
 
 @router.get("/{pid}", response_model=schemas.PatientWithRxs)
@@ -110,6 +123,15 @@ def get_patient(
     patient = db.get(Patient, pid)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
+
+    _write_audit(
+        db, "PATIENT_VIEWED",
+        entity_type="patient", entity_id=pid,
+        details=f"{patient.last_name}, {patient.first_name}",
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
+    db.commit()
 
     for prescription in patient.prescriptions:
         latest_refill = _get_latest_refill_for_prescription(db, prescription.id)  # type: ignore[arg-type]

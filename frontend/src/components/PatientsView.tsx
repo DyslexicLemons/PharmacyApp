@@ -1,14 +1,9 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getPatients } from "@/api";
-import type { Patient, PaginatedResponse } from "@/types";
+import type { PatientSearchResult, PaginatedResponse } from "@/types";
 
 const PAGE_SIZE = 15;
-
-interface PatientWithExtra extends Patient {
-  city?: string;
-  state?: string;
-}
 
 interface PatientsViewProps {
   onBack?: () => void;
@@ -18,7 +13,7 @@ interface PatientsViewProps {
 
 export default function PatientsView({ onBack, onSelectPatient, page = 1 }: PatientsViewProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState<PaginatedResponse<PatientWithExtra>>({ items: [], total: 0 });
+  const [data, setData] = useState<PaginatedResponse<PatientSearchResult>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -46,12 +41,8 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1 }: Pati
         <thead>
           <tr>
             <th>#</th>
-            <th>LastName</th>
-            <th>FirstName</th>
-            <th>Date of Birth</th>
-            <th>Address</th>
-            <th>City</th>
-            <th>State</th>
+            <th>Last Name</th>
+            <th>First Name</th>
           </tr>
         </thead>
         <tbody>
@@ -65,10 +56,6 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1 }: Pati
               <td><strong style={{ color: "var(--primary)" }}>{startIdx + index + 1}</strong></td>
               <td>{p.last_name.toUpperCase()}</td>
               <td>{p.first_name.toUpperCase()}</td>
-              <td>{new Date(p.dob).toLocaleDateString()}</td>
-              <td>{p.address.toUpperCase()}</td>
-              <td>{p.city ? p.city.toUpperCase() : "—"}</td>
-              <td>{p.state ? p.state.toUpperCase() : "—"}</td>
             </tr>
           ))}
         </tbody>

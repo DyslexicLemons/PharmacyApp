@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { Patient } from "@/types";
+import type { PatientSearchResult } from "@/types";
 
 /**
  * Shown when a patient search returns multiple matches.
@@ -12,7 +12,7 @@ import type { Patient } from "@/types";
  */
 
 interface PatientSelectViewProps {
-  patients: Patient[];
+  patients: PatientSearchResult[];
   query: string;
   onSelect: (id: number) => void;
   onSelectRow?: number | null;
@@ -34,7 +34,7 @@ export default function PatientSelectView({ patients, query, onSelect, onSelectR
   const qb3 = qb.slice(0, 3);
   const canHighlight = qa3.length >= 3 && qb3.length >= 3;
 
-  function getRowStyle(p: Patient): React.CSSProperties {
+  function getRowStyle(p: PatientSearchResult): React.CSSProperties {
     if (!canHighlight) return { cursor: "pointer" };
     const last = p.last_name.toLowerCase();
     const first = p.first_name.toLowerCase();
@@ -47,12 +47,12 @@ export default function PatientSelectView({ patients, query, onSelect, onSelectR
     return { cursor: "pointer" };
   }
 
-  const hasYellow = canHighlight && patients.some((p) => {
+  const hasYellow = canHighlight && patients.some((p: PatientSearchResult) => {
     const last = p.last_name.toLowerCase();
     const first = p.first_name.toLowerCase();
     return last.startsWith(qa3) && first.startsWith(qb3);
   });
-  const hasBlue = canHighlight && patients.some((p) => {
+  const hasBlue = canHighlight && patients.some((p: PatientSearchResult) => {
     const last = p.last_name.toLowerCase();
     const first = p.first_name.toLowerCase();
     return last.startsWith(qb3) && first.startsWith(qa3);
@@ -86,8 +86,6 @@ export default function PatientSelectView({ patients, query, onSelect, onSelectR
             <th>#</th>
             <th>Last Name</th>
             <th>First Name</th>
-            <th>Date of Birth</th>
-            <th>Address</th>
           </tr>
         </thead>
         <tbody>
@@ -101,8 +99,6 @@ export default function PatientSelectView({ patients, query, onSelect, onSelectR
               <td><strong style={{ color: "var(--primary)" }}>{i + 1}</strong></td>
               <td>{p.last_name.toUpperCase()}</td>
               <td>{p.first_name.toUpperCase()}</td>
-              <td>{new Date(p.dob).toLocaleDateString()}</td>
-              <td>{p.address.toUpperCase()}</td>
             </tr>
           ))}
         </tbody>
