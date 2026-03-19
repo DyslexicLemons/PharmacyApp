@@ -14,8 +14,8 @@ from pydantic import TypeAdapter
 from ..auth import get_current_user, require_pharmacist
 from ..database import get_db
 from ..models import (
-    Drug, Patient, Prescription, Prescriber, Priority, Refill,
-    RefillHist, RxState, PatientInsurance, SystemConfig, User,
+    Drug, Formulary, Patient, Prescription, Prescriber, Priority, Refill,
+    RefillHist, RxState, PatientInsurance, Stock, SystemConfig, User,
 )
 from .. import cache, schemas
 from ..utils import _int, _mask_patient_id, _parse_priority, _write_audit
@@ -45,7 +45,7 @@ TRANSITIONS = {
     RxState.QP:        [RxState.QV2, RxState.HOLD],
     RxState.QV2:       [RxState.READY, RxState.QP, RxState.HOLD],
     RxState.HOLD:      [RxState.QP, RxState.REJECTED],
-    RxState.SCHEDULED: [RxState.QP, RxState.HOLD, RxState.REJECTED],
+    RxState.SCHEDULED: [RxState.QP, RxState.QT, RxState.HOLD, RxState.REJECTED],
     RxState.READY:     [RxState.SOLD],
 }
 
@@ -191,6 +191,57 @@ def get_refill(
 # ---------------------------------------------------------------------------
 # advance_refill helpers
 # ---------------------------------------------------------------------------
+
+def _triage_for_new_fill(
+    db: Session,
+    drug_id: int,
+    quantity: int,
+    days_supply: int,
+    patient_id: int,
+    insurance_id: Optional[int] = None,
+) -> tuple[RxState, Optional[str]]:
+    """Check stock and insurance before routing a fill to QP.
+
+    Returns (RxState.QP, None) if everything validates, or (RxState.QT, reason)
+    if any issue is found that requires a pharmacist to triage first.
+    """
+    stock = db.query(Stock).filter(Stock.drug_id == drug_id).first()
+    stock_qty = _int(stock.quantity) if stock else 0
+    if stock_qty < quantity:
+        return RxState.QT, f"insufficient stock (on_hand={stock_qty}, needed={quantity})"
+
+    # Resolve the PatientInsurance record to check against.
+    patient_ins: Optional[PatientInsurance] = None
+    if insurance_id:
+        patient_ins = db.query(PatientInsurance).filter(PatientInsurance.id == insurance_id).first()
+        if not patient_ins:
+            return RxState.QT, "insurance record not found"
+    else:
+        # Fall back to the patient's primary active insurance.
+        patient_ins = (
+            db.query(PatientInsurance)
+            .filter(
+                PatientInsurance.patient_id == patient_id,
+                PatientInsurance.is_primary == True,  # noqa: E712
+                PatientInsurance.is_active == True,  # noqa: E712
+            )
+            .first()
+        )
+
+    if patient_ins:
+        formulary = (
+            db.query(Formulary)
+            .filter(
+                Formulary.insurance_company_id == patient_ins.insurance_company_id,
+                Formulary.drug_id == drug_id,
+            )
+            .first()
+        )
+        if not formulary or bool(formulary.not_covered):
+            return RxState.QT, "insurance does not cover drug"
+
+    return RxState.QP, None
+
 
 def _resolve_next_state(current_state: RxState, payload: schemas.AdvanceRequest) -> RxState:
     """Return the target state for this advance request, or raise 400."""
@@ -391,6 +442,23 @@ def advance_refill(
         raise HTTPException(status_code=400, detail="No further transition available")
 
     new_state = _resolve_next_state(current_state, payload)
+
+    # When a SCHEDULED refill is manually advanced to QP, run the same triage
+    # that the Celery task performs. Issues (stock, insurance) redirect to QT.
+    if current_state == RxState.SCHEDULED and new_state == RxState.QP:
+        triage_state, triage_reason = _triage_for_new_fill(
+            db,
+            drug_id=_int(rx.drug_id),
+            quantity=_int(rx.quantity),
+            days_supply=_int(rx.days_supply) or 30,
+            patient_id=_int(rx.patient_id),
+            insurance_id=_int(rx.insurance_id) if rx.insurance_id else None,
+        )
+        if triage_state == RxState.QT:
+            new_state = RxState.QT
+            logger.info(
+                f"[RX TRIAGE] Refill #{rx_id}: SCHEDULED→QP overridden to QT — {triage_reason}"
+            )
 
     # Pharmacist-only steps: QV1 and QV2 may only be advanced by an RPh or admin.
     if current_state in PHARMACIST_REQUIRED_STATES:
@@ -665,6 +733,23 @@ def create_manual_prescription(
     state_map = {"QP": RxState.QP, "SCHEDULED": RxState.SCHEDULED, "HOLD": RxState.HOLD}
     initial_state = state_map[data.initial_state]
 
+    # For fills starting at QP, run stock and insurance triage before accepting
+    # that state. Any issue (low stock, uncovered drug) redirects to QT.
+    if initial_state == RxState.QP:
+        triage_state, triage_reason = _triage_for_new_fill(
+            db,
+            drug_id=data.drug_id,
+            quantity=data.quantity,
+            days_supply=data.days_supply,
+            patient_id=data.patient_id,
+        )
+        if triage_state == RxState.QT:
+            initial_state = RxState.QT
+            logger.info(
+                f"[RX TRIAGE] New manual fill for patient {data.patient_id}: "
+                f"QP overridden to QT — {triage_reason}"
+            )
+
     refill = Refill(
         prescription_id=prescription.id,
         patient_id=patient.id,
@@ -698,4 +783,4 @@ def create_manual_prescription(
     db.commit()
     _invalidate_queue_for_states({initial_state.value})
     db.refresh(refill)
-    return {"message": "Prescription created successfully", "RX#": prescription.id, "state": str(initial_state)}
+    return {"message": "Prescription created successfully", "RX#": prescription.id, "state": initial_state.value}
