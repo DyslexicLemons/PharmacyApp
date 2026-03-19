@@ -46,6 +46,13 @@ export interface Patient {
   prescriptions?: Prescription[];
 }
 
+/** Redacted patient record returned by list/search endpoints (no DOB or address). */
+export interface PatientSearchResult {
+  id: number;
+  first_name: string;
+  last_name: string;
+}
+
 export interface Prescriber {
   id: number;
   first_name: string;
@@ -232,7 +239,7 @@ export type RouteState =
   | { view: "PRESCRIBERS"; page?: number }
   | { view: "CREATE_PRESCRIPTION"; patientId?: number }
   | { view: "NO_MATCH"; query: string }
-  | { view: "PATIENT_SELECT"; patients: Patient[]; query: string }
+  | { view: "PATIENT_SELECT"; patients: PatientSearchResult[]; query: string }
   | { view: "CREATE_PATIENT"; prefillLast: string; prefillFirst: string }
   | { view: "REGISTER" }
   | { view: "USER_MANAGEMENT" }

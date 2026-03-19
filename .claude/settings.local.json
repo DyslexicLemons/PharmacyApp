@@ -35,7 +35,8 @@
       "Bash(mv CommandBar.jsx CommandBar.tsx)",
       "Bash(mv DrugsView.jsx DrugsView.tsx)",
       "Bash(ls C:UsersjmajoVSProjectsPharmacyAppfrontendsrccomponents*.tsx)",
-      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp -type f -name *.py -o -name *.tsx -o -name *.jsx -o -name *.json -o -name *.yml -o -name *.yaml -o -name *.txt -o -name *.md -o -name *.example -o -name .env*)"
+      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp -type f -name *.py -o -name *.tsx -o -name *.jsx -o -name *.json -o -name *.yml -o -name *.yaml -o -name *.txt -o -name *.md -o -name *.example -o -name .env*)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_rbac.py tests/test_state_machine.py -v --tb=short)"
     ]
   }
 }

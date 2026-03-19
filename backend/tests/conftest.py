@@ -79,7 +79,7 @@ def client(engine):
 
     def override_get_current_user():
         return User(id=None, username="test_user", hashed_password="x",
-                    is_active=True, is_admin=True)
+                    is_active=True, is_admin=True, role="admin")
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user

@@ -31,11 +31,12 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def create_access_token(user: User) -> str:
-    """Return a signed JWT encoding the user's id, username, and admin flag."""
+    """Return a signed JWT encoding the user's id, username, admin flag, and role."""
     payload = {
         "sub": str(user.id),
         "username": user.username,
         "is_admin": user.is_admin,
+        "role": user.role,
         "exp": datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
@@ -77,4 +78,15 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     """
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+
+def require_pharmacist(current_user: User = Depends(get_current_user)) -> User:
+    """
+    FastAPI dependency: require a pharmacist or admin user.
+    Technicians receive 403. Admins always pass (they can perform any action).
+    """
+    role = getattr(current_user, "role", None) or ""
+    if role not in ("pharmacist", "admin"):
+        raise HTTPException(status_code=403, detail="Pharmacist access required")
     return current_user

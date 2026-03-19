@@ -94,6 +94,7 @@ def login(request: Request, payload: schemas.LoginRequest, db: Session = Depends
         success=True,
         username=user.username,
         is_admin=user.is_admin,
+        role=user.role,
         quick_code=quick_code,
         access_token=token,
     )
@@ -117,6 +118,7 @@ def login_with_code(request: Request, payload: schemas.CodeLoginRequest, db: Ses
         success=True,
         username=user.username,
         is_admin=user.is_admin,
+        role=user.role,
         quick_code=new_code,
         access_token=token,
     )
@@ -130,7 +132,7 @@ def login_with_code(request: Request, payload: schemas.CodeLoginRequest, db: Ses
 def list_users(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     """List all active users. Requires admin JWT."""
     users = db.query(User).filter(User.is_active == True).order_by(User.username).all()
-    return [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in users]
+    return [{"id": u.id, "username": u.username, "is_admin": u.is_admin, "role": u.role} for u in users]
 
 
 @router.delete("/users/{user_id}", status_code=200)
@@ -167,12 +169,17 @@ def create_user(
     """Create a new user. Requires admin JWT."""
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=409, detail=f"Username '{payload.username}' already exists")
+    # Derive role: if is_admin=True and no explicit role provided, use 'admin'.
+    role = payload.role
+    if payload.is_admin and role == "technician":
+        role = "admin"
     user = User(
         username=payload.username,
         hashed_password=_hash_password(payload.password),
         is_active=True,
         is_admin=payload.is_admin,
+        role=role,
     )
     db.add(user)
     db.commit()
-    return {"success": True, "id": user.id, "username": user.username, "is_admin": user.is_admin}
+    return {"success": True, "id": user.id, "username": user.username, "is_admin": user.is_admin, "role": user.role}
