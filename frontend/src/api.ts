@@ -509,6 +509,19 @@ export async function adminClearPrescriptions(
   return handleResponse(res);
 }
 
+export interface QueueSummary {
+  generated_at: string;
+  refills_by_state: Record<string, number>;
+  total_active: number;
+  overdue_scheduled: number;
+  expiring_soon_30d: number;
+}
+
+export async function fetchQueueSummary(token: string): Promise<QueueSummary> {
+  const res = await fetch(`${V1}/queue-summary`, { headers: authHeaders(token) });
+  return handleResponse(res);
+}
+
 export async function getAuditLog(
   token: string,
   limit = 100,

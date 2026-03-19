@@ -689,7 +689,23 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
               <div><strong>Quantity:</strong> {lr.quantity}</div>
               <div><strong>Days Supply:</strong> {lr.days_supply}</div>
               {lr.due_date && (
-                <div><strong>Due Date:</strong> {new Date(lr.due_date).toLocaleDateString()}</div>
+                <div>
+                  <strong>Due Date:</strong> {new Date(lr.due_date).toLocaleDateString()}
+                  {lr.state === "SCHEDULED" && new Date(lr.due_date + "T00:00:00") < new Date(new Date().toDateString()) && (
+                    <span style={{
+                      marginLeft: "0.5rem",
+                      padding: "1px 6px",
+                      background: "#ef476f22",
+                      border: "1px solid #ef476f",
+                      borderRadius: 4,
+                      fontSize: "0.75rem",
+                      color: "#ef476f",
+                      fontWeight: 600,
+                    }}>
+                      overdue — pending promotion
+                    </span>
+                  )}
+                </div>
               )}
             </div>
             <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>

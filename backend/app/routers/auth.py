@@ -133,6 +133,31 @@ def list_users(admin: User = Depends(require_admin), db: Session = Depends(get_d
     return [{"id": u.id, "username": u.username, "is_admin": u.is_admin} for u in users]
 
 
+@router.delete("/users/{user_id}", status_code=200)
+def disable_user(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Disable a user account. Invalidates all their quick codes immediately."""
+    if user_id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot disable your own account")
+    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found or already disabled")
+
+    user.is_active = False
+
+    # Mark any outstanding DB quick codes as used so they can't be consumed
+    db.query(QuickCode).filter(
+        QuickCode.user_id == user_id,
+        QuickCode.used == False,
+    ).update({"used": True})
+
+    db.commit()
+    return {"success": True, "username": user.username}
+
+
 @router.post("/users", status_code=201)
 def create_user(
     payload: schemas.CreateUserRequest,
