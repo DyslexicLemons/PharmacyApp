@@ -594,13 +594,13 @@ class TestScheduledPromotion:
         db.refresh(prescription)
         assert prescription.remaining_quantity == 60  # 90 - 30
 
-    def test_promote_sets_state_to_qt(self, db_session):
-        """Promoting a SCHEDULED refill sets its state to QT."""
+    def test_promote_routes_to_qp_when_billing_unchanged(self, db_session):
+        """When price hasn't changed and stock is sufficient, refill goes to QP."""
         from app.models import Refill as RefillModel
         from app.tasks import promote_scheduled_refills
         db = db_session
         prescriber = make_prescriber(db)
-        drug = make_drug(db)
+        drug = make_drug(db)  # cost=0.50, stock=5000
         patient = make_patient(db)
         prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
         refill = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
@@ -613,7 +613,142 @@ class TestScheduledPromotion:
 
         db.expire_all()
         promoted = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
+        assert promoted.state == RxState.QP
+
+    def test_promote_routes_to_qt_on_price_change(self, db_session):
+        """When cash price rises more than 20%, the refill is routed to QT."""
+        from app.models import Refill as RefillModel, Drug as DrugModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("0.50"))
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        # Store refill with the old (lower) price
+        refill = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                             state=RxState.SCHEDULED, due_date=date.today())
+        db.commit()
+        refill_id = refill.id
+
+        # Simulate a significant drug cost increase before the promotion runs
+        db.query(DrugModel).filter(DrugModel.id == drug.id).update({"cost": Decimal("1.00")})
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["to_qt"] == 1
+        assert result["to_qp"] == 0
+        db.expire_all()
+        promoted = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
         assert promoted.state == RxState.QT
+
+    def test_promote_routes_to_qt_on_insufficient_stock(self, db_session):
+        """When physical stock is below the refill quantity, the refill goes to QT."""
+        from app.models import Refill as RefillModel, Stock as StockModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)  # stock=5000 by default
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, days_supply=30,
+                             state=RxState.SCHEDULED, due_date=date.today())
+        db.commit()
+        refill_id = refill.id
+
+        # Drain stock so there isn't enough to fill
+        db.query(StockModel).filter(StockModel.drug_id == drug.id).update({"quantity": 10})
+        db.commit()
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["to_qt"] == 1
+        assert result["to_qp"] == 0
+        db.expire_all()
+        promoted = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
+        assert promoted.state == RxState.QT
+
+    def test_promote_routes_to_qt_when_insurance_not_covered(self, db_session):
+        """When the formulary marks the drug as not covered, the refill goes to QT."""
+        from app.models import Refill as RefillModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("1.00"))
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        insurance = make_insurance(db)
+        make_formulary(db, insurance, drug, not_covered=True)
+        patient_ins = make_patient_insurance(db, patient, insurance)
+        # Store previous copay of $10 so it looks like it was covered before
+        refill = Refill(
+            prescription_id=prescription.id,
+            patient_id=patient.id,
+            drug_id=drug.id,
+            quantity=30,
+            days_supply=30,
+            total_cost=Decimal("30.00"),
+            state=RxState.SCHEDULED,
+            due_date=date.today(),
+            source="auto_schedule",
+            insurance_id=patient_ins.id,
+            copay_amount=Decimal("10.00"),
+            insurance_paid=Decimal("20.00"),
+        )
+        db.add(refill)
+        db.commit()
+        refill_id = refill.id
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["to_qt"] == 1
+        assert result["to_qp"] == 0
+        db.expire_all()
+        promoted = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
+        assert promoted.state == RxState.QT
+
+    def test_promote_routes_to_qp_with_unchanged_insurance(self, db_session):
+        """When insurance copay is unchanged, insured refill goes to QP."""
+        from app.models import Refill as RefillModel
+        from app.tasks import promote_scheduled_refills
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("1.00"))
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        insurance = make_insurance(db)
+        make_formulary(db, insurance, drug, copay_per_30=Decimal("10.00"), not_covered=False)
+        patient_ins = make_patient_insurance(db, patient, insurance)
+        # 30-day supply at $10/30 days = $10 copay
+        refill = Refill(
+            prescription_id=prescription.id,
+            patient_id=patient.id,
+            drug_id=drug.id,
+            quantity=30,
+            days_supply=30,
+            total_cost=Decimal("30.00"),
+            state=RxState.SCHEDULED,
+            due_date=date.today(),
+            source="auto_schedule",
+            insurance_id=patient_ins.id,
+            copay_amount=Decimal("10.00"),
+            insurance_paid=Decimal("20.00"),
+        )
+        db.add(refill)
+        db.commit()
+        refill_id = refill.id
+
+        with patch("app.tasks._acquire_lock", return_value=True):
+            result = promote_scheduled_refills()
+
+        assert result["to_qp"] == 1
+        assert result["to_qt"] == 0
+        db.expire_all()
+        promoted = db.query(RefillModel).filter(RefillModel.id == refill_id).first()
+        assert promoted.state == RxState.QP
 
     def test_promote_skips_when_insufficient_quantity(self, db_session):
         """A SCHEDULED refill is not promoted when remaining_quantity < refill.quantity."""
@@ -689,9 +824,10 @@ class TestScheduledPromotion:
             r.id: r.state
             for r in db.query(RefillModel).filter(RefillModel.id.in_([r1_id, r2_id])).all()
         }
-        qt_count = sum(1 for s in states.values() if s == RxState.QT)
+        # Price is unchanged so the promoted refill goes to QP, not QT.
+        qp_count = sum(1 for s in states.values() if s == RxState.QP)
         scheduled_count = sum(1 for s in states.values() if s == RxState.SCHEDULED)
-        assert qt_count == 1
+        assert qp_count == 1
         assert scheduled_count == 1
         db.refresh(prescription)
         assert prescription.remaining_quantity == 0
@@ -722,6 +858,187 @@ class TestScheduledPromotion:
             .count()
         )
         assert audit_count == 2
+
+
+# ===========================================================================
+# NEW FILL TRIAGE (create_manual + SCHEDULED advance)
+# ===========================================================================
+
+class TestNewFillTriage:
+    """
+    Verify that triage checks (stock, insurance coverage) are applied whenever
+    a fill is routed to QP — both at manual creation time and when a SCHEDULED
+    refill is manually advanced to QP.
+    """
+
+    def _manual_payload(self, patient_id, drug_id, prescriber_id, **kwargs):
+        payload = {
+            "patient_id": patient_id,
+            "drug_id": drug_id,
+            "prescriber_id": prescriber_id,
+            "quantity": 30,
+            "days_supply": 30,
+            "total_refills": 3,
+            "instructions": "Take 1 tablet daily",
+            "initial_state": "QP",
+        }
+        payload.update(kwargs)
+        return payload
+
+    def test_create_manual_qp_sufficient_stock_no_insurance_stays_qp(self, client, db_session):
+        """No insurance + sufficient stock → QP (no triage issue)."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)  # stock=5000
+        patient = make_patient(db)
+        db.commit()
+
+        resp = client.post(
+            "/refills/create_manual",
+            json=self._manual_payload(patient.id, drug.id, prescriber.id),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QP"
+
+    def test_create_manual_qp_insufficient_stock_redirects_to_qt(self, client, db_session):
+        """Insufficient stock → QP request is overridden to QT."""
+        from app.models import Stock as StockModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        db.commit()
+
+        db.query(StockModel).filter(StockModel.drug_id == drug.id).update({"quantity": 5})
+        db.commit()
+
+        resp = client.post(
+            "/refills/create_manual",
+            json=self._manual_payload(patient.id, drug.id, prescriber.id, quantity=30),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QT"
+
+    def test_create_manual_qp_insurance_not_covered_redirects_to_qt(self, client, db_session):
+        """Patient has insurance but drug is not on formulary → QT."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("1.00"))
+        patient = make_patient(db)
+        insurance = make_insurance(db)
+        make_formulary(db, insurance, drug, not_covered=True)
+        make_patient_insurance(db, patient, insurance, is_primary=True, is_active=True)
+        db.commit()
+
+        resp = client.post(
+            "/refills/create_manual",
+            json=self._manual_payload(patient.id, drug.id, prescriber.id),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QT"
+
+    def test_create_manual_qp_insurance_covers_drug_stays_qp(self, client, db_session):
+        """Patient has active insurance that covers the drug → QP."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("1.00"))
+        patient = make_patient(db)
+        insurance = make_insurance(db)
+        make_formulary(db, insurance, drug, not_covered=False)
+        make_patient_insurance(db, patient, insurance, is_primary=True, is_active=True)
+        db.commit()
+
+        resp = client.post(
+            "/refills/create_manual",
+            json=self._manual_payload(patient.id, drug.id, prescriber.id),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QP"
+
+    def test_create_manual_scheduled_skips_triage(self, client, db_session):
+        """SCHEDULED fills bypass triage — stock/insurance issues are checked at promotion time."""
+        from app.models import Stock as StockModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        db.commit()
+
+        db.query(StockModel).filter(StockModel.drug_id == drug.id).update({"quantity": 0})
+        db.commit()
+
+        resp = client.post(
+            "/refills/create_manual",
+            json=self._manual_payload(
+                patient.id, drug.id, prescriber.id, initial_state="SCHEDULED"
+            ),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "SCHEDULED"
+
+    def test_advance_scheduled_to_qp_insufficient_stock_redirects_to_qt(self, client, db_session):
+        """Manually advancing SCHEDULED → QP with low stock lands at QT instead."""
+        from app.models import Stock as StockModel, Refill as RefillModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        refill = make_refill(
+            db, prescription, drug, patient,
+            quantity=30, days_supply=30, state=RxState.SCHEDULED,
+        )
+        db.commit()
+
+        db.query(StockModel).filter(StockModel.drug_id == drug.id).update({"quantity": 5})
+        db.commit()
+
+        resp = advance(client, refill.id)
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QT"
+
+    def test_advance_scheduled_to_qp_insurance_not_covered_redirects_to_qt(
+        self, client, db_session
+    ):
+        """Manually advancing SCHEDULED → QP when insurance doesn't cover drug → QT."""
+        from app.models import Refill as RefillModel
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db, cost=Decimal("1.00"))
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        insurance = make_insurance(db)
+        make_formulary(db, insurance, drug, not_covered=True)
+        patient_ins = make_patient_insurance(db, patient, insurance)
+        refill = make_refill(
+            db, prescription, drug, patient,
+            quantity=30, days_supply=30, state=RxState.SCHEDULED,
+        )
+        refill.insurance_id = patient_ins.id
+        db.commit()
+
+        resp = advance(client, refill.id)
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QT"
+
+    def test_advance_scheduled_to_qp_sufficient_stock_no_insurance_stays_qp(
+        self, client, db_session
+    ):
+        """Manually advancing SCHEDULED → QP with sufficient stock and no insurance → QP."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)  # stock=5000
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 90)
+        refill = make_refill(
+            db, prescription, drug, patient,
+            quantity=30, days_supply=30, state=RxState.SCHEDULED,
+        )
+        db.commit()
+
+        resp = advance(client, refill.id)
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QP"
 
 
 # ===========================================================================
