@@ -4,13 +4,26 @@ import { DataContext } from "@/context/DataContext";
 import { createShipment } from "@/api";
 import { useNotification } from "@/context/NotificationContext";
 
-export default function ShipmentView({ onBack, keyCmd, onKeyCmdHandled }) {
+interface ShipmentItem {
+  drug_id: number;
+  drug_name: string;
+  bottles_received: number;
+  units_per_bottle: number;
+}
+
+interface ShipmentViewProps {
+  onBack: () => void;
+  keyCmd?: string | null;
+  onKeyCmdHandled?: () => void;
+}
+
+export default function ShipmentView({ onBack, keyCmd, onKeyCmdHandled }: ShipmentViewProps) {
   const { token } = useContext(AuthContext);
   const { drugs, loadingDrugs } = useContext(DataContext);
   const { addNotification } = useNotification();
 
   // Items staged for the shipment
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<ShipmentItem[]>([]);
 
   // Add-drug form state
   const [selectedDrugId, setSelectedDrugId] = useState("");
@@ -33,7 +46,7 @@ export default function ShipmentView({ onBack, keyCmd, onKeyCmdHandled }) {
       } else {
         setShowConfirm(true);
       }
-      onKeyCmdHandled();
+      onKeyCmdHandled?.();
     }
   }, [keyCmd]);
 
@@ -66,7 +79,7 @@ export default function ShipmentView({ onBack, keyCmd, onKeyCmdHandled }) {
     setUnitsPerBottle("100");
   }
 
-  function handleRemoveItem(drugId) {
+  function handleRemoveItem(drugId: number) {
     setItems((prev) => prev.filter((i) => i.drug_id !== drugId));
   }
 
@@ -84,6 +97,7 @@ export default function ShipmentView({ onBack, keyCmd, onKeyCmdHandled }) {
     if (!confirmPassword) { setConfirmError("Password is required."); return; }
 
     setSubmitting(true);
+    if (!token) { setConfirmError("Not authenticated."); setSubmitting(false); return; }
     try {
       const result = await createShipment(
         {
@@ -103,7 +117,7 @@ export default function ShipmentView({ onBack, keyCmd, onKeyCmdHandled }) {
       );
       onBack();
     } catch (e) {
-      setConfirmError(e.message);
+      setConfirmError((e as Error).message);
     } finally {
       setSubmitting(false);
     }

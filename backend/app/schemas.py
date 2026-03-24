@@ -1,6 +1,6 @@
 from decimal import Decimal
 from pydantic import BaseModel, computed_field, field_validator, Field
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Generic, List, Optional, TypeVar
 
 # ---- Generic paginated response ----
@@ -47,13 +47,114 @@ class LoginResponse(BaseModel):
 
 class SystemConfigOut(BaseModel):
     bin_count: int
+    simulation_enabled: bool = False
+    sim_arrival_rate: int = 2
+    sim_reject_rate: int = 10
 
     class Config:
         from_attributes = True
 
 
 class SystemConfigUpdate(BaseModel):
-    bin_count: int = Field(..., ge=60, le=300)
+    bin_count: Optional[int] = Field(None, ge=60, le=300)
+    simulation_enabled: Optional[bool] = None
+    sim_arrival_rate: Optional[int] = Field(None, ge=1, le=10)
+    sim_reject_rate: Optional[int] = Field(None, ge=0, le=50)
+
+
+# ---- Simulation workers ----
+
+class SimWorkerRefillContext(BaseModel):
+    """Minimal context about the refill a worker is currently processing."""
+    id: int
+    prescription_id: int
+    drug_name: str
+    patient_name: str
+
+    class Config:
+        from_attributes = True
+
+
+class SimWorkerOut(BaseModel):
+    id: int
+    name: str
+    role: str
+    is_active: bool
+    speed: int
+    current_station: Optional[str] = None
+    busy_until: Optional[datetime] = None
+    task_started_at: Optional[datetime] = None
+    current_refill_id: Optional[int] = None
+    current_refill: Optional[SimWorkerRefillContext] = None
+    # Server-computed progress fields — eliminates client/server clock skew
+    progress_pct: Optional[float] = None   # 0.0–100.0, or None if not busy
+    secs_remaining: Optional[float] = None  # seconds left, or None if not busy
+
+    class Config:
+        from_attributes = True
+
+    @classmethod
+    def from_orm_with_refill(cls, worker: object) -> "SimWorkerOut":
+        """Build from ORM, resolving the nested refill context fields."""
+        import typing
+        refill = getattr(worker, "current_refill", None)
+        ctx: typing.Optional[SimWorkerRefillContext] = None
+        if refill is not None:
+            drug = getattr(refill, "drug", None)
+            patient = getattr(refill, "patient", None)
+            drug_name = getattr(drug, "drug_name", "Unknown") if drug else "Unknown"
+            first = getattr(patient, "first_name", "") if patient else ""
+            last = getattr(patient, "last_name", "") if patient else ""
+            patient_name = f"{first} {last}".strip() or "Unknown"
+            ctx = SimWorkerRefillContext(
+                id=refill.id,
+                prescription_id=refill.prescription_id,
+                drug_name=drug_name,
+                patient_name=patient_name,
+            )
+
+        busy_until = getattr(worker, "busy_until", None)
+        task_started_at = getattr(worker, "task_started_at", None)
+        now = datetime.now(timezone.utc)
+
+        progress_pct: Optional[float] = None
+        secs_remaining: Optional[float] = None
+        if busy_until is not None:
+            secs_remaining = max(0.0, (busy_until - now).total_seconds())
+            if task_started_at is not None:
+                total = (busy_until - task_started_at).total_seconds()
+                elapsed = (now - task_started_at).total_seconds()
+                progress_pct = min(100.0, max(0.0, (elapsed / total * 100) if total > 0 else 100.0))
+
+        return cls.model_validate({
+            "id": worker.id,
+            "name": worker.name,
+            "role": worker.role,
+            "is_active": worker.is_active,
+            "speed": worker.speed,
+            "current_station": getattr(worker, "current_station", None),
+            "busy_until": busy_until,
+            "task_started_at": task_started_at,
+            "current_refill_id": getattr(worker, "current_refill_id", None),
+            "current_refill": ctx,
+            "progress_pct": progress_pct,
+            "secs_remaining": secs_remaining,
+        })
+
+
+class SimWorkerCreate(BaseModel):
+    name: str
+    role: str  # "technician" or "pharmacist"
+    speed: int = Field(5, ge=1, le=10)
+    is_active: bool = True
+    current_station: Optional[str] = None  # triage | fill | verify_1 | verify_2 | window
+
+
+class SimWorkerUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+    speed: Optional[int] = Field(None, ge=1, le=10)
+    current_station: Optional[str] = None  # triage | fill | verify_1 | verify_2 | window
 
 
 # ---- Audit log output ----
@@ -178,6 +279,7 @@ class DrugBase(BaseModel):
     niosh: bool = False
     drug_class: int
     description: Optional[str] = None
+    drug_form: Optional[str] = None
 
 class DrugOut(BaseModel):
     id: int
@@ -188,6 +290,7 @@ class DrugOut(BaseModel):
     niosh: bool
     drug_class: int
     description: Optional[str] = None
+    drug_form: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -431,6 +534,7 @@ class RefillOut(BaseModel):
     rejected_by: Optional[str] = None
     rejection_reason: Optional[str] = None
     rejection_date: Optional[date] = None
+    triage_reason: Optional[str] = None
     source: str = "manual"
     insurance_id: Optional[int] = None
     copay_amount: Optional[Decimal] = None

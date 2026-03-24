@@ -2,7 +2,8 @@ import React, { useContext, useState, useEffect } from "react";
 import { fillScript, getPrescribers, getPatientInsurance, calculateBilling } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
-import type { Prescriber, BillingResult } from "@/types";
+import { usePrescriptionLock } from "@/hooks/usePrescriptionLock";
+import type { Prescriber, BillingResult, Prescription } from "@/types";
 
 // Extended prescription type with runtime fields not in the base type
 interface LatestRefill {
@@ -71,15 +72,17 @@ function daysEarly(prescription: PrescriptionWithRuntime): number {
 }
 
 interface FillScriptViewProps {
-  prescription: PrescriptionWithRuntime;
+  prescription: Prescription;
   patientName: string;
   patientId?: number;
   onBack: () => void;
 }
 
-export default function FillScriptView({ prescription, patientName, patientId, onBack }: FillScriptViewProps) {
+export default function FillScriptView({ prescription: rawPrescription, patientName, patientId, onBack }: FillScriptViewProps) {
+  const prescription = rawPrescription as unknown as PrescriptionWithRuntime;
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
+  const { lockError } = usePrescriptionLock(prescription.id);
   const [prescribers, setPrescribers] = useState<Prescriber[]>([]);
   const [patientInsurance, setPatientInsurance] = useState<PatientInsuranceItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -109,11 +112,16 @@ export default function FillScriptView({ prescription, patientName, patientId, o
   });
 
   useEffect(() => {
-    getPrescribers(token).then(setPrescribers).catch(console.error);
+    if (!token) return;
+    getPrescribers(token)
+      .then((res) => setPrescribers(Array.isArray(res) ? res : res.items))
+      .catch(console.error);
 
     const pid = patientId ?? prescription.patient_id;
     if (pid) {
-      getPatientInsurance(pid, token).then(setPatientInsurance).catch(console.error);
+      getPatientInsurance(pid, token)
+        .then((res) => setPatientInsurance(res as unknown as PatientInsuranceItem[]))
+        .catch(console.error);
     }
   }, [token]);
 
@@ -127,6 +135,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
 
     setBillingLoading(true);
 
+    if (!token) { setBillingLoading(false); return; }
     calculateBilling({
       drug_id: prescription.drug_id,
       insurance_id: parseInt(selectedInsuranceId),
@@ -192,6 +201,7 @@ export default function FillScriptView({ prescription, patientName, patientId, o
       return;
     }
 
+    if (!token) { setError("Not authenticated."); return; }
     setSubmitting(true);
     setError("");
 
@@ -207,8 +217,8 @@ export default function FillScriptView({ prescription, patientName, patientId, o
 
       let msg = `Fill created!\nRX#: ${prescription.id}\nState: ${result.state}`;
 
-      if ((result as Record<string, unknown>).copay_amount != null) {
-        const r = result as Record<string, number>;
+      if ((result as unknown as Record<string, unknown>).copay_amount != null) {
+        const r = result as unknown as Record<string, number>;
         msg += `\n\nBilling Summary:\nCash Price:      $${r.cash_price.toFixed(2)}\nPatient Copay:   $${r.copay_amount.toFixed(2)}\nInsurance Pays:  $${r.insurance_paid.toFixed(2)}`;
       }
 
@@ -228,6 +238,16 @@ export default function FillScriptView({ prescription, patientName, patientId, o
       : null;
 
   const activeInsurance = patientInsurance.filter(i => i.is_active);
+
+  if (lockError) {
+    return (
+      <div className="vstack" style={{ alignItems: "center", justifyContent: "center", padding: "3rem", gap: "1rem" }}>
+        <span style={{ fontSize: "2rem" }}>🔒</span>
+        <p style={{ fontWeight: 600, textAlign: "center" }}>{lockError}</p>
+        <button className="btn" onClick={onBack}>Go Back</button>
+      </div>
+    );
+  }
 
   return (
     <div className="vstack">

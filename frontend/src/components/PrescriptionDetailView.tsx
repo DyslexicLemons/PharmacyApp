@@ -3,6 +3,8 @@ import { getPrescribers, getPatientInsurance, getInsuranceCompanies, addPatientI
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 import Badge from "@/components/Badge";
+import { usePrescriptionLock } from "@/hooks/usePrescriptionLock";
+import type { Prescription } from "@/types";
 
 const DAW_CODES: Record<number, string> = {
   0: "No product selection indicated (generic substitution allowed)",
@@ -363,16 +365,18 @@ function HoldModal({ onClose, onConfirm, submitting }: HoldModalProps) {
 }
 
 interface PrescriptionDetailViewProps {
-  prescription: PrescriptionDetail;
+  prescription: Prescription;
   patientName: string;
   patientId?: number;
   onBack?: () => void;
   onPrescriptionUpdated?: (updated: unknown) => void;
 }
 
-export default function PrescriptionDetailView({ prescription, patientName, patientId, onBack, onPrescriptionUpdated }: PrescriptionDetailViewProps) {
+export default function PrescriptionDetailView({ prescription: rawPrescription, patientName, patientId, onBack, onPrescriptionUpdated }: PrescriptionDetailViewProps) {
+  const prescription = rawPrescription as PrescriptionDetail;
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
+  const { lockError } = usePrescriptionLock(prescription.id);
   const [prescribers, setPrescribers] = useState<PrescriberDetail[]>([]);
   const [patientInsurance, setPatientInsurance] = useState<PatientInsuranceItem[]>([]);
   const [allCompanies, setAllCompanies] = useState<InsuranceCompanyDetail[]>([]);
@@ -496,6 +500,16 @@ export default function PrescriptionDetailView({ prescription, patientName, pati
       setUploadingPicture(false);
     }
   };
+
+  if (lockError) {
+    return (
+      <div className="vstack" style={{ alignItems: "center", justifyContent: "center", padding: "3rem", gap: "1rem" }}>
+        <span style={{ fontSize: "2rem" }}>🔒</span>
+        <p style={{ fontWeight: 600, textAlign: "center" }}>{lockError}</p>
+        <button className="btn" onClick={onBack}>Go Back</button>
+      </div>
+    );
+  }
 
   return (
     <div className="vstack">

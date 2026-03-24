@@ -1,12 +1,19 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getStock } from "@/api";
+import type { StockEntry, PaginatedResponse } from "@/types";
 
 const PAGE_SIZE = 15;
 
-export default function StockView({ onBack, onSelectStock, page = 1 }) {
+interface StockViewProps {
+  onBack?: () => void;
+  onSelectStock?: (drugId: number) => void;
+  page?: number;
+}
+
+export default function StockView({ onBack, onSelectStock, page = 1 }: StockViewProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ items: [], total: 0 });
+  const [data, setData] = useState<PaginatedResponse<StockEntry>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -15,8 +22,8 @@ export default function StockView({ onBack, onSelectStock, page = 1 }) {
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
     getStock(token, PAGE_SIZE, offset)
-      .then(setData)
-      .catch((e) => setError(e.message))
+      .then((res) => setData(Array.isArray(res) ? { items: res, total: res.length } : res))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page]);
 

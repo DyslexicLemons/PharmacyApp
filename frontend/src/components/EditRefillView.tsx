@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { getRefill, editRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import { usePrescriptionLock } from "@/hooks/usePrescriptionLock";
 import type { Refill } from "@/types";
 
 const PRIORITIES = ["low", "normal", "high", "stat"];
@@ -32,6 +33,8 @@ export default function EditRefillView({ refillId, onBack, onSaved }: EditRefill
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [prescriptionId, setPrescriptionId] = useState<number | null>(null);
+  const { lockError } = usePrescriptionLock(prescriptionId);
 
   // Form fields
   const [quantity, setQuantity] = useState("");
@@ -42,13 +45,15 @@ export default function EditRefillView({ refillId, onBack, onSaved }: EditRefill
   const [dawCode, setDawCode] = useState(0);
 
   useEffect(() => {
+    if (!token) return;
     getRefill(refillId, token)
-      .then((r: Refill & { priority: string; due_date: string }) => {
+      .then((r) => {
         setRefill(r);
+        if (r.prescription_id) setPrescriptionId(r.prescription_id);
         setQuantity(String(r.quantity));
         setDaysSupply(String(r.days_supply));
-        setPriority(r.priority);
-        setDueDate(r.due_date);
+        setPriority(r.priority ?? "normal");
+        setDueDate(r.due_date ?? "");
         setInstructions(r.prescription.instructions || "");
         setDawCode(r.prescription.daw_code ?? 0);
         setError("");
@@ -71,6 +76,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }: EditRefill
       daw_code: dawCode,
     };
 
+    if (!token) { setError("Not authenticated."); setSaving(false); return; }
     try {
       const updated = await editRefill(refillId, payload, token);
       const msg =
@@ -89,6 +95,16 @@ export default function EditRefillView({ refillId, onBack, onSaved }: EditRefill
   if (loading) return <div className="vstack"><p>Loading...</p></div>;
   if (error && !refill) return <div className="vstack"><p style={{ color: "var(--danger)" }}>{error}</p></div>;
   if (!refill) return <div className="vstack"><p>Refill not found</p></div>;
+
+  if (lockError) {
+    return (
+      <div className="vstack" style={{ alignItems: "center", justifyContent: "center", padding: "3rem", gap: "1rem" }}>
+        <span style={{ fontSize: "2rem" }}>🔒</span>
+        <p style={{ fontWeight: 600, textAlign: "center" }}>{lockError}</p>
+        <button className="btn" onClick={onBack}>Go Back</button>
+      </div>
+    );
+  }
 
   const priorState = refill.state;
   const newStateLabel = priorState === "QP" ? "QV1" : "QT";

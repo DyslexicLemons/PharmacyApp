@@ -1,14 +1,20 @@
 import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getSystemConfig, updateSystemConfig } from "@/api";
+import type { SystemConfig } from "@/types";
 
 const BIN_MIN = 60;
 const BIN_MAX = 300;
 const BIN_DEFAULT = 100;
 
-export default function SystemSettingsView({ onBack }) {
+interface SystemSettingsViewProps {
+  onBack?: () => void;
+}
+
+export default function SystemSettingsView({ onBack }: SystemSettingsViewProps) {
   const { token } = useContext(AuthContext);
 
+  const [config, setConfig] = useState<SystemConfig | null>(null);
   const [binCount, setBinCount] = useState(BIN_DEFAULT);
   const [inputVal, setInputVal] = useState(String(BIN_DEFAULT));
   const [loadError, setLoadError] = useState("");
@@ -17,15 +23,17 @@ export default function SystemSettingsView({ onBack }) {
   const [saveSuccess, setSaveSuccess] = useState("");
 
   useEffect(() => {
+    if (!token) return;
     getSystemConfig(token)
       .then((cfg) => {
+        setConfig(cfg);
         setBinCount(cfg.bin_count);
         setInputVal(String(cfg.bin_count));
       })
-      .catch((err) => setLoadError(err.message));
+      .catch((err: Error) => setLoadError(err.message));
   }, [token]);
 
-  async function handleSave(e) {
+  async function handleSave(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaveError("");
     setSaveSuccess("");
@@ -34,14 +42,20 @@ export default function SystemSettingsView({ onBack }) {
       setSaveError(`Bin count must be between ${BIN_MIN} and ${BIN_MAX}.`);
       return;
     }
+    if (!token) { setSaveError("Not authenticated."); return; }
     setSaving(true);
     try {
-      const updated = await updateSystemConfig({ bin_count: val }, token);
+      const merged: SystemConfig = {
+        ...(config ?? { simulation_enabled: false, sim_arrival_rate: 2, sim_reject_rate: 10 }),
+        bin_count: val,
+      };
+      const updated = await updateSystemConfig(merged, token);
+      setConfig(updated);
       setBinCount(updated.bin_count);
       setInputVal(String(updated.bin_count));
       setSaveSuccess(`Bin count updated to ${updated.bin_count}.`);
     } catch (err) {
-      setSaveError(err.message);
+      setSaveError((err as Error).message);
     } finally {
       setSaving(false);
     }
@@ -74,7 +88,7 @@ export default function SystemSettingsView({ onBack }) {
               min={BIN_MIN}
               max={BIN_MAX}
               value={inputVal}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setInputVal(e.target.value);
                 setSaveSuccess("");
                 setSaveError("");

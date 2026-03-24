@@ -39,6 +39,8 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   const [stockQty, setStockQty] = useState<number | null>(null);
   const [showHoldConfirm, setShowHoldConfirm] = useState(false);
   const [holdIsQV2, setHoldIsQV2] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
 
   useEffect(() => {
     fetchRefillDetails();
@@ -52,6 +54,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   }, [keyCmd]);
 
   const fetchRefillDetails = async () => {
+    if (!token) return;
     try {
       setLoading(true);
       const found = await getRefill(refillId, token);
@@ -67,6 +70,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   const handleApprove = async () => {
     if (!refill) return;
     if (refill.state === "READY") {
+      if (!token) return;
       try {
         const stocks = await getStock(token);
         const items = Array.isArray(stocks) ? stocks : (stocks.items ?? []);
@@ -79,6 +83,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
       }
       return;
     }
+    if (!token) return;
     try {
       const updated = await advanceRx(refillId, {}, token);
       addNotification(`RX# ${updated.prescription.id} advanced to ${updated.state}`, "success");
@@ -90,6 +95,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   };
 
   const handleConfirmSell = async () => {
+    if (!token) return;
     try {
       const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill }, token);
       addNotification(`Rx #${updated.prescription.id} marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`, "success");
@@ -100,19 +106,21 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     }
   };
 
-  const handleReject = async () => {
-    const reason = prompt("Rejection reason:");
-    if (!reason) return;
-    const rejectedBy = prompt("Rejected by (name):");
-    if (!rejectedBy) return;
+  const handleReject = () => {
+    setRejectReason("");
+    setShowRejectModal(true);
+  };
 
+  const handleConfirmReject = async () => {
+    if (!rejectReason.trim()) return;
+    if (!token) return;
+    setShowRejectModal(false);
     try {
       const updated = await advanceRx(refillId, {
         action: "reject",
-        rejection_reason: reason,
-        rejected_by: rejectedBy
+        rejection_reason: rejectReason.trim(),
       }, token);
-      addNotification("Prescription rejected successfully", "info");
+      addNotification(`Rx returned to triage: ${rejectReason.trim()}`, "warning");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
     } catch (e) {
@@ -127,6 +135,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   };
 
   const handleConfirmHold = async () => {
+    if (!token) return;
     setShowHoldConfirm(false);
     try {
       const updated = await advanceRx(refillId, { action: "hold" }, token);
@@ -162,6 +171,22 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
       {refill.state === "READY" && refill.bin_number && (
         <div style={{ padding: "1rem", background: "var(--success)", color: "white", borderRadius: "8px", marginBottom: "1rem" }}>
           <strong style={{ fontSize: "1.2rem" }}>Bin Number: {refill.bin_number}</strong>
+        </div>
+      )}
+
+      {refill.state === "QT" && (
+        <div style={{ padding: "1rem", background: "rgba(251, 191, 36, 0.12)", border: "2px solid #fbbf24", borderRadius: "8px", marginBottom: "1rem" }}>
+          <strong style={{ color: "#92620a" }}>
+            {refill.triage_reason?.startsWith("Pharmacist rejected:") ? "Returned by Pharmacist" : "Triage Required"}
+          </strong>
+          <div style={{ marginTop: "0.5rem" }}>
+            <strong>Reason:</strong> {refill.triage_reason ?? "no reason recorded"}
+          </div>
+          {refill.rejected_by && refill.triage_reason?.startsWith("Pharmacist rejected:") && (
+            <div style={{ marginTop: "0.25rem", fontSize: "0.9rem", color: "var(--text-light)" }}>
+              Returned by: {refill.rejected_by} on {refill.rejection_date}
+            </div>
+          )}
         </div>
       )}
 
@@ -206,7 +231,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
                 <span>{refill.prescription.expiration_date ? new Date(refill.prescription.expiration_date).toLocaleDateString() : "—"}</span>
 
                 <strong>DAW Code:</strong>
-                <span>{refill.prescription.daw_code} — {DAW_CODES[refill.prescription.daw_code] ?? "Unknown"}</span>
+                <span>{refill.prescription.daw_code ?? "—"} — {refill.prescription.daw_code != null ? (DAW_CODES[refill.prescription.daw_code] ?? "Unknown") : "—"}</span>
 
                 <strong>Orig. Qty:</strong>
                 <span>{refill.prescription.original_quantity}</span>
@@ -338,6 +363,49 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
           )}
         </div>
       </div>
+
+      {showRejectModal && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+        }}>
+          <div className="card vstack" style={{ maxWidth: "440px", width: "92%", gap: "1rem", padding: "1.5rem", border: "2px solid var(--danger)" }}>
+            <h3 style={{ margin: 0, color: "var(--danger)" }}>↩ Return to Triage</h3>
+            <p style={{ margin: 0, fontSize: "0.95rem" }}>
+              This prescription will be returned to the <strong>QT queue</strong> for the technician to review. A rejection reason is required.
+            </p>
+            <div>
+              <label style={{ display: "block", fontWeight: 600, marginBottom: "0.4rem", fontSize: "0.9rem" }}>
+                Rejection reason <span style={{ color: "var(--danger)" }}>*</span>
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                maxLength={500}
+                placeholder="Describe the reason for rejection..."
+                style={{
+                  width: "100%", boxSizing: "border-box", resize: "vertical",
+                  padding: "0.5rem 0.75rem", borderRadius: "6px",
+                  border: "1px solid var(--border)", fontSize: "0.95rem",
+                  background: "var(--bg-light)", color: "var(--text)",
+                }}
+                autoFocus
+              />
+            </div>
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button className="btn btn-secondary" onClick={() => setShowRejectModal(false)}>Cancel</button>
+              <button
+                className="btn btn-danger"
+                onClick={handleConfirmReject}
+                disabled={!rejectReason.trim()}
+              >
+                Return to Triage
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showHoldConfirm && (
         <div style={{
@@ -487,9 +555,9 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
           <button
             className="btn btn-danger"
             onClick={handleReject}
-            style={{ minWidth: "120px" }}
+            style={{ minWidth: "160px" }}
           >
-            ✗ Reject
+            ↩ Return to Triage
           </button>
         )}
       </div>

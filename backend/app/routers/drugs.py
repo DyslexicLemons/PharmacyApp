@@ -1,4 +1,4 @@
-"""Drug catalog and stock inventory endpoints."""
+"""Drug catalog, stock inventory, and SIG code translation endpoints."""
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,6 +10,7 @@ from sqlalchemy import func
 from ..models import Drug, InventoryShipment, InventoryShipmentItem, ReturnToStock, Stock, User
 from ..utils import _write_audit
 from .. import schemas
+from ..sig_codes import translate_sig
 
 router = APIRouter(tags=["drugs"])
 
@@ -147,3 +148,25 @@ def get_shipments(
         .all()
     )
     return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/sig/translate")
+def sig_translate(
+    codes: str = Query(..., description="Space-separated SIG code string, e.g. '1 TAB PO QD CF'"),
+    drug_id: int = Query(None, description="Optional drug ID — used to infer form defaults"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Translate a SIG code shorthand string into a human-readable instruction.
+
+    When *drug_id* is provided the drug's physical form (Tablet, Liquid, etc.)
+    is used to supply defaults for omitted units and routes.
+    """
+    drug_form = None
+    if drug_id is not None:
+        drug = db.get(Drug, drug_id)
+        if drug and drug.drug_form:
+            drug_form = drug.drug_form.value  # e.g. "Tablet"
+
+    translation = translate_sig(codes, drug_form)
+    return {"input": codes, "translation": translation, "drug_form": drug_form}

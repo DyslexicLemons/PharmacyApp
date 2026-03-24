@@ -13,7 +13,7 @@ from ..auth import get_current_user, require_admin
 from ..database import get_db
 from ..models import (
     AuditLog, Drug, Patient, Prescription, Prescriber, Priority,
-    Refill, RefillHist, RxState, SystemConfig, User,
+    Refill, RefillHist, RxState, SimWorker, SimWorkerRole, StationName, SystemConfig, User,
 )
 from .. import schemas
 from ..utils import _int
@@ -53,13 +53,27 @@ def update_config(
     """Update system configuration. Admin-only."""
     from ..utils import _write_audit
     cfg = _get_or_create_config(db)
-    cfg.bin_count = body.bin_count
+
+    changes: list[str] = []
+    if body.bin_count is not None:
+        cfg.bin_count = body.bin_count  # type: ignore[assignment]
+        changes.append(f"bin_count={body.bin_count}")
+    if body.simulation_enabled is not None:
+        cfg.simulation_enabled = body.simulation_enabled  # type: ignore[assignment]
+        changes.append(f"simulation_enabled={body.simulation_enabled}")
+    if body.sim_arrival_rate is not None:
+        cfg.sim_arrival_rate = body.sim_arrival_rate  # type: ignore[assignment]
+        changes.append(f"sim_arrival_rate={body.sim_arrival_rate}")
+    if body.sim_reject_rate is not None:
+        cfg.sim_reject_rate = body.sim_reject_rate  # type: ignore[assignment]
+        changes.append(f"sim_reject_rate={body.sim_reject_rate}")
+
     _write_audit(
         db,
         action="CONFIG_UPDATED",
         entity_type="system_config",
         entity_id=1,
-        details=f"bin_count set to {body.bin_count}",
+        details="; ".join(changes) if changes else "no changes",
         user_id=current_user.id,
         performed_by=current_user.username,
     )
@@ -186,6 +200,118 @@ def get_queue_summary(
         overdue_scheduled=overdue_scheduled,
         expiring_soon_30d=expiring_soon_30d,
     )
+
+
+# ---------------------------------------------------------------------------
+# Simulation workers (CRUD + seed)
+# ---------------------------------------------------------------------------
+
+@router.get("/sim-workers", response_model=list[schemas.SimWorkerOut])
+def list_sim_workers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all virtual simulation workers ordered by role then name."""
+    workers = (
+        db.query(SimWorker)
+        .order_by(SimWorker.role, SimWorker.name)
+        .all()
+    )
+    return [schemas.SimWorkerOut.from_orm_with_refill(w) for w in workers]
+
+
+@router.post("/sim-workers", response_model=schemas.SimWorkerOut)
+def create_sim_worker(
+    body: schemas.SimWorkerCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Create a new virtual worker. Admin-only."""
+    try:
+        role = SimWorkerRole(body.role)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="role must be 'technician' or 'pharmacist'")
+    station = None
+    if body.current_station is not None:
+        try:
+            station = StationName(body.current_station)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="current_station must be one of: triage, fill, verify_1, verify_2, window",
+            )
+    worker = SimWorker(name=body.name, role=role, is_active=body.is_active, speed=body.speed, current_station=station)
+    db.add(worker)
+    db.commit()
+    db.refresh(worker)
+    return worker
+
+
+@router.put("/sim-workers/{worker_id}", response_model=schemas.SimWorkerOut)
+def update_sim_worker(
+    worker_id: int,
+    body: schemas.SimWorkerUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Update name, speed, or active status of a virtual worker. Admin-only."""
+    worker = db.query(SimWorker).filter(SimWorker.id == worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    if body.name is not None:
+        worker.name = body.name  # type: ignore[assignment]
+    if body.is_active is not None:
+        worker.is_active = body.is_active  # type: ignore[assignment]
+    if body.speed is not None:
+        worker.speed = body.speed  # type: ignore[assignment]
+    if body.current_station is not None:
+        try:
+            worker.current_station = StationName(body.current_station)  # type: ignore[assignment]
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="current_station must be one of: triage, fill, verify_1, verify_2, window",
+            )
+        # Clear any in-flight travel when station is manually reassigned.
+        worker.busy_until = None  # type: ignore[assignment]
+    db.commit()
+    db.refresh(worker)
+    return worker
+
+
+@router.delete("/sim-workers/{worker_id}")
+def delete_sim_worker(
+    worker_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Delete a virtual worker. Admin-only."""
+    worker = db.query(SimWorker).filter(SimWorker.id == worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    db.delete(worker)
+    db.commit()
+    return {"deleted": True}
+
+
+@router.post("/commands/seed_sim_workers")
+def seed_sim_workers(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Seed default virtual workers if none exist yet. Admin-only."""
+    count = db.query(SimWorker).count()
+    if count > 0:
+        return {"message": f"{count} worker(s) already exist — not seeded.", "seeded": 0}
+    defaults = [
+        SimWorker(name="Alex Chen", role=SimWorkerRole.technician, speed=5, is_active=True, current_station=StationName.triage),
+        SimWorker(name="Jordan Lee", role=SimWorkerRole.technician, speed=5, is_active=True, current_station=StationName.fill),
+        SimWorker(name="Dr. Sarah Park", role=SimWorkerRole.pharmacist, speed=5, is_active=True, current_station=StationName.verify_1),
+    ]
+    for w in defaults:
+        db.add(w)
+    db.commit()
+    return {"seeded": len(defaults), "message": f"Seeded {len(defaults)} default worker(s)."}
 
 
 # ---------------------------------------------------------------------------

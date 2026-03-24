@@ -12,6 +12,22 @@ class Priority(str, enum.Enum):
     stat = "Stat"
 
 
+class DrugForm(str, enum.Enum):
+    """Physical/delivery form of a drug — drives SIG code translation defaults."""
+    tablet = "Tablet"
+    capsule = "Capsule"
+    liquid = "Liquid"          # oral solution / suspension
+    injection = "Injection"    # vial, syringe, pen injector
+    patch = "Patch"            # transdermal patch
+    film = "Film"              # sublingual / buccal film
+    topical = "Topical"        # cream, ointment, gel
+    inhaler = "Inhaler"        # MDI / DPI
+    drops = "Drops"            # eye, ear, or nasal drops
+    suppository = "Suppository"
+    powder = "Powder"          # oral powder / granules
+    unknown = "Unknown"
+
+
 class RxState(str, enum.Enum):
     QT = "QT" # Queue Triage
     QV1 = "QV1" # Verify 1
@@ -77,7 +93,7 @@ class Refill(Base):
     quantity = Column(Integer)
     days_supply = Column(Integer)
     total_cost = Column(Numeric(10, 2), nullable=False)
-    priority = Column(Enum(Priority), default=Priority.normal)
+    priority = Column(Enum(Priority, values_callable=lambda x: [e.value for e in x]), default=Priority.normal)
     state = Column(Enum(RxState), default=RxState.QT, index=True)
     completed_date = Column(Date)
 
@@ -86,6 +102,7 @@ class Refill(Base):
     rejected_by = Column(String, nullable=True)
     rejection_reason = Column(String, nullable=True)
     rejection_date = Column(Date, nullable=True)
+    triage_reason = Column(String, nullable=True)
     source = Column(String, default="manual")
 
     # Billing fields
@@ -149,6 +166,7 @@ class Drug(Base):
     niosh = Column(Boolean, default=False)
     drug_class = Column(Integer)
     description = Column(String, nullable=True)
+    drug_form = Column(Enum(DrugForm, values_callable=lambda x: [e.value for e in x]), nullable=True, default=DrugForm.unknown)
 
     refills = relationship("Refill", back_populates="drug", lazy="noload")
     stock = relationship("Stock", back_populates="drug", uselist=False)
@@ -272,6 +290,48 @@ class SystemConfig(Base):
 
     id = Column(Integer, primary_key=True, default=1)
     bin_count = Column(Integer, nullable=False, default=100)
+
+    # Simulation settings
+    simulation_enabled = Column(Boolean, nullable=False, default=False, server_default="false")
+    sim_arrival_rate = Column(Integer, nullable=False, default=2)   # max new Rxs per arrival cycle
+    sim_reject_rate = Column(Integer, nullable=False, default=10)   # % chance pharmacist rejects at QV1
+
+
+class SimWorkerRole(str, enum.Enum):
+    technician = "technician"
+    pharmacist = "pharmacist"
+
+
+class StationName(str, enum.Enum):
+    triage = "triage"       # QT queue — technician intake/triage
+    fill = "fill"           # QP queue — technician prep/fill
+    verify_1 = "verify_1"  # QV1 queue — pharmacist first verification
+    verify_2 = "verify_2"  # QV2 queue — pharmacist final verification
+    window = "window"      # READY — patient pickup window
+
+
+class SimWorker(Base):
+    """A virtual pharmacy worker used in simulation.
+
+    Speed (1–10) controls how many refills this worker processes per Celery
+    cycle.  is_active lets you bench a worker without deleting them.
+
+    current_station tracks where in the pharmacy the worker is physically
+    located. Moving between stations takes 5–10 seconds (busy_until records
+    when the worker arrives and becomes available again).
+    """
+    __tablename__ = "sim_workers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    role = Column(Enum(SimWorkerRole), nullable=False, index=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    speed = Column(Integer, nullable=False, default=5)  # items per cycle, 1–10
+    current_station = Column(Enum(StationName), nullable=True)
+    busy_until = Column(DateTime(timezone=True), nullable=True)  # None = available now
+    task_started_at = Column(DateTime(timezone=True), nullable=True)  # when current travel began
+    current_refill_id = Column(Integer, ForeignKey("refills.id"), nullable=True, index=True)
+    current_refill = relationship("Refill", foreign_keys=[current_refill_id], lazy="joined")
 
 
 class ReturnToStock(Base):

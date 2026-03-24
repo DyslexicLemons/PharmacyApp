@@ -22,7 +22,7 @@ export default function PrescribersView({ onBack, onSelectPrescriber, page = 1 }
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
     getPrescribers(token, PAGE_SIZE, offset)
-      .then(setData)
+      .then((res) => setData(Array.isArray(res) ? { items: res, total: res.length } : res))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page]);

@@ -23,6 +23,14 @@ const V1 = '/api/v1';
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** Error thrown by handleResponse — includes the HTTP status code. */
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 function authHeaders(token: string): Record<string, string> {
   return {
     'Content-Type': 'application/json',
@@ -33,12 +41,13 @@ function authHeaders(token: string): Record<string, string> {
 async function handleResponse<T>(res: Response): Promise<T> {
   if (res.status === 401) {
     window.dispatchEvent(new CustomEvent('auth:expired'));
-    throw new Error('Session expired — please log in again');
+    throw new ApiError(401, 'Session expired — please log in again');
   }
   if (!res.ok) {
     const error = await res.json().catch(() => ({})) as { detail?: string };
-    throw new Error(error.detail || `HTTP ${res.status}`);
+    throw new ApiError(res.status, error.detail || `HTTP ${res.status}`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -134,7 +143,7 @@ export async function checkConflict(
   patientId: number,
   drugId: number,
   token: string,
-): Promise<{ conflict: boolean; message?: string }> {
+): Promise<{ has_conflict: boolean; active_refills: { id: number; state: string; due_date: string; quantity: number }[]; recent_fills: { id: number; sold_date: string; days_supply: number; quantity: number }[]; message?: string }> {
   const res = await fetch(
     `${V1}/refills/check_conflict?patient_id=${patientId}&drug_id=${drugId}`,
     { headers: authHeaders(token) },
@@ -326,6 +335,32 @@ export async function createPrescription(
   return handleResponse(res);
 }
 
+export async function lockPrescription(id: number, token: string): Promise<void> {
+  const res = await fetch(`${V1}/prescriptions/${id}/lock`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+export async function unlockPrescription(id: number, token: string): Promise<void> {
+  await fetch(`${V1}/prescriptions/${id}/lock`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  // 204 No Content — ignore response body
+}
+
+export async function checkPrescriptionLock(
+  id: number,
+  token: string,
+): Promise<{ locked: boolean; locked_by: string | null }> {
+  const res = await fetch(`${V1}/prescriptions/${id}/lock`, {
+    headers: authHeaders(token),
+  });
+  return handleResponse(res);
+}
+
 // ---------------------------------------------------------------------------
 // Drugs & stock
 // ---------------------------------------------------------------------------
@@ -510,6 +545,26 @@ export async function adminClearPrescriptions(
   return handleResponse(res);
 }
 
+// ---------------------------------------------------------------------------
+// Simulation control
+// ---------------------------------------------------------------------------
+
+export async function updateSimulationConfig(
+  token: string,
+  patch: {
+    simulation_enabled?: boolean;
+    sim_arrival_rate?: number;
+    sim_reject_rate?: number;
+  },
+): Promise<import('@/types').SystemConfig> {
+  const res = await fetch(`${V1}/config`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(patch),
+  });
+  return handleResponse(res);
+}
+
 export interface QueueSummary {
   generated_at: string;
   refills_by_state: Record<string, number>;
@@ -534,6 +589,56 @@ export async function getAuditLog(
   if (username) params.set('username', username);
   if (prescriptionId) params.set('prescription_id', String(prescriptionId));
   const res = await fetch(`${V1}/audit_log?${params}`, { headers: authHeaders(token) });
+  return handleResponse(res);
+}
+
+// ---------------------------------------------------------------------------
+// Simulation workers
+// ---------------------------------------------------------------------------
+
+export async function listSimWorkers(token: string): Promise<import('@/types').SimWorker[]> {
+  const res = await fetch(`${V1}/sim-workers`, { headers: authHeaders(token) });
+  return handleResponse(res);
+}
+
+export async function createSimWorker(
+  token: string,
+  body: { name: string; role: string; speed: number; is_active: boolean },
+): Promise<import('@/types').SimWorker> {
+  const res = await fetch(`${V1}/sim-workers`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
+export async function updateSimWorker(
+  token: string,
+  id: number,
+  patch: { name?: string; speed?: number; is_active?: boolean },
+): Promise<import('@/types').SimWorker> {
+  const res = await fetch(`${V1}/sim-workers/${id}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(patch),
+  });
+  return handleResponse(res);
+}
+
+export async function deleteSimWorker(token: string, id: number): Promise<void> {
+  const res = await fetch(`${V1}/sim-workers/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return handleResponse(res);
+}
+
+export async function seedSimWorkers(token: string): Promise<{ seeded: number; message: string }> {
+  const res = await fetch(`${V1}/commands/seed_sim_workers`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
   return handleResponse(res);
 }
 

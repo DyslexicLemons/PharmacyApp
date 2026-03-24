@@ -78,10 +78,12 @@ def setup_refill(db, state):
     return refill
 
 
-def advance(client, refill_id, action=None):
+def advance(client, refill_id, action=None, rejection_reason=None):
     payload = {}
     if action:
         payload["action"] = action
+    if rejection_reason:
+        payload["rejection_reason"] = rejection_reason
     return client.post(f"/refills/{refill_id}/advance", json=payload)
 
 
@@ -117,7 +119,7 @@ class TestQV1RoleGate:
     def test_technician_can_reject_from_qv1(self, tech_client, db_session):
         """Rejecting from QV1 is also gated — only an RPh can make that call."""
         refill = setup_refill(db_session, RxState.QV1)
-        resp = advance(tech_client, refill.id, action="reject")
+        resp = advance(tech_client, refill.id, action="reject", rejection_reason="Invalid DEA number")
         assert resp.status_code == 403
 
 

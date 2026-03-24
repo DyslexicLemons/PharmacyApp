@@ -1,27 +1,46 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getShipments } from "@/api";
+import type { Shipment, PaginatedResponse } from "@/types";
 
 const PAGE_SIZE = 15;
 
-export default function ShipmentHistView({ onBack, page = 1 }) {
+interface ShipmentItemDetail {
+  id: number;
+  drug: { drug_name: string; manufacturer: string };
+  bottles_received: number;
+  units_per_bottle: number;
+}
+
+interface ShipmentWithDetails extends Shipment {
+  performed_at: string;
+  performed_by: string;
+  items: ShipmentItemDetail[];
+}
+
+interface ShipmentHistViewProps {
+  onBack?: () => void;
+  page?: number;
+}
+
+export default function ShipmentHistView({ onBack, page = 1 }: ShipmentHistViewProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ items: [], total: 0 });
+  const [data, setData] = useState<PaginatedResponse<ShipmentWithDetails>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [expanded, setExpanded] = useState({});
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     if (!token) return;
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
     getShipments(token, PAGE_SIZE, offset)
-      .then(setData)
-      .catch((e) => setError(e.message))
+      .then((res) => setData(Array.isArray(res) ? { items: res as ShipmentWithDetails[], total: res.length } : res as PaginatedResponse<ShipmentWithDetails>))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page]);
 
-  function toggleExpand(id) {
+  function toggleExpand(id: number) {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 

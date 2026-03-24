@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useContext } from "react";
+import { useState, useEffect, useRef, useContext, useMemo } from "react";
 import { getDrugs, getPrescribers, searchPatients, getPatient, checkConflict as apiCheckConflict } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 import NewPatientForm from "./NewPatientForm";
-
+import { translateSig, looksLikeSigCode } from "@/sig_codes";
+import type { Drug, Patient, PatientSearchResult, Prescriber } from "@/types";
 const DAW_CODES = {
   0: "No product selection indicated (generic substitution allowed)",
   1: "Substitution not allowed by prescriber (brand medically necessary)",
@@ -17,9 +18,9 @@ const DAW_CODES = {
   9: "Other",
 };
 
-const API = `${import.meta.env.VITE_API_BASE || 'http://localhost:8000'}/api/v1`;
+const API = `${(import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'}/api/v1`;
 
-function parseDueInput(raw) {
+function parseDueInput(raw: string) {
   const str = raw.trim().toLowerCase();
   const now = new Date();
 
@@ -44,14 +45,14 @@ function parseDueInput(raw) {
   return { date: new Date(now.getTime() + ms), priority: null };
 }
 
-function formatDueDisplay(date) {
+function formatDueDisplay(date: Date) {
   return date.toLocaleString(undefined, {
     month: "short", day: "numeric", year: "numeric",
     hour: "numeric", minute: "2-digit",
   });
 }
 
-function parseScheduleDays(raw) {
+function parseScheduleDays(raw: string) {
   const n = parseInt(raw.trim(), 10);
   if (isNaN(n) || n < 1 || n > 30) return null;
   const d = new Date();
@@ -59,33 +60,52 @@ function parseScheduleDays(raw) {
   return d;
 }
 
-function formatScheduledDate(date) {
+function formatScheduledDate(date: Date) {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default function PrescriptionForm({ onBack, patientId }) {
+export default function PrescriptionForm({ onBack, patientId }: { onBack?: () => void; patientId?: number }) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
   const [step, setStep] = useState(1);
-  const [drugs, setDrugs] = useState([]);
-  const [prescribers, setPrescribers] = useState([]);
-  const [conflict, setConflict] = useState(null);
+  const [drugs, setDrugs] = useState<Drug[]>([]);
+  const [prescribers, setPrescribers] = useState<Prescriber[]>([]);
+  const [conflict, setConflict] = useState<{ has_conflict: boolean; active_refills: { id: number; state: string; due_date: string; quantity: number }[]; recent_fills: { id: number; sold_date: string; days_supply: number; quantity: number }[]; message?: string } | null>(null);
   const [dueInput, setDueInput] = useState("");
   const [dueDisplay, setDueDisplay] = useState("");
   const [scheduleMode, setScheduleMode] = useState("now"); // "now" | "scheduled"
   const [scheduleDays, setScheduleDays] = useState("");
   const [scheduledDateDisplay, setScheduledDateDisplay] = useState("");
 
+  // SIG code shorthand state
+  const [sigInput, setSigInput] = useState("");
+  const [showSigRef, setShowSigRef] = useState(false);
+
+  // Drug search state
+  const [drugQuery, setDrugQuery] = useState("");
+  const [drugDropdownOpen, setDrugDropdownOpen] = useState(false);
+  const drugSearchRef = useRef<HTMLDivElement>(null);
+
+  const filteredDrugs = useMemo(() => {
+    if (!drugQuery.trim()) return drugs.slice(0, 20);
+    const q = drugQuery.toLowerCase();
+    return drugs.filter(d =>
+      (typeof d.drug_name === "string" && d.drug_name.toLowerCase().includes(q)) ||
+      (typeof d.manufacturer === "string" && d.manufacturer.toLowerCase().includes(q)) ||
+      String(d.drug_class).includes(q)
+    ).slice(0, 20);
+  }, [drugs, drugQuery]);
+
   // Patient search state (used when no patientId prop)
   const [patientQuery, setPatientQuery] = useState("");
-  const [patientSearchResults, setPatientSearchResults] = useState([]);
+  const [patientSearchResults, setPatientSearchResults] = useState<PatientSearchResult[]>([]);
   const [patientSearchError, setPatientSearchError] = useState("");
-  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showNewPatientForm, setShowNewPatientForm] = useState(false);
   const [newPatientPrefill, setNewPatientPrefill] = useState({ last: "", first: "" });
 
-  const [picture, setPicture] = useState(null);
-  const fileInputRef = useRef(null);
+  const [picture, setPicture] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [expirationEdited, setExpirationEdited] = useState(false);
 
   const defaultExpiration = (() => {
@@ -111,49 +131,62 @@ export default function PrescriptionForm({ onBack, patientId }) {
   });
 
   useEffect(() => {
-    getDrugs(token).then(res => setDrugs(res.items ?? res)).catch(console.error);
-    getPrescribers(token).then(res => setPrescribers(res.items ?? res)).catch(console.error);
+    const handler = (e: MouseEvent) => {
+      if (drugSearchRef.current && !drugSearchRef.current.contains(e.target as Node)) {
+        setDrugDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    getDrugs(token).then((res) => setDrugs(Array.isArray(res) ? res : res.items)).catch(console.error);
+    getPrescribers(token).then((res) => setPrescribers(Array.isArray(res) ? res : res.items)).catch(console.error);
     if (patientId) {
-      getPatient(patientId, token).then(setSelectedPatient).catch(console.error);
+      getPatient(patientId, token).then((d) => setSelectedPatient(d as Patient)).catch(console.error);
     }
   }, [patientId, token]);
 
-  const handlePatientSearch = async (e) => {
+  const handlePatientSearch = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setPatientSearchError("");
     setPatientSearchResults([]);
     try {
-      const results = await searchPatients(patientQuery);
+      if (!token) return;
+      const results = await searchPatients(patientQuery, token);
       if (results.length === 0) {
         const [last = "", first = ""] = patientQuery.split(",").map((s) => s.trim());
         setNewPatientPrefill({ last, first });
         setPatientSearchError("no_match");
       } else if (results.length === 1) {
-        setSelectedPatient(results[0]);
+        setSelectedPatient(results[0] as unknown as Patient);
       } else {
         setPatientSearchResults(results);
       }
     } catch (e) {
-      setPatientSearchError(e.message);
+      setPatientSearchError((e as Error).message);
     }
   };
 
-  const handlePictureSelect = (e) => {
-    const file = e.target.files[0];
+  const handlePictureSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => setPicture(reader.result);
+    reader.onload = () => setPicture(reader.result as string);
     reader.readAsDataURL(file);
   };
 
-  const getMaxExpiration = (dateReceived) => {
+  const getMaxExpiration = (dateReceived: string) => {
     const d = new Date(dateReceived + "T00:00:00");
     d.setFullYear(d.getFullYear() + 1);
     return d.toISOString().split("T")[0];
   };
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const target = e.target as HTMLInputElement;
+    const { name, value, type, checked } = target;
 
     if (name === "date_received") {
       const maxExp = getMaxExpiration(value);
@@ -184,7 +217,8 @@ export default function PrescriptionForm({ onBack, patientId }) {
       return;
     }
     try {
-      const data = await apiCheckConflict(selectedPatient.id, form.drug_id, token);
+      if (!token) return;
+      const data = await apiCheckConflict(selectedPatient.id, parseInt(String(form.drug_id), 10), token);
       setConflict(data);
       if (data.has_conflict) {
         addNotification(`Conflict: ${data.message} — Review below and continue if intended.`, "warning");
@@ -192,11 +226,12 @@ export default function PrescriptionForm({ onBack, patientId }) {
         setStep(2);
       }
     } catch (e) {
-      addNotification(e.message, "error");
+      addNotification((e as Error).message, "error");
     }
   };
 
-  const handleSubmit = async (initialState) => {
+  const handleSubmit = async (initialState: string) => {
+    if (!selectedPatient || !token) return;
     try {
       const res = await fetch(`${API}/refills/create_manual`, {
         method: "POST",
@@ -228,7 +263,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
       addNotification(`Prescription created successfully! RX#: ${result["RX#"]} | State: ${result.state}`, "success");
       if (onBack) onBack();
     } catch (e) {
-      addNotification(e.message, "error");
+      addNotification((e as Error).message, "error");
     }
   };
 
@@ -338,7 +373,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
                         key={p.id}
                         className="btn btn-secondary"
                         style={{ display: "block", width: "100%", textAlign: "left", marginBottom: "0.25rem" }}
-                        onClick={() => { setSelectedPatient(p); setPatientSearchResults([]); }}
+                        onClick={() => { setSelectedPatient(p as unknown as Patient); setPatientSearchResults([]); }}
                       >
                         {p.last_name.toUpperCase()}, {p.first_name.toUpperCase()} — DOB: {p.dob}
                       </button>
@@ -351,38 +386,76 @@ export default function PrescriptionForm({ onBack, patientId }) {
 
           {/* Drug section */}
           <div className="card" style={{ padding: "1rem" }}>
-            <label>
-              <strong>Drug</strong>
-              <select
-                name="drug_id"
-                value={form.drug_id}
-                onChange={handleChange}
-                style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
-              >
-                <option value="">-- Select Drug --</option>
-                {drugs.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.drug_name} ({d.manufacturer}) - ${Number(d.cost).toFixed(2)}
-                    {d.niosh && " ⚠️ NIOSH"}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <strong>Drug</strong>
 
-            {selectedDrug && (
-              <div style={{ marginTop: "0.5rem", padding: "0.5rem", background: "var(--bg-light)", borderRadius: "4px" }}>
-                <strong>{selectedDrug.drug_name}</strong> ({selectedDrug.manufacturer})
-                {selectedDrug.description && (
-                  <div style={{ fontSize: "0.9rem", color: "var(--text-light)", marginTop: "0.25rem" }}>
-                    {selectedDrug.description}
+            {selectedDrug ? (
+              <div style={{ marginTop: "0.5rem" }}>
+                <div style={{ padding: "0.5rem", background: "var(--bg-light)", borderRadius: "4px" }}>
+                  <strong>{selectedDrug.drug_name}</strong> ({selectedDrug.manufacturer})
+                  {selectedDrug.description && (
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-light)", marginTop: "0.25rem" }}>
+                      {selectedDrug.description}
+                    </div>
+                  )}
+                  <div style={{ fontSize: "0.9rem", marginTop: "0.25rem" }}>
+                    Cost: ${Number(selectedDrug.cost).toFixed(2)} | Class: {selectedDrug.drug_class}
+                    {selectedDrug.niosh && <span style={{ color: "var(--danger)", marginLeft: "0.5rem" }}>⚠️ NIOSH HAZARDOUS</span>}
+                  </div>
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{ marginTop: "0.5rem" }}
+                  onClick={() => { setForm(f => ({ ...f, drug_id: "" })); setDrugQuery(""); }}
+                >
+                  Change Drug
+                </button>
+              </div>
+            ) : (
+              <div ref={drugSearchRef} style={{ position: "relative", marginTop: "0.25rem" }}>
+                <input
+                  className="input"
+                  placeholder="Search by name, manufacturer, or class..."
+                  value={drugQuery}
+                  onChange={(e) => { setDrugQuery(e.target.value); setDrugDropdownOpen(true); }}
+                  onFocus={() => setDrugDropdownOpen(true)}
+                  style={{ width: "100%", padding: "0.5rem" }}
+                />
+                {drugDropdownOpen && filteredDrugs.length > 0 && (
+                  <div style={{
+                    position: "absolute", zIndex: 100, width: "100%",
+                    background: "var(--bg, #1e1e2e)", border: "1px solid var(--border, #dee2e6)",
+                    borderRadius: "4px", maxHeight: "260px", overflowY: "auto", boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  }}>
+                    {filteredDrugs.map(d => (
+                      <button
+                        key={d.id}
+                        type="button"
+                        style={{
+                          display: "block", width: "100%", textAlign: "left",
+                          padding: "0.5rem 0.75rem", background: "none", border: "none",
+                          borderBottom: "1px solid var(--border, #dee2e6)", cursor: "pointer",
+                          color: "inherit",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-light)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                        onClick={() => {
+                          setForm(f => ({ ...f, drug_id: String(d.id) }));
+                          setDrugQuery(d.drug_name);
+                          setDrugDropdownOpen(false);
+                        }}
+                      >
+                        <span style={{ fontWeight: 500 }}>{d.drug_name}</span>
+                        <span style={{ fontSize: "0.85rem", color: "var(--text-light)", marginLeft: "0.5rem" }}>
+                          ({d.manufacturer}) — ${Number(d.cost).toFixed(2)}
+                        </span>
+                        {d.niosh && <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginLeft: "0.5rem" }}>⚠️ NIOSH</span>}
+                      </button>
+                    ))}
                   </div>
                 )}
-                <div style={{ fontSize: "0.9rem", marginTop: "0.25rem" }}>
-                  Cost: ${Number(selectedDrug.cost).toFixed(2)} | Class: {selectedDrug.drug_class}
-                  {selectedDrug.niosh && <span style={{ color: "var(--danger)", marginLeft: "0.5rem" }}>⚠️ NIOSH HAZARDOUS</span>}
-                </div>
               </div>
             )}
+
           </div>
 
           {conflict && (
@@ -548,6 +621,92 @@ export default function PrescriptionForm({ onBack, patientId }) {
 
           {/* Instructions + Priority */}
           <div className="card" style={{ padding: "1rem" }}>
+
+            {/* SIG Code shorthand panel */}
+            <div style={{ marginBottom: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }}>
+                <strong style={{ fontSize: "0.9rem" }}>SIG Code Shorthand</strong>
+                <button
+                  type="button"
+                  style={{
+                    fontSize: "0.75rem", padding: "0.1rem 0.4rem",
+                    background: "none", border: "1px solid var(--border, #dee2e6)",
+                    borderRadius: "4px", cursor: "pointer", color: "var(--text-light)",
+                  }}
+                  onClick={() => setShowSigRef(r => !r)}
+                >
+                  {showSigRef ? "Hide reference" : "Show codes"}
+                </button>
+              </div>
+
+              {showSigRef && (
+                <div style={{
+                  fontSize: "0.75rem", padding: "0.5rem", marginBottom: "0.5rem",
+                  background: "var(--bg-light)", borderRadius: "4px",
+                  display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: "0.2rem 1rem",
+                  maxHeight: "180px", overflowY: "auto",
+                }}>
+                  {[
+                    ["TAB / CAP / GTT / PF", "tablet / capsule / drop / puff"],
+                    ["TSP / TBL / SUPP", "teaspoon / tablespoon / suppository"],
+                    ["APL / SS", "applicatorful / one-half"],
+                    ["PO / SL / INJ / I / APP", "by mouth / under tongue / inject / inhale / apply"],
+                    ["OD / OS / AU / OU / IEN", "right eye / left eye / each ear / each eye / nostril"],
+                    ["QD / BID / TID / QID", "once daily / twice / 3× / 4× daily"],
+                    ["Q4H / Q6H / Q8H / Q12H", "every 4 / 6 / 8 / 12 hours"],
+                    ["HS / QAM / QPM / PRN", "bedtime / morning / evening / as needed"],
+                    ["STAT / Q2D / Q2-3H", "immediately / every other day / 2–3h"],
+                    ["CC / CF / PC / AC", "with meals / with food / after meals / before meals"],
+                    ["UF / SW / CR / SP", "until finished / shake well / crushed / sparingly"],
+                    ["PA / FE / SB / HD", "for pain / fever / shortness of breath / headache"],
+                    ["DI / CON / INF / RA / AR", "diarrhea / constipation / inflammation / rash / arthritis"],
+                  ].map(([codes, desc]) => (
+                    <div key={codes}>
+                      <span style={{ fontWeight: 600, color: "var(--primary, #6c63ff)" }}>{codes}</span>
+                      <span style={{ color: "var(--text-light)", marginLeft: "0.3rem" }}>— {desc}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <input
+                    className="input"
+                    placeholder="e.g.  1 TAB PO QD CF   or   2 GTT OD QID PRN PA"
+                    value={sigInput}
+                    onChange={e => setSigInput(e.target.value)}
+                    style={{ width: "100%", padding: "0.4rem 0.5rem", fontFamily: "monospace" }}
+                  />
+                  {looksLikeSigCode(sigInput) && (
+                    <div style={{
+                      marginTop: "0.3rem", padding: "0.35rem 0.6rem",
+                      background: "rgba(108, 99, 255, 0.08)", borderRadius: "4px",
+                      fontSize: "0.875rem", color: "var(--text)",
+                      borderLeft: "3px solid var(--primary, #6c63ff)",
+                    }}>
+                      {translateSig(sigInput, selectedDrug?.drug_form)}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ whiteSpace: "nowrap", padding: "0.4rem 0.75rem" }}
+                  disabled={!looksLikeSigCode(sigInput)}
+                  onClick={() => {
+                    const translated = translateSig(sigInput, selectedDrug?.drug_form);
+                    if (translated) {
+                      setForm(f => ({ ...f, instructions: translated }));
+                      setSigInput("");
+                    }
+                  }}
+                >
+                  → Apply
+                </button>
+              </div>
+            </div>
+
             <label>
               <strong>Instructions <span style={{ color: "var(--danger)" }}>*</span></strong>
               <textarea
@@ -734,7 +893,7 @@ export default function PrescriptionForm({ onBack, patientId }) {
                     type="button"
                     className="btn btn-secondary"
                     style={{ padding: "4px 14px", fontSize: "0.85rem" }}
-                    onClick={() => { setPicture(null); fileInputRef.current.value = ""; }}
+                    onClick={() => { setPicture(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}
                   >
                     Remove
                   </button>

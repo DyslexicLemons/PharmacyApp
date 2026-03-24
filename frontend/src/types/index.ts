@@ -18,8 +18,8 @@ export type RxState =
 export const APPROVABLE_STATES: RxState[] = ["QT", "QV1", "QP", "QV2", "READY", "HOLD", "SCHEDULED"];
 /** States where Hold is valid */
 export const HOLDABLE_STATES: RxState[] = ["QT", "QV1", "QP", "QV2"];
-/** States where Reject is valid */
-export const REJECTABLE_STATES: RxState[] = ["QV1", "HOLD"];
+/** States where pharmacist reject (return to QT) is valid */
+export const REJECTABLE_STATES: RxState[] = ["QV1"];
 /** States where Edit is valid */
 export const EDITABLE_STATES: RxState[] = ["QT", "QP", "HOLD"];
 
@@ -32,9 +32,12 @@ export interface Drug {
   drug_name: string;
   ndc: string | null;
   manufacturer: string;
+  cost: number | string;
   description: string | null;
   drug_class: number;
   niosh: boolean;
+  /** Physical/delivery form — drives SIG code translation defaults */
+  drug_form: string | null;
 }
 
 export interface Patient {
@@ -51,6 +54,7 @@ export interface PatientSearchResult {
   id: number;
   first_name: string;
   last_name: string;
+  dob?: string;
 }
 
 export interface Prescriber {
@@ -64,15 +68,23 @@ export interface Prescriber {
 
 export interface Prescription {
   id: number;
-  date_received: string | null;
-  expiration_date: string | null;
-  daw_code: number;
-  original_quantity: number;
+  date_received?: string | null;
+  expiration_date?: string | null;
+  daw_code?: number;
+  original_quantity?: number;
   remaining_quantity: number;
-  instructions: string | null;
-  picture: string | null;
-  prescriber: Prescriber | null;
-  patient: Patient;
+  instructions?: string | null;
+  picture?: string | null;
+  prescriber?: Prescriber | null;
+  patient?: Patient;
+  drug_id?: number;
+  drug?: { drug_name: string; [key: string]: unknown };
+  is_inactive?: boolean;
+  is_expired?: boolean;
+  latest_refill?: unknown;
+  picture_url?: string | null;
+  prescriber_id?: number;
+  patient_id?: number;
 }
 
 export interface Refill {
@@ -90,12 +102,19 @@ export interface Refill {
   rejection_reason: string | null;
   rejected_by: string | null;
   rejection_date: string | null;
+  triage_reason: string | null;
+  priority?: string;
+  due_date?: string | null;
 }
 
 export interface StockEntry {
   drug_id: number;
   drug_name: string;
   quantity: number;
+  drug: Drug;
+  package_size: number;
+  rts_count: number;
+  rts_quantity: number;
 }
 
 export interface Shipment {
@@ -125,6 +144,7 @@ export interface PatientInsurance {
   group_number: string | null;
   rx_bin: string | null;
   rx_pcn: string | null;
+  is_active?: boolean;
 }
 
 export interface RTSLookup {
@@ -160,7 +180,32 @@ export interface AuditLogEntry {
 }
 
 export interface SystemConfig {
-  [key: string]: string | number | boolean | null;
+  bin_count: number;
+  simulation_enabled: boolean;
+  sim_arrival_rate: number;
+  sim_reject_rate: number;
+}
+
+export interface SimWorkerRefillContext {
+  id: number;
+  prescription_id: number;
+  drug_name: string;
+  patient_name: string;
+}
+
+export interface SimWorker {
+  id: number;
+  name: string;
+  role: "technician" | "pharmacist";
+  is_active: boolean;
+  speed: number;
+  current_station: "triage" | "fill" | "verify_1" | "verify_2" | "window" | null;
+  busy_until: string | null;
+  task_started_at: string | null;
+  current_refill_id: number | null;
+  current_refill: SimWorkerRefillContext | null;
+  progress_pct: number | null;
+  secs_remaining: number | null;
 }
 
 export interface User {
@@ -249,4 +294,5 @@ export type RouteState =
   | { view: "SYSTEM_SETTINGS" }
   | { view: "ADMIN_CONSOLE" }
   | { view: "RTS_LOOKUP"; refillId?: number }
-  | { view: "RTS_HIST"; page?: number };
+  | { view: "RTS_HIST"; page?: number }
+  | { view: "WORKER_DASHBOARD" };

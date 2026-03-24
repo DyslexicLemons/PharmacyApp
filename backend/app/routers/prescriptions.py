@@ -19,7 +19,7 @@ from ..models import (
     Drug, Formulary, Patient, PatientInsurance, Prescription,
     Prescriber, Refill, RefillHist, RxState, User,
 )
-from .. import schemas
+from .. import cache, schemas
 from ..utils import _int, _parse_priority, _write_audit
 from .patients import _get_latest_refill_for_prescription
 
@@ -148,6 +148,9 @@ def update_prescription(
     prescription = db.get(Prescription, prescription_id)
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
+    locked_by = cache.check_prescription_locked_by_other(prescription_id, _int(current_user.id))
+    if locked_by:
+        raise HTTPException(status_code=423, detail=f"Prescription is currently open by {locked_by}")
     changed_fields = []
     if payload.expiration_date is not None:
         date_received = prescription.date_received
@@ -187,6 +190,9 @@ async def update_prescription_picture(
     prescription = db.get(Prescription, prescription_id)
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
+    locked_by = cache.check_prescription_locked_by_other(prescription_id, _int(current_user.id))
+    if locked_by:
+        raise HTTPException(status_code=423, detail=f"Prescription is currently open by {locked_by}")
 
     # Delete old file if one exists
     if prescription.picture_path:
@@ -223,6 +229,10 @@ def fill_prescription(
     Create a new refill for an existing prescription.
     Uses SELECT FOR UPDATE to prevent concurrent double-fills.
     """
+    locked_by = cache.check_prescription_locked_by_other(prescription_id, _int(current_user.id))
+    if locked_by:
+        raise HTTPException(status_code=423, detail=f"Prescription is currently open by {locked_by}")
+
     prescription = (
         db.query(Prescription)
         .filter(Prescription.id == prescription_id)
@@ -265,6 +275,7 @@ def fill_prescription(
     insurance_id: Optional[int] = None
 
     initial_state = RxState.SCHEDULED if data.scheduled else RxState.QV1
+    fill_triage_reason: Optional[str] = None
 
     if data.insurance_id:
         patient_ins = db.query(PatientInsurance).filter(
@@ -280,6 +291,7 @@ def fill_prescription(
                 not_covered = bool(formulary_entry.not_covered) if formulary_entry else True
                 if not formulary_entry or not_covered:
                     initial_state = RxState.QT
+                    fill_triage_reason = "insurance does not cover drug"
             if formulary_entry and not bool(formulary_entry.not_covered):
                 raw_copay = Decimal(str(formulary_entry.copay_per_30)) * data.days_supply / Decimal("30")
                 copay_amount = min(raw_copay, cash_price)
@@ -312,6 +324,7 @@ def fill_prescription(
         insurance_id=insurance_id,
         copay_amount=copay_amount,
         insurance_paid=insurance_paid,
+        triage_reason=fill_triage_reason,
     )
     db.add(refill)
 
@@ -360,6 +373,9 @@ def hold_prescription(
     prescription = db.get(Prescription, prescription_id)
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
+    locked_by = cache.check_prescription_locked_by_other(prescription_id, _int(current_user.id))
+    if locked_by:
+        raise HTTPException(status_code=423, detail=f"Prescription is currently open by {locked_by}")
 
     if prescription.is_inactive:
         raise HTTPException(status_code=409, detail="Prescription is inactive")
@@ -434,6 +450,9 @@ def inactivate_prescription(
     prescription = db.get(Prescription, prescription_id)
     if not prescription:
         raise HTTPException(status_code=404, detail="Prescription not found")
+    locked_by = cache.check_prescription_locked_by_other(prescription_id, _int(current_user.id))
+    if locked_by:
+        raise HTTPException(status_code=423, detail=f"Prescription is currently open by {locked_by}")
 
     if prescription.is_inactive:
         raise HTTPException(status_code=409, detail="Prescription is already inactive")
@@ -458,3 +477,55 @@ def inactivate_prescription(
     )
     prescription.picture_url = _build_picture_url(request, prescription.picture_path)  # type: ignore[attr-defined]
     return prescription
+
+
+# ---------------------------------------------------------------------------
+# View locks — prevent concurrent access to the same prescription
+# ---------------------------------------------------------------------------
+
+@router.post("/{prescription_id}/lock", status_code=200)
+def acquire_lock(
+    prescription_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Acquire a view lock on a prescription for the calling user.
+
+    - 200: lock acquired (or already owned — TTL refreshed).
+    - 423: locked by another user; detail message names them.
+    - 404: prescription not found.
+    """
+    prescription = db.get(Prescription, prescription_id)
+    if not prescription:
+        raise HTTPException(status_code=404, detail="Prescription not found")
+    acquired, locked_by = cache.acquire_prescription_lock(
+        prescription_id, _int(current_user.id), current_user.username
+    )
+    if not acquired:
+        raise HTTPException(
+            status_code=423,
+            detail=f"Prescription is currently open by {locked_by}",
+        )
+    return {"locked": True, "prescription_id": prescription_id}
+
+
+@router.delete("/{prescription_id}/lock", status_code=204)
+def release_lock(
+    prescription_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    """Release a view lock. No-op if the lock belongs to someone else or doesn't exist."""
+    cache.release_prescription_lock(prescription_id, _int(current_user.id))
+
+
+@router.get("/{prescription_id}/lock")
+def get_lock_status(
+    prescription_id: int,
+    current_user: User = Depends(get_current_user),
+):
+    """Return who (if anyone) currently holds the view lock on this prescription."""
+    data = cache.get_prescription_lock(prescription_id)
+    if data:
+        return {"locked": True, "locked_by": data.get("username")}
+    return {"locked": False, "locked_by": None}

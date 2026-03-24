@@ -1,62 +1,76 @@
-import { useState } from "react";
+import { useContext, useState } from "react";
+import { AuthContext } from "@/context/AuthContext";
 import { searchPatients, fetchQueue, advanceRx } from "@/api";
 import { useNotification } from "@/context/NotificationContext";
 import Badge from "@/components/Badge";
+import type { Refill, PatientSearchResult } from "@/types";
 
-function fmt(d) {
+interface RegisterViewProps {
+  onBack?: () => void;
+}
+
+interface PatientWithDob extends PatientSearchResult {
+  dob: string;
+}
+
+function fmt(d: string | null | undefined): string {
   return d ? new Date(d).toLocaleDateString() : "—";
 }
 
-function price(refill) {
+function price(refill: Refill & { copay_amount?: number | null }): number {
   const amt = refill.copay_amount != null ? refill.copay_amount : refill.total_cost;
-  return parseFloat(amt || 0);
+  return parseFloat(String(amt || 0));
 }
 
-function refillsRemaining(refill) {
-  const remaining = refill.prescription.remaining_quantity - refill.quantity;
+function refillsRemaining(refill: Refill): number {
+  const remaining = (refill.prescription.remaining_quantity ?? 0) - refill.quantity;
   if (remaining <= 0 || refill.quantity <= 0) return 0;
   return Math.floor(remaining / refill.quantity);
 }
 
-export default function RegisterView({ onBack }) {
+const STATUS_ORDER: Record<string, number> = { READY: 0, QV2: 1, QP: 2, QV1: 3, QT: 4, HOLD: 5, SCHEDULED: 6, REJECTED: 7 };
+
+export default function RegisterView({ onBack }: RegisterViewProps) {
+  const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
   const [lastName, setLastName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [dob, setDob] = useState("");
 
   const [step, setStep] = useState("search"); // "search" | "candidates" | "checkout"
-  const [candidates, setCandidates] = useState([]);
-  const [patient, setPatient] = useState(null);
-  const [allRefills, setAllRefills] = useState([]);
-  const [selected, setSelected] = useState(new Set());
+  const [candidates, setCandidates] = useState<PatientWithDob[]>([]);
+  const [patient, setPatient] = useState<PatientWithDob | null>(null);
+  const [allRefills, setAllRefills] = useState<(Refill & { copay_amount?: number | null; completed_date?: string | null })[]>([]);
+  const [selected, setSelected] = useState(new Set<number>());
   const [selling, setSelling] = useState(false);
   const [error, setError] = useState("");
 
-  const STATUS_ORDER = { READY: 0, QV2: 1, QP: 2, QV1: 3, QT: 4, HOLD: 5, SCHEDULED: 6, REJECTED: 7 };
-
-  async function loadPatientRefills(pt) {
+  async function loadPatientRefills(pt: PatientWithDob) {
+    if (!token) { setError("Not authenticated."); return; }
     setPatient(pt);
     setError("");
     try {
-      const all = await fetchQueue(null);
+      const res = await fetchQueue(null, token);
+      const all = Array.isArray(res) ? res : res.items;
       const mine = all
         .filter((r) => r.patient.id === pt.id && r.state !== "SOLD")
         .sort((a, b) => (STATUS_ORDER[a.state] ?? 99) - (STATUS_ORDER[b.state] ?? 99));
-      setAllRefills(mine);
+      setAllRefills(mine as typeof allRefills);
       setSelected(new Set(mine.filter((r) => r.state === "READY").map((r) => r.id)));
       setStep("checkout");
     } catch (e) {
-      setError(e.message);
+      setError((e as Error).message);
     }
   }
 
-  async function handleSearch(e) {
+  async function handleSearch(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError("");
     if (!lastName.trim()) return;
+    if (!token) { setError("Not authenticated."); return; }
     const q = `${lastName.trim()},${firstName.trim()}`;
     try {
-      let matches = await searchPatients(q);
+      let matches = await searchPatients(q, token);
       if (dob) {
         matches = matches.filter((p) => p.dob === dob);
       }
@@ -65,37 +79,38 @@ export default function RegisterView({ onBack }) {
         return;
       }
       if (matches.length === 1) {
-        await loadPatientRefills(matches[0]);
+        await loadPatientRefills(matches[0] as PatientWithDob);
       } else {
-        setCandidates(matches);
+        setCandidates(matches as PatientWithDob[]);
         setStep("candidates");
       }
     } catch (e) {
-      setError(e.message);
+      setError((e as Error).message);
     }
   }
 
   async function handleSell() {
     if (selected.size === 0) return;
-    if (!confirm(`Sell ${selected.size} prescription(s) to ${patient.last_name.toUpperCase()}, ${patient.first_name.toUpperCase()}?`)) return;
+    if (!token) { setError("Not authenticated."); return; }
+    if (!confirm(`Sell ${selected.size} prescription(s) to ${patient?.last_name?.toUpperCase()}, ${patient?.first_name?.toUpperCase()}?`)) return;
     setSelling(true);
     setError("");
     try {
       for (const id of selected) {
-        await advanceRx(id, {});
+        await advanceRx(id, {}, token);
       }
       const remaining = allRefills.filter((r) => !selected.has(r.id));
       setAllRefills(remaining);
       setSelected(new Set());
       addNotification("Sale complete!", "success");
     } catch (e) {
-      setError(`Sale failed: ${e.message}`);
+      setError(`Sale failed: ${(e as Error).message}`);
     } finally {
       setSelling(false);
     }
   }
 
-  function toggleSelect(id, refill) {
+  function toggleSelect(id: number, refill: Refill) {
     if (refill.state !== "READY") return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -127,7 +142,7 @@ export default function RegisterView({ onBack }) {
                   className="input"
                   placeholder="Last name"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLastName(e.target.value)}
                   autoFocus
                 />
               </div>
@@ -137,7 +152,7 @@ export default function RegisterView({ onBack }) {
                   className="input"
                   placeholder="First name"
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFirstName(e.target.value)}
                 />
               </div>
             </div>
@@ -147,7 +162,7 @@ export default function RegisterView({ onBack }) {
                 className="input"
                 type="date"
                 value={dob}
-                onChange={(e) => setDob(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDob(e.target.value)}
               />
             </div>
             {error && <div style={{ color: "#ff7675", fontSize: "0.9rem" }}>{error}</div>}
@@ -201,10 +216,10 @@ export default function RegisterView({ onBack }) {
 
       <div className="card hstack" style={{ justifyContent: "space-between" }}>
         <div>
-          <strong style={{ fontSize: "1.1rem" }}>{patient.last_name.toUpperCase()}, {patient.first_name.toUpperCase()}</strong>
+          <strong style={{ fontSize: "1.1rem" }}>{patient?.last_name?.toUpperCase()}, {patient?.first_name?.toUpperCase()}</strong>
         </div>
         <span style={{ color: "var(--text-light)" }}>
-          DOB: {new Date(patient.dob).toLocaleDateString()}
+          DOB: {patient?.dob ? new Date(patient.dob).toLocaleDateString() : "—"}
         </span>
       </div>
 
