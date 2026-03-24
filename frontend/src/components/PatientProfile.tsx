@@ -51,13 +51,15 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!token) return;
     let mounted = true;
 
     getPatient(pid, token)
-      .then((d: PatientData) => {
+      .then((d) => {
+        const patientData = d as unknown as PatientData;
         if (!mounted) return;
-        setData(d);
-        onDataLoaded?.(d);
+        setData(patientData);
+        onDataLoaded?.(patientData);
       })
       .catch((e: Error) => setError(e.message));
 

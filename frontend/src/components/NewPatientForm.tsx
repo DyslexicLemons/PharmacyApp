@@ -46,8 +46,9 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
     e.preventDefault();
     setError("");
     setSubmitting(true);
+    if (!token) { setError("Not authenticated."); setSubmitting(false); return; }
     try {
-      const patient = await createPatient(form, token);
+      const patient = await createPatient(form as unknown as Record<string, unknown>, token);
       onCreated(patient);
     } catch (err) {
       setError((err as Error).message);

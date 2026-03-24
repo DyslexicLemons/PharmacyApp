@@ -1,12 +1,18 @@
 import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getRefillHist } from "@/api";
+import type { Refill, PaginatedResponse } from "@/types";
 
 const PAGE_SIZE = 15;
 
-export default function RefillHistView({ onBack, page = 1 }) {
+interface RefillHistViewProps {
+  onBack?: () => void;
+  page?: number;
+}
+
+export default function RefillHistView({ onBack, page = 1 }: RefillHistViewProps) {
   const { token } = useContext(AuthContext);
-  const [data, setData] = useState({ items: [], total: 0 });
+  const [data, setData] = useState<PaginatedResponse<Refill & { completed_date?: string | null; sold_date?: string | null; insurance?: { insurance_company?: { plan_name?: string } } | null }>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -15,8 +21,8 @@ export default function RefillHistView({ onBack, page = 1 }) {
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
     getRefillHist(token, PAGE_SIZE, offset)
-      .then(setData)
-      .catch((e) => setError(e.message))
+      .then((res) => setData(Array.isArray(res) ? { items: res as typeof data.items, total: res.length } : res as typeof data))
+      .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page]);
 
@@ -28,12 +34,14 @@ export default function RefillHistView({ onBack, page = 1 }) {
   const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
 
   // Compute per-prescription fill number within the current page
-  const fillNumberMap = {};
-  const rxCounter = {};
+  const fillNumberMap: Record<number, number> = {};
+  const rxCounter: Record<number, number> = {};
   [...items].sort((a, b) => a.id - b.id).forEach((r) => {
     const rxId = r.prescription?.id;
-    rxCounter[rxId] = (rxCounter[rxId] || 0) + 1;
-    fillNumberMap[r.id] = rxCounter[rxId];
+    if (rxId != null) {
+      rxCounter[rxId] = (rxCounter[rxId] || 0) + 1;
+      fillNumberMap[r.id] = rxCounter[rxId];
+    }
   });
 
   return (

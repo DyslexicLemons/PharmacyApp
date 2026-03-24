@@ -113,6 +113,9 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>admin</code> – Admin console (generate test data, clear prescriptions)
               </li>
               <li>
+                <code>workers</code> – Worker dashboard (live station status &amp; queue counts)
+              </li>
+              <li>
                 <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
               </li>
             </ul>

@@ -460,9 +460,15 @@ class TestFillWithInsurance:
             json=fill_payload(30, insurance_id=pi.id)
         )
         assert resp.status_code == 200
+        body = resp.json()
+        assert "QT" in body["state"]
         # QT is an ACTIVE_STATE — remaining_qty should have been decremented
         db.refresh(prescription)
         assert prescription.remaining_quantity == 60
+        # triage_reason must be set so staff know why the script is in QT
+        from app.models import Refill
+        refill = db.query(Refill).filter(Refill.id == body["refill_id"]).first()
+        assert refill.triage_reason == "insurance does not cover drug"
 
     def test_fill_with_nonexistent_insurance_id_falls_back_gracefully(self, client, base_data):
         """Invalid insurance_id is treated as no insurance (falls back to cash)."""

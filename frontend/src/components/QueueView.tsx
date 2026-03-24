@@ -9,7 +9,9 @@ const PAGE_SIZE = 15;
 
 const PRIORITY_ORDER = { stat: 0, high: 1, normal: 2 };
 
-function getSortValue(r, key) {
+import type { Refill } from "@/types";
+
+function getSortValue(r: Refill, key: string): string | number {
   switch (key) {
     case "rx":       return r.prescription?.id ?? 0;
     case "drug":     return r.drug.drug_name.toLowerCase();
@@ -17,22 +19,30 @@ function getSortValue(r, key) {
     case "qty":      return r.quantity;
     case "days":     return r.days_supply;
     case "cost":     return Number(r.total_cost);
-    case "due":      return new Date(r.due_date).getTime();
-    case "priority": return PRIORITY_ORDER[r.priority] ?? 99;
+    case "due":      return r.due_date ? new Date(r.due_date).getTime() : 0;
+    case "priority": return (PRIORITY_ORDER as Record<string, number>)[r.priority ?? ""] ?? 99;
     case "state":    return r.state;
     default:         return 0;
   }
 }
 
-export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, onSelectRefill }) {
+interface QueueViewProps {
+  stateFilter?: string;
+  onBack?: () => void;
+  onSelectRow?: number | null;
+  page?: number;
+  onSelectRefill?: (id: number) => void;
+}
+
+export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, onSelectRefill }: QueueViewProps) {
   const { token } = useContext(AuthContext);
   const [sortKey, setSortKey] = useState("due");
   const [sortDir, setSortDir] = useState("asc");
 
   const { data, isLoading: loading, error: queryError } = useQuery({
     queryKey: ["queue", stateFilter, token],
-    queryFn: () => fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : undefined, token),
-    select: (data) => data.items ?? data,
+    queryFn: () => fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : null, token!),
+    select: (res) => Array.isArray(res) ? res : res.items,
     refetchInterval: 30_000,
     enabled: !!token,
   });
@@ -40,7 +50,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
   const refills = data ?? [];
   const error = queryError?.message ?? "";
 
-  const handleSelectRefill = (id) => {
+  const handleSelectRefill = (id: number) => {
     if (onSelectRefill) onSelectRefill(id);
   };
 
@@ -54,7 +64,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
     }
   }, [onSelectRow, refills]);
 
-  const handleSort = (key) => {
+  const handleSort = (key: string) => {
     if (sortKey === key) {
       setSortDir(d => d === "asc" ? "desc" : "asc");
     } else {
@@ -76,7 +86,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
   const endIdx = Math.min(startIdx + PAGE_SIZE, total);
   const pageItems = sortedRefills.slice(startIdx, endIdx);
 
-  const SortTh = ({ label, colKey }) => {
+  const SortTh = ({ label, colKey }: { label: string; colKey: string }) => {
     const active = sortKey === colKey;
     return (
       <th
@@ -148,7 +158,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
                 <td>{r.quantity}</td>
                 <td>{r.days_supply}</td>
                 <td>{"$" + Number(r.total_cost).toFixed(2)}</td>
-                <td>{new Date(r.due_date).toLocaleDateString()}</td>
+                <td>{r.due_date ? new Date(r.due_date).toLocaleDateString() : "—"}</td>
                 <td>{r.priority}</td>
                 <td><Badge state={r.state} /></td>
                 {stateFilter === "READY" && (

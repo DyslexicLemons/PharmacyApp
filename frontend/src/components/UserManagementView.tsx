@@ -1,11 +1,16 @@
 import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { getUsers, createUser } from "@/api";
+import type { User } from "@/types";
 
-export default function UserManagementView({ onBack }) {
+interface UserManagementViewProps {
+  onBack?: () => void;
+}
+
+export default function UserManagementView({ onBack }: UserManagementViewProps) {
   const { token } = useContext(AuthContext);
 
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loadError, setLoadError] = useState("");
 
   const [newUsername, setNewUsername] = useState("");
@@ -16,16 +21,18 @@ export default function UserManagementView({ onBack }) {
   const [createSuccess, setCreateSuccess] = useState("");
 
   useEffect(() => {
+    if (!token) return;
     getUsers(token)
       .then(setUsers)
-      .catch((err) => setLoadError(err.message));
+      .catch((err: Error) => setLoadError(err.message));
   }, [token]);
 
-  async function handleCreate(e) {
+  async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setCreateError("");
     setCreateSuccess("");
     setCreating(true);
+    if (!token) { setCreateError("Not authenticated."); setCreating(false); return; }
     try {
       const created = await createUser(
         { username: newUsername, password: newPassword, is_admin: newIsAdmin },
@@ -37,7 +44,7 @@ export default function UserManagementView({ onBack }) {
       setNewIsAdmin(false);
       setCreateSuccess(`User "${created.username}" created successfully.`);
     } catch (err) {
-      setCreateError(err.message);
+      setCreateError((err as Error).message);
     } finally {
       setCreating(false);
     }
@@ -85,7 +92,7 @@ export default function UserManagementView({ onBack }) {
                 className="input"
                 type="text"
                 value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewUsername(e.target.value)}
                 required
               />
             </div>
@@ -97,7 +104,7 @@ export default function UserManagementView({ onBack }) {
                 className="input"
                 type="password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPassword(e.target.value)}
                 required
               />
             </div>
@@ -106,7 +113,7 @@ export default function UserManagementView({ onBack }) {
             <input
               type="checkbox"
               checked={newIsAdmin}
-              onChange={(e) => setNewIsAdmin(e.target.checked)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewIsAdmin(e.target.checked)}
               style={{ width: 16, height: 16 }}
             />
             <span style={{ fontSize: "0.9rem" }}>Grant admin privileges</span>

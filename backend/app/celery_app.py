@@ -11,11 +11,18 @@ Schedule (all times UTC):
   - expire-prescriptions-daily          — 00:00 UTC
   - promote-scheduled-refills-halfhour  — every 30 minutes
   - purge-expired-quick-codes-hourly    — :30 every hour
+
+Simulation tasks (only act when SystemConfig.simulation_enabled = true):
+  - simulate-patient-arrivals           — every 30 seconds
+  - simulate-technician                 — every 10 seconds
+  - simulate-pharmacist                 — every 10 seconds
+  - simulate-patient-pickups            — every 15 seconds
 """
 
 import os
 from celery import Celery
 from celery.schedules import crontab
+from datetime import timedelta
 
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 
@@ -43,6 +50,23 @@ celery_app.conf.update(
         "purge-expired-quick-codes-hourly": {
             "task": "app.tasks.purge_expired_quick_codes",
             "schedule": crontab(minute=30),
+        },
+        # Simulation agents — fire every 10–30 seconds (tasks self-skip when disabled)
+        "simulate-patient-arrivals": {
+            "task": "app.tasks.simulate_patient_arrivals",
+            "schedule": timedelta(seconds=30),
+        },
+        "simulate-technician": {
+            "task": "app.tasks.simulate_technician",
+            "schedule": timedelta(seconds=10),
+        },
+        "simulate-pharmacist": {
+            "task": "app.tasks.simulate_pharmacist",
+            "schedule": timedelta(seconds=10),
+        },
+        "simulate-patient-pickups": {
+            "task": "app.tasks.simulate_patient_pickups",
+            "schedule": timedelta(seconds=15),
         },
     },
 )

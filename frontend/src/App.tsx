@@ -35,6 +35,7 @@ const SystemSettingsView    = lazy(() => import("@/components/SystemSettingsView
 const AdminConsoleView      = lazy(() => import("@/components/AdminConsoleView"));
 const RTSView               = lazy(() => import("@/components/RTSView"));
 const RTSHistView           = lazy(() => import("@/components/RTSHistView"));
+const WorkerDashboardView   = lazy(() => import("@/components/WorkerDashboardView"));
 
 function ViewFallback() {
   return (
@@ -152,8 +153,8 @@ function App() {
           navigateTo({
             view: "VIEW_PRESCRIPTION",
             prescription,
-            patientName: `${p.last_name}, ${p.first_name}`,
-            patientId: p.id,
+            patientName: p ? `${p.last_name}, ${p.first_name}` : "Unknown",
+            patientId: p?.id ?? 0,
           });
         })
         .catch(() => addNotification(`Rx #${rxId} not found`, "error"));
@@ -300,6 +301,7 @@ function App() {
       if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
       navigateToSection({ view: "ADMIN_CONSOLE" });
     }
+    else if (cmd === "workers") navigateToSection({ view: "WORKER_DASHBOARD" });
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
         generateTestPrescriptions(token!)
@@ -509,6 +511,7 @@ function App() {
             />
           )}
           {route.view === "RTS_HIST" && <RTSHistView onBack={goBack} page={route.page || 1} />}
+          {route.view === "WORKER_DASHBOARD" && <WorkerDashboardView onBack={goBack} />}
           {route.view === "AUDIT_LOG" && <AuditLogView onBack={goBack} page={route.page || 1} />}
           {route.view === "SHIPMENT" && (
             <ShipmentView
@@ -537,7 +540,7 @@ function App() {
       {isAuthenticated && <QueueSidebar />}
       </div>
       <footer>
-        <strong>JoeMed</strong> Pharmacy Management System | API: {import.meta.env.VITE_API_BASE || "http://localhost:8000"}
+        <strong>JoeMed</strong> Pharmacy Management System | API: {(import.meta as unknown as { env: Record<string, string> }).env.VITE_API_BASE || "http://localhost:8000"}
         {isAuthenticated && authUser && (
           <span style={{ marginLeft: "1.5rem", color: "var(--text-light)" }}>
             Logged in as: <strong>{authUser.username}</strong>{authUser.isAdmin ? " (Admin)" : ""}

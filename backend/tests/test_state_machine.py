@@ -316,6 +316,7 @@ class TestResumeFromNonActiveState:
 
 class TestRejectionTransitions:
     def test_qv1_can_be_rejected(self, client, db_session):
+        """QV1 reject returns the fill to QT with triage_reason set."""
         _, refill = setup_refill(db_session, RxState.QV1)
         resp = advance(
             client, refill.id,
@@ -324,9 +325,10 @@ class TestRejectionTransitions:
             rejected_by="Jane Smith RPh"
         )
         assert resp.status_code == 200
-        assert resp.json()["state"] == "REJECTED"
+        assert resp.json()["state"] == "QT"
 
     def test_rejection_records_reason_and_rejector(self, client, db_session):
+        """Rejection stores reason in triage_reason, rejected_by, and rejection_date."""
         _, refill = setup_refill(db_session, RxState.QV1)
         resp = advance(
             client, refill.id,
@@ -335,31 +337,32 @@ class TestRejectionTransitions:
             rejected_by="Dr. Quality"
         )
         body = resp.json()
+        assert body["state"] == "QT"
         assert body["rejection_reason"] == "Forged signature"
         assert body["rejected_by"] == "Dr. Quality"
         assert body["rejection_date"] == str(date.today())
+        assert "Forged signature" in body["triage_reason"]
 
-    def test_rejection_without_reason_uses_default(self, client, db_session):
+    def test_rejection_without_reason_returns_400(self, client, db_session):
+        """rejection_reason is required when rejecting from QV1."""
         _, refill = setup_refill(db_session, RxState.QV1)
         resp = advance(client, refill.id, action="reject")
-        assert resp.status_code == 200
-        assert resp.json()["rejection_reason"] == "No reason provided"
-        assert resp.json()["rejected_by"] == "Unknown"
+        assert resp.status_code == 400
 
     def test_qt_cannot_be_rejected(self, client, db_session):
-        """REJECTED is not a valid transition from QT."""
+        """Reject is only valid from QV1 — QT should return 400."""
         _, refill = setup_refill(db_session, RxState.QT)
-        resp = advance(client, refill.id, action="reject")
+        resp = advance(client, refill.id, action="reject", rejection_reason="reason")
         assert resp.status_code == 400
 
     def test_qp_cannot_be_rejected(self, client, db_session):
-        """QP → REJECTED is not in the TRANSITIONS map."""
+        """Reject is only valid from QV1 — QP should return 400."""
         _, refill = setup_refill(db_session, RxState.QP)
-        resp = advance(client, refill.id, action="reject")
+        resp = advance(client, refill.id, action="reject", rejection_reason="reason")
         assert resp.status_code == 400
 
-    def test_rejection_returns_quantity_to_prescription(self, client, db_session):
-        """Rejecting from an active state returns reserved qty to the prescription."""
+    def test_rejection_quantity_stays_reserved(self, client, db_session):
+        """QV1 → QT (reject): both states are active, so reserved qty is unchanged."""
         db = db_session
         prescriber = make_prescriber(db)
         drug = make_drug(db)
@@ -372,20 +375,19 @@ class TestRejectionTransitions:
         advance(client, refill.id, action="reject", rejection_reason="Controlled substance abuse")
 
         db.refresh(prescription)
-        assert prescription.remaining_quantity == 90  # quantity returned
+        assert prescription.remaining_quantity == 60  # qty still reserved — refill is now in QT (active)
 
     def test_rejected_state_has_no_further_transitions(self, client, db_session):
-        """REJECTED is terminal — no further state changes allowed."""
+        """Legacy REJECTED records are terminal — no further state changes allowed."""
         _, refill = setup_refill(db_session, RxState.REJECTED)
         resp = advance(client, refill.id)
         assert resp.status_code == 400
 
-    def test_hold_can_be_rejected(self, client, db_session):
-        """HOLD → REJECTED is a valid escape path."""
+    def test_hold_cannot_be_rejected(self, client, db_session):
+        """HOLD → reject is no longer valid; reject is only allowed from QV1."""
         _, refill = setup_refill(db_session, RxState.HOLD, remaining_qty=90)
-        resp = advance(client, refill.id, action="reject")
-        assert resp.status_code == 200
-        assert resp.json()["state"] == "REJECTED"
+        resp = advance(client, refill.id, action="reject", rejection_reason="reason")
+        assert resp.status_code == 400
 
 
 # ===========================================================================
@@ -421,7 +423,7 @@ class TestStateTransitionAuditLog:
     def test_rejection_audit_log_includes_rejector(self, client, db_session):
         from app.models import AuditLog
         _, refill = setup_refill(db_session, RxState.QV1)
-        advance(client, refill.id, action="reject", rejected_by="TestRPh")
+        advance(client, refill.id, action="reject", rejected_by="TestRPh", rejection_reason="Duplicate therapy")
         log = db_session.query(AuditLog).filter(
             AuditLog.action == "STATE_TRANSITION",
             AuditLog.details.contains("TestRPh")
@@ -444,6 +446,7 @@ class TestStateTransitionAuditLog:
         resp = advance(
             client, refill.id,
             action="reject",
+            rejection_reason="Valid reason",
             rejected_by="x" * 201,
         )
         assert resp.status_code == 422

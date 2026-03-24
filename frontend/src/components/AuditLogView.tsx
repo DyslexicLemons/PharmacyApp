@@ -7,7 +7,7 @@ const PAGE_SIZE = 15;
 
 interface AuditFilters {
   username?: string;
-  prescriptionId?: string;
+  prescriptionId?: number;
 }
 
 interface AuditLogViewProps {
@@ -30,7 +30,7 @@ export default function AuditLogView({ onBack, page = 1 }: AuditLogViewProps) {
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
     getAuditLog(token, PAGE_SIZE, offset, filters)
-      .then(setData)
+      .then((res) => setData(Array.isArray(res) ? { items: res, total: res.length } : res))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page, filters]);
@@ -39,7 +39,8 @@ export default function AuditLogView({ onBack, page = 1 }: AuditLogViewProps) {
     e.preventDefault();
     const next: AuditFilters = {};
     if (usernameInput.trim()) next.username = usernameInput.trim();
-    if (rxInput.trim()) next.prescriptionId = rxInput.trim();
+    const rxNum = parseInt(rxInput.trim(), 10);
+    if (rxInput.trim() && !isNaN(rxNum)) next.prescriptionId = rxNum;
     setFilters(next);
   }
 
@@ -99,8 +100,8 @@ export default function AuditLogView({ onBack, page = 1 }: AuditLogViewProps) {
         <p style={{ fontSize: "0.85rem", color: "var(--text-light)", marginBottom: "0.5rem" }}>
           Filtering by:{" "}
           {filters.username && <strong>user "{filters.username}"</strong>}
-          {filters.username && filters.prescriptionId && " and "}
-          {filters.prescriptionId && <strong>RX #{filters.prescriptionId}</strong>}
+          {filters.username && filters.prescriptionId != null && " and "}
+          {filters.prescriptionId != null && <strong>RX #{filters.prescriptionId}</strong>}
         </p>
       )}
 

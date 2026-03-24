@@ -26,7 +26,7 @@ export default function DrugsView({ onBack, onSelectDrug, page = 1 }: DrugsViewP
     setLoading(true);
     const offset = (page - 1) * PAGE_SIZE;
     getDrugs(token, PAGE_SIZE, offset)
-      .then(setData)
+      .then((res) => setData(Array.isArray(res) ? { items: res, total: res.length } : res as PaginatedResponse<DrugWithCost>))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   }, [token, page]);

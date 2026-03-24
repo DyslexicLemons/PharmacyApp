@@ -150,3 +150,82 @@ def cache_delete_pattern(pattern: str) -> None:
             _client.delete(*keys)
     except Exception as exc:
         logger.warning("cache_delete_pattern failed for %s: %s", pattern, exc)
+
+
+# ---------------------------------------------------------------------------
+# Prescription view locks
+# ---------------------------------------------------------------------------
+
+_LOCK_TTL = 300  # seconds — 5 minutes; clients must heartbeat every ~60 s
+
+
+def acquire_prescription_lock(
+    prescription_id: int, user_id: int, username: str
+) -> "tuple[bool, str | None]":
+    """
+    Atomically acquire a view lock for a prescription.
+
+    Returns (True, None)  — lock acquired or already owned by this user (TTL refreshed).
+    Returns (False, name) — held by a different user; *name* is their username.
+    Returns (True, None)  — Redis unavailable; fail open so the app stays usable.
+    """
+    if _client is None:
+        return True, None
+    key = f"rx:lock:{prescription_id}"
+    value = json.dumps({"user_id": user_id, "username": username})
+    try:
+        acquired = _client.set(key, value, nx=True, ex=_LOCK_TTL)
+        if acquired:
+            return True, None
+        existing = _client.get(key)
+        if existing is None:
+            # Key expired between our SET and GET — try once more
+            acquired = _client.set(key, value, nx=True, ex=_LOCK_TTL)
+            return (True, None) if acquired else (False, "another user")
+        data = json.loads(existing)
+        if data.get("user_id") == user_id:
+            _client.expire(key, _LOCK_TTL)
+            return True, None
+        return False, data.get("username", "another user")
+    except Exception as exc:
+        logger.warning("acquire_prescription_lock failed for rx:%s: %s", prescription_id, exc)
+        return True, None  # fail open
+
+
+def release_prescription_lock(prescription_id: int, user_id: int) -> None:
+    """Release a prescription lock only if it is owned by *user_id*."""
+    if _client is None:
+        return
+    key = f"rx:lock:{prescription_id}"
+    try:
+        existing = _client.get(key)
+        if existing:
+            data = json.loads(existing)
+            if data.get("user_id") == user_id:
+                _client.delete(key)
+    except Exception as exc:
+        logger.warning("release_prescription_lock failed for rx:%s: %s", prescription_id, exc)
+
+
+def get_prescription_lock(prescription_id: int) -> "dict | None":
+    """Return lock info dict (user_id, username) or None if not locked / Redis unavailable."""
+    if _client is None:
+        return None
+    key = f"rx:lock:{prescription_id}"
+    try:
+        existing = _client.get(key)
+        return json.loads(existing) if existing else None
+    except Exception as exc:
+        logger.warning("get_prescription_lock failed for rx:%s: %s", prescription_id, exc)
+        return None
+
+
+def check_prescription_locked_by_other(prescription_id: int, user_id: int) -> "str | None":
+    """
+    Returns the locker's username if this prescription is locked by someone other
+    than *user_id*, otherwise None (including when Redis is unavailable).
+    """
+    data = get_prescription_lock(prescription_id)
+    if data and data.get("user_id") != user_id:
+        return data.get("username", "another user")
+    return None

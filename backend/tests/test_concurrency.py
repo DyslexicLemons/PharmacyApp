@@ -250,12 +250,12 @@ class TestSequentialFillBlocking:
         db.refresh(prescription)
         assert prescription.remaining_quantity == 60
 
-    def test_fill_then_reject_then_fill_again(self, client, db_session):
+    def test_fill_then_reject_sends_back_to_qt(self, client, db_session):
         """
-        Fill → REJECTED (quantity returned) → new fill can start.
+        QV1 rejection now returns the fill to QT (not REJECTED).
+        The fill stays active, so a second fill on the same prescription is blocked.
 
         Note: the fill endpoint defaults new fills to QV1 (when no history match).
-        QV1 → REJECTED is a valid transition.
         """
         db = db_session
         prescriber = make_prescriber(db)
@@ -272,24 +272,26 @@ class TestSequentialFillBlocking:
         assert r1.status_code == 200
         refill_id = r1.json()["refill_id"]
 
-        # QV1 → REJECTED directly (QV1 allows rejection per TRANSITIONS map)
+        # QV1 → QT (pharmacist rejection with reason)
         reject_resp = client.post(f"/refills/{refill_id}/advance", json={
             "action": "reject",
             "rejection_reason": "Forged Rx",
             "rejected_by": "RPh Jones"
         })
         assert reject_resp.status_code == 200
-        assert reject_resp.json()["state"] == "REJECTED"
+        assert reject_resp.json()["state"] == "QT"
+        assert "Forged Rx" in reject_resp.json()["triage_reason"]
 
         db.refresh(prescription)
-        assert prescription.remaining_quantity == 90  # quantity returned after rejection
+        # Quantity stays reserved — the fill is now in QT (still active)
+        assert prescription.remaining_quantity == 60
 
-        # New fill allowed since first fill is now REJECTED
+        # Second fill blocked because the first fill is still active (in QT)
         r2 = client.post(
             f"/prescriptions/{prescription.id}/fill",
             json={"quantity": 30, "days_supply": 30, "priority": "normal"},
         )
-        assert r2.status_code == 200
+        assert r2.status_code == 409
 
 
 # ===========================================================================

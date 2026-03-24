@@ -41,11 +41,11 @@ PHARMACIST_REQUIRED_STATES = {RxState.QV1, RxState.QV2}
 
 TRANSITIONS = {
     RxState.QT:        [RxState.QV1, RxState.HOLD],
-    RxState.QV1:       [RxState.QP, RxState.HOLD, RxState.REJECTED],
+    RxState.QV1:       [RxState.QP, RxState.HOLD, RxState.QT],
     RxState.QP:        [RxState.QV2, RxState.HOLD],
     RxState.QV2:       [RxState.READY, RxState.QP, RxState.HOLD],
-    RxState.HOLD:      [RxState.QP, RxState.REJECTED],
-    RxState.SCHEDULED: [RxState.QP, RxState.QT, RxState.HOLD, RxState.REJECTED],
+    RxState.HOLD:      [RxState.QP],
+    RxState.SCHEDULED: [RxState.QP, RxState.QT, RxState.HOLD],
     RxState.READY:     [RxState.SOLD],
 }
 
@@ -248,9 +248,11 @@ def _resolve_next_state(current_state: RxState, payload: schemas.AdvanceRequest)
     valid_next = TRANSITIONS[current_state]
 
     if payload.action == "reject":
-        if RxState.REJECTED not in valid_next:
-            raise HTTPException(status_code=400, detail="Cannot reject from this state")
-        return RxState.REJECTED
+        if current_state != RxState.QV1:
+            raise HTTPException(status_code=400, detail="Reject is only allowed from QV1")
+        if not payload.rejection_reason or not payload.rejection_reason.strip():
+            raise HTTPException(status_code=400, detail="rejection_reason is required when rejecting")
+        return RxState.QT
 
     if payload.action == "hold":
         if RxState.HOLD not in valid_next:
@@ -320,10 +322,12 @@ def _apply_state_entry_effects(
     payload: schemas.AdvanceRequest,
 ) -> None:
     """Mutate rx fields that are set as a side-effect of entering a given state."""
-    if new_state == RxState.REJECTED:
-        rx.rejected_by = payload.rejected_by or "Unknown"              # type: ignore[assignment]
-        rx.rejection_reason = payload.rejection_reason or "No reason provided"  # type: ignore[assignment]
-        rx.rejection_date = date_type.today()                          # type: ignore[assignment]
+    if new_state == RxState.QT and payload.action == "reject":
+        # QV1 pharmacist rejection — return to triage with reason recorded.
+        rx.triage_reason = f"Pharmacist rejected: {payload.rejection_reason}"  # type: ignore[assignment]
+        rx.rejected_by = payload.rejected_by or "Pharmacist"                   # type: ignore[assignment]
+        rx.rejection_reason = payload.rejection_reason                          # type: ignore[assignment]
+        rx.rejection_date = date_type.today()                                   # type: ignore[assignment]
     elif new_state == RxState.READY:
         rx.completed_date = date_type.today()                          # type: ignore[assignment]
         rx.bin_number = _assign_bin(db)                                # type: ignore[assignment]
@@ -435,6 +439,10 @@ def advance_refill(
     if not rx:
         raise HTTPException(status_code=404, detail="Refill not found")
 
+    locked_by = cache.check_prescription_locked_by_other(_int(rx.prescription_id), _int(current_user.id))
+    if locked_by:
+        raise HTTPException(status_code=423, detail=f"Prescription is currently open by {locked_by}")
+
     raw_state = rx.state
     current_state = raw_state if isinstance(raw_state, RxState) else RxState(str(raw_state))
 
@@ -456,6 +464,7 @@ def advance_refill(
         )
         if triage_state == RxState.QT:
             new_state = RxState.QT
+            rx.triage_reason = triage_reason  # type: ignore[assignment]
             logger.info(
                 f"[RX TRIAGE] Refill #{rx_id}: SCHEDULED→QP overridden to QT — {triage_reason}"
             )
@@ -492,7 +501,7 @@ def advance_refill(
         details=(
             f"{current_state.value} → {new_state.value} "
             f"prescription_id={rx.prescription_id} patient_id={rx.patient_id}"
-            + (f" rejected_by={rx.rejected_by}" if new_state == RxState.REJECTED else "")
+            + (f" rejected_by={rx.rejected_by} reason={rx.rejection_reason}" if payload.action == "reject" else "")
         ),
         user_id=current_user.id,
         performed_by=current_user.username,
@@ -528,6 +537,10 @@ def edit_refill(
 
     if not rx:
         raise HTTPException(status_code=404, detail="Refill not found")
+
+    locked_by = cache.check_prescription_locked_by_other(_int(rx.prescription_id), _int(current_user.id))
+    if locked_by:
+        raise HTTPException(status_code=423, detail=f"Prescription is currently open by {locked_by}")
 
     raw_state = rx.state
     current_state = raw_state if isinstance(raw_state, RxState) else RxState(str(raw_state))
@@ -578,6 +591,7 @@ def edit_refill(
         new_state = RxState.QV1
     else:
         new_state = RxState.QT
+        rx.triage_reason = "edited while on hold"  # type: ignore[assignment]
 
     old_state_str = current_state.value
     rx.state = new_state  # type: ignore[assignment]
@@ -671,6 +685,7 @@ def upload_json_prescription(
         priority=priority,
         state=RxState.QT,
         source="external",
+        triage_reason="external prescription — manual triage required",
     )
     db.add(refill)
 
@@ -761,6 +776,7 @@ def create_manual_prescription(
         priority=priority,
         state=initial_state,
         source="manual",
+        triage_reason=triage_reason if initial_state == RxState.QT else None,
     )
     db.add(refill)
 
