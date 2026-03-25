@@ -116,6 +116,18 @@ class Refill(Base):
     drug = relationship("Drug", back_populates="refills", lazy="joined")
     insurance = relationship("PatientInsurance", lazy="joined")
 
+    @property
+    def drug_name(self) -> str:
+        return self.drug.drug_name if self.drug else "Unknown"
+
+    @property
+    def patient_name(self) -> str:
+        if self.patient:
+            first = self.patient.first_name or ""
+            last = self.patient.last_name or ""
+            return f"{first} {last}".strip() or "Unknown"
+        return "Unknown"
+
 
 class RefillHist(Base):
     __tablename__ = "refill_hist"

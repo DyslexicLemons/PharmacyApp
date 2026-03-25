@@ -51,6 +51,11 @@ logging.basicConfig(
 for _h in logging.root.handlers:
     _h.addFilter(_RequestIdFilter())
 
+# Set pharmacy.rx to DEBUG when LOG_RX_DEBUG=true — exposes stale-queue check details.
+import os as _os
+if _os.environ.get("LOG_RX_DEBUG", "").lower() in ("1", "true", "yes"):
+    logging.getLogger("pharmacy.rx").setLevel(logging.DEBUG)
+
 logger = logging.getLogger("pharmacy.rx")
 
 # ---------------------------------------------------------------------------

@@ -529,3 +529,84 @@ class TestEditQuantityAccounting:
         prescription, refill = setup_refill(db, RxState.HOLD, quantity=30, remaining_qty=10)
         resp = edit(client, refill.id, quantity=20)
         assert resp.status_code == 200
+
+
+# ===========================================================================
+# QUEUE-SCOPED ACCESS — GET /refills/{id}?queue=<state>
+# ===========================================================================
+
+class TestQueueScopedAccess:
+    """Verifies that the ?queue= param enforces state-based access control.
+
+    A refill accessed from a specific queue view should only be returned if it
+    is still in the matching state.  If it has since transitioned to another
+    state, the API must return 409 so the frontend can surface an informative
+    error rather than showing stale data from the wrong queue.
+
+    Uses fakeredis so the per-refill cache is isolated per test — avoids
+    cross-test pollution where tests sharing the same refill ID (due to DB
+    reset between tests) would read stale cache from a prior run.
+    """
+
+    @pytest.fixture(autouse=True)
+    def isolated_cache(self, monkeypatch):
+        """Wire an in-memory fakeredis instance for each test in this class."""
+        import fakeredis
+        from app import cache as cache_module
+        server = fakeredis.FakeServer()
+        fake = fakeredis.FakeRedis(server=server, decode_responses=True)
+        monkeypatch.delenv("REDIS_URL", raising=False)
+        monkeypatch.setattr(cache_module, "_client", fake)
+        yield fake
+
+    def test_get_refill_without_queue_param_always_succeeds(self, client, db_session):
+        """No queue param → no state gate; any state is returned."""
+        _, refill = setup_refill(db_session, RxState.QV1)
+        resp = client.get(f"/refills/{refill.id}")
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QV1"
+
+    def test_get_refill_matching_queue_state_succeeds(self, client, db_session):
+        """Requesting a refill with the correct queue state returns 200."""
+        _, refill = setup_refill(db_session, RxState.QT)
+        resp = client.get(f"/refills/{refill.id}?queue=QT")
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QT"
+
+    def test_get_refill_wrong_queue_state_returns_409(self, client, db_session):
+        """Refill is in QV1 but caller expects QT → 409 Conflict."""
+        _, refill = setup_refill(db_session, RxState.QV1)
+        resp = client.get(f"/refills/{refill.id}?queue=QT")
+        assert resp.status_code == 409
+        assert "no longer in" in resp.json()["detail"]
+
+    def test_get_refill_after_advance_returns_409_for_old_queue(self, client, db_session):
+        """Advancing QT → QV1 then fetching with ?queue=QT returns 409."""
+        _, refill = setup_refill(db_session, RxState.QT)
+        adv = advance(client, refill.id)
+        assert adv.status_code == 200
+        assert adv.json()["state"] == "QV1"
+
+        resp = client.get(f"/refills/{refill.id}?queue=QT")
+        assert resp.status_code == 409
+
+    def test_get_refill_after_advance_succeeds_for_new_queue(self, client, db_session):
+        """After QT → QV1, fetching with ?queue=QV1 returns 200."""
+        _, refill = setup_refill(db_session, RxState.QT)
+        advance(client, refill.id)
+
+        resp = client.get(f"/refills/{refill.id}?queue=QV1")
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QV1"
+
+    def test_get_refill_invalid_queue_param_returns_400(self, client, db_session):
+        """An unrecognised queue value returns 400 Bad Request."""
+        _, refill = setup_refill(db_session, RxState.QT)
+        resp = client.get(f"/refills/{refill.id}?queue=INVALID")
+        assert resp.status_code == 400
+
+    def test_get_refill_queue_all_bypasses_state_check(self, client, db_session):
+        """?queue=ALL is treated as 'no filter' and always returns 200."""
+        _, refill = setup_refill(db_session, RxState.QP)
+        resp = client.get(f"/refills/{refill.id}?queue=ALL")
+        assert resp.status_code == 200

@@ -61,6 +61,16 @@ def update_config(
     if body.simulation_enabled is not None:
         cfg.simulation_enabled = body.simulation_enabled  # type: ignore[assignment]
         changes.append(f"simulation_enabled={body.simulation_enabled}")
+        if not body.simulation_enabled:
+            # Clear all in-flight worker state so the dashboard shows idle immediately.
+            db.query(SimWorker).update(
+                {
+                    SimWorker.current_refill_id: None,
+                    SimWorker.busy_until: None,
+                    SimWorker.task_started_at: None,
+                },
+                synchronize_session=False,
+            )
     if body.sim_arrival_rate is not None:
         cfg.sim_arrival_rate = body.sim_arrival_rate  # type: ignore[assignment]
         changes.append(f"sim_arrival_rate={body.sim_arrival_rate}")
@@ -244,7 +254,7 @@ def create_sim_worker(
     db.add(worker)
     db.commit()
     db.refresh(worker)
-    return worker
+    return schemas.SimWorkerOut.from_orm_with_refill(worker)
 
 
 @router.put("/sim-workers/{worker_id}", response_model=schemas.SimWorkerOut)
@@ -276,7 +286,7 @@ def update_sim_worker(
         worker.busy_until = None  # type: ignore[assignment]
     db.commit()
     db.refresh(worker)
-    return worker
+    return schemas.SimWorkerOut.from_orm_with_refill(worker)
 
 
 @router.delete("/sim-workers/{worker_id}")
