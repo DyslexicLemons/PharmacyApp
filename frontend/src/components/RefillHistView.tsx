@@ -8,9 +8,10 @@ const PAGE_SIZE = 15;
 interface RefillHistViewProps {
   onBack?: () => void;
   page?: number;
+  onTotalPages?: (n: number) => void;
 }
 
-export default function RefillHistView({ onBack, page = 1 }: RefillHistViewProps) {
+export default function RefillHistView({ onBack, page = 1, onTotalPages }: RefillHistViewProps) {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState<PaginatedResponse<Refill & { completed_date?: string | null; sold_date?: string | null; insurance?: { insurance_company?: { plan_name?: string } } | null }>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
@@ -32,6 +33,10 @@ export default function RefillHistView({ onBack, page = 1 }: RefillHistViewProps
   const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
+
+  useEffect(() => {
+    onTotalPages?.(Math.ceil(total / PAGE_SIZE) || 1);
+  }, [total, onTotalPages]);
 
   // Compute per-prescription fill number within the current page
   const fillNumberMap: Record<number, number> = {};
@@ -79,7 +84,7 @@ export default function RefillHistView({ onBack, page = 1 }: RefillHistViewProps
           ))}
         </tbody>
       </table>
-      {total > PAGE_SIZE && (
+      {total > 0 && (
         <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
           Showing {startIdx + 1}–{endIdx} of {total}
           {page > 1 && <span> | [p] prev</span>}

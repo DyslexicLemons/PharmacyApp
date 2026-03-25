@@ -43,7 +43,9 @@
       "Bash(grep -r \"redis\\\\|_redis\\\\|_client\\\\|cache\\\\.\" /c/Users/jmajo/VSProjects/PharmacyApp/backend/app/routers --include=*.py)",
       "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short)",
       "Bash(docker compose:*)",
-      "Bash(.venv/Scripts/python -m pytest tests/ -v --timeout=60)"
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --timeout=60)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -v -x --tb=short)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_state_machine.py -v -k \"QueueScoped\")"
     ]
   }
 }

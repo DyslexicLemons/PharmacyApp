@@ -165,21 +165,71 @@ def get_refills(
 @router.get("/{rx_id}", response_model=schemas.RefillOut)
 def get_refill(
     rx_id: int,
+    queue: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Fetch a single refill by ID.
+
+    If *queue* is provided (e.g. ``?queue=QT``), the endpoint validates that
+    the refill is still in that state.  A 409 is returned if the refill has
+    since moved to a different queue — callers should treat this as "item no
+    longer accessible from this queue".
+    """
+    expected_state: Optional[RxState] = None
+    if queue and queue != "ALL":
+        try:
+            expected_state = RxState(queue)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid queue state: {queue}")
+
     cache_key = f"refills:id:{rx_id}"
+    logger.debug(
+        f"[GET_REFILL] rx_id={rx_id} expected_queue={queue!r} cache_key={cache_key!r}"
+    )
+
     cached = cache.cache_get(cache_key)
     if cached is not None:
+        logger.debug(f"[GET_REFILL] rx_id={rx_id} cache=HIT")
+        if expected_state is not None:
+            cached_state = cached.get("state") if isinstance(cached, dict) else None
+            if cached_state != expected_state.value:
+                logger.warning(
+                    f"[GET_REFILL] STALE (cache) rx_id={rx_id} "
+                    f"expected={expected_state.value!r} actual={cached_state!r} — returning 409"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Refill is no longer in the {queue} queue (current state: {cached_state})",
+                )
         return cached
 
+    logger.debug(f"[GET_REFILL] rx_id={rx_id} cache=MISS — querying DB")
     rx = db.query(Refill).options(
         joinedload(Refill.patient),
         joinedload(Refill.drug),
         joinedload(Refill.prescription).joinedload(Prescription.prescriber),
     ).filter(Refill.id == rx_id).first()
     if not rx:
+        logger.warning(f"[GET_REFILL] rx_id={rx_id} not found in DB")
         raise HTTPException(status_code=404, detail="Refill not found")
+
+    if expected_state is not None:
+        raw_state = rx.state
+        current_state = raw_state if isinstance(raw_state, RxState) else RxState(str(raw_state))
+        logger.debug(
+            f"[GET_REFILL] rx_id={rx_id} DB state={current_state.value!r} expected={expected_state.value!r}"
+        )
+        if current_state != expected_state:
+            logger.warning(
+                f"[GET_REFILL] STALE (db) rx_id={rx_id} "
+                f"expected={expected_state.value!r} actual={current_state.value!r} — returning 409"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail=f"Refill is no longer in the {queue} queue (current state: {current_state.value})",
+            )
+
     cache.cache_set(
         cache_key,
         _refill_ta.validate_python(rx, from_attributes=True).model_dump(mode="json"),

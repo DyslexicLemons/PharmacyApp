@@ -45,6 +45,7 @@ services:
       ALLOWED_ORIGINS: http://localhost:5173,http://localhost
       UPLOAD_DIR: /app/uploads
       REDIS_URL: redis://redis:6379
+      LOG_RX_DEBUG: "true"
     volumes:
       - uploads_data:/app/uploads
     depends_on:

@@ -110,8 +110,9 @@ export async function advanceRx(
   return handleResponse(res);
 }
 
-export async function getRefill(id: number, token: string): Promise<Refill> {
-  const res = await fetch(`${V1}/refills/${id}`, { headers: authHeaders(token) });
+export async function getRefill(id: number, token: string, queue?: string): Promise<Refill> {
+  const params = queue && queue !== 'ALL' ? `?queue=${encodeURIComponent(queue)}` : '';
+  const res = await fetch(`${V1}/refills/${id}${params}`, { headers: authHeaders(token) });
   return handleResponse(res);
 }
 

@@ -3,7 +3,8 @@ import Badge from "@/components/Badge";
 import { advanceRx, getStock, getRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
-import type { Refill, RxState } from "@/types";
+import { useQueryClient } from "@tanstack/react-query";
+import type { Refill } from "@/types";
 import { APPROVABLE_STATES, HOLDABLE_STATES, REJECTABLE_STATES, EDITABLE_STATES } from "@/types";
 
 const DAW_CODES: Record<number, string> = {
@@ -21,6 +22,7 @@ const DAW_CODES: Record<number, string> = {
 
 interface RefillDetailViewProps {
   refillId: number;
+  fromQueueState?: string;
   onBack?: () => void;
   onUpdate?: (updated: Refill) => void;
   onEdit?: () => void;
@@ -28,9 +30,10 @@ interface RefillDetailViewProps {
   onKeyCmdHandled?: () => void;
 }
 
-export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, keyCmd, onKeyCmdHandled }: RefillDetailViewProps) {
+export default function RefillDetailView({ refillId, fromQueueState, onBack, onUpdate, onEdit, keyCmd, onKeyCmdHandled }: RefillDetailViewProps) {
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
+  const queryClient = useQueryClient();
   const [refill, setRefill] = useState<Refill | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -41,6 +44,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
   const [holdIsQV2, setHoldIsQV2] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [staleQueueMessage, setStaleQueueMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRefillDetails();
@@ -57,11 +61,20 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     if (!token) return;
     try {
       setLoading(true);
-      const found = await getRefill(refillId, token);
-      setRefill(found);
-      setError("");
-    } catch (e) {
-      setError((e as Error).message);
+      const found = await getRefill(refillId, token, fromQueueState);
+      if (fromQueueState && fromQueueState !== "ALL" && found.state !== fromQueueState) {
+        setStaleQueueMessage(`This prescription is currently in ${found.state}, not ${fromQueueState}.`);
+      } else {
+        setRefill(found);
+        setError("");
+      }
+    } catch (e: unknown) {
+      const err = e as { status?: number; message?: string };
+      if (err.status === 409) {
+        setStaleQueueMessage(err.message ?? "This prescription has already been advanced to another queue.");
+      } else {
+        setError((e as Error).message);
+      }
     } finally {
       setLoading(false);
     }
@@ -86,6 +99,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     if (!token) return;
     try {
       const updated = await advanceRx(refillId, {}, token);
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
       addNotification(`RX# ${updated.prescription.id} advanced to ${updated.state}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -98,6 +112,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     if (!token) return;
     try {
       const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill }, token);
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
       addNotification(`Rx #${updated.prescription.id} marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -120,6 +135,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
         action: "reject",
         rejection_reason: rejectReason.trim(),
       }, token);
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
       addNotification(`Rx returned to triage: ${rejectReason.trim()}`, "warning");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -139,6 +155,7 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     setShowHoldConfirm(false);
     try {
       const updated = await advanceRx(refillId, { action: "hold" }, token);
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
       if (holdIsQV2) {
         addNotification("Prescription placed on HOLD. This script has been filled — please return the medication to stock.", "warning");
       } else {
@@ -151,8 +168,35 @@ export default function RefillDetailView({ refillId, onBack, onUpdate, onEdit, k
     }
   };
 
+  const isStaleQueue =
+    staleQueueMessage !== null ||
+    (refill !== null && fromQueueState && fromQueueState !== "ALL" && refill.state !== fromQueueState);
+
   if (loading) return <div className="vstack"><p>Loading...</p></div>;
   if (error) return <div className="vstack"><p style={{ color: "var(--danger)" }}>{error}</p></div>;
+  if (isStaleQueue) {
+    const staleDetail = staleQueueMessage
+      ?? (refill ? `This prescription is currently in ${refill.state}, not ${fromQueueState}.` : "");
+    return (
+      <div style={{
+        position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)",
+        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
+      }}>
+        <div className="card vstack" style={{ maxWidth: "420px", width: "92%", gap: "1rem", padding: "1.5rem", border: "2px solid var(--warning, #f59e0b)" }}>
+          <h3 style={{ margin: 0, color: "var(--warning, #f59e0b)" }}>Rx #{refillId} — Already Advanced</h3>
+          <p style={{ margin: 0, fontSize: "0.95rem" }}>
+            This prescription has been moved to another queue by another user and can no longer be accessed from here.
+          </p>
+          {staleDetail && (
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-light)" }}>{staleDetail}</p>
+          )}
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="btn btn-secondary" onClick={onBack}>← Back to Queue</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!refill) return <div className="vstack"><p>Refill not found</p></div>;
 
   const canApprove = APPROVABLE_STATES.includes(refill.state);

@@ -9,9 +9,10 @@ interface PatientsViewProps {
   onBack?: () => void;
   onSelectPatient?: (id: number) => void;
   page?: number;
+  onTotalPages?: (n: number) => void;
 }
 
-export default function PatientsView({ onBack, onSelectPatient, page = 1 }: PatientsViewProps) {
+export default function PatientsView({ onBack, onSelectPatient, page = 1, onTotalPages }: PatientsViewProps) {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState<PaginatedResponse<PatientSearchResult>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
@@ -33,6 +34,10 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1 }: Pati
   const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
+
+  useEffect(() => {
+    onTotalPages?.(Math.ceil(total / PAGE_SIZE) || 1);
+  }, [total, onTotalPages]);
 
   return (
     <div className="vstack">
@@ -60,7 +65,7 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1 }: Pati
           ))}
         </tbody>
       </table>
-      {total > PAGE_SIZE && (
+      {total > 0 && (
         <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
           Showing {startIdx + 1}–{endIdx} of {total}
           {page > 1 && <span> | [p] prev</span>}

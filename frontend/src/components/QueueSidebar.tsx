@@ -55,20 +55,20 @@ export default function QueueSidebar() {
   const { token, authUser } = useContext(AuthContext);
   const isAdmin = authUser?.isAdmin ?? false;
 
-  const { data, isLoading } = useQuery<QueueData>({
-    queryKey: ["queue-sidebar", token],
-    queryFn: () =>
-      Promise.all(QUEUES.map((q) => fetchQueue(q, token!, 200, 0))).then(
-        ([qt, qv1, qp, qv2]) => ({
-          QT:  extractItems(qt),
-          QV1: extractItems(qv1),
-          QP:  extractItems(qp),
-          QV2: extractItems(qv2),
-        })
-      ),
-    refetchInterval: 30_000,
-    enabled: !!token,
-  });
+  // Use the same query keys as QueueView so the cache is shared — counts always match.
+  const LIMIT = 1000;
+  const qtQuery  = useQuery({ queryKey: ["queue", "QT",  token], queryFn: () => fetchQueue("QT",  token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
+  const qv1Query = useQuery({ queryKey: ["queue", "QV1", token], queryFn: () => fetchQueue("QV1", token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
+  const qpQuery  = useQuery({ queryKey: ["queue", "QP",  token], queryFn: () => fetchQueue("QP",  token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
+  const qv2Query = useQuery({ queryKey: ["queue", "QV2", token], queryFn: () => fetchQueue("QV2", token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
+
+  const isLoading = qtQuery.isLoading || qv1Query.isLoading || qpQuery.isLoading || qv2Query.isLoading;
+  const data: QueueData | undefined = (!qtQuery.data && !qv1Query.data && !qpQuery.data && !qv2Query.data) ? undefined : {
+    QT:  extractItems(qtQuery.data  ?? []),
+    QV1: extractItems(qv1Query.data ?? []),
+    QP:  extractItems(qpQuery.data  ?? []),
+    QV2: extractItems(qv2Query.data ?? []),
+  };
 
   const { data: summary } = useQuery({
     queryKey: ["queue-summary", token],

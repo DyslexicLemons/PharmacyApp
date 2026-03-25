@@ -66,6 +66,7 @@ function App() {
   const [refillKeyCmd, setRefillKeyCmd] = useState<string | null>(null);
   const [shipmentKeyCmd, setShipmentKeyCmd] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(true);
+  const [currentTotalPages, setCurrentTotalPages] = useState(Infinity);
   const cmdBarRef = useRef<{ focus: () => void } | null>(null);
   // Track whether auth has ever been established in this session.
   // False = first-time login (show full-screen form), true = timeout (show modal overlay).
@@ -80,6 +81,10 @@ function App() {
       clearHomeReset();
     }
   }, [shouldResetToHome, clearHomeReset]);
+
+  useEffect(() => {
+    setCurrentTotalPages(Infinity);
+  }, [route.view]);
 
   useEffect(() => {
     cmdBarRef.current?.focus();
@@ -198,7 +203,10 @@ function App() {
     }
 
     if (cmd === "n") {
-      setRoute((prev) => ({ ...prev, page: (("page" in prev ? prev.page : undefined) || 1) + 1 }));
+      setRoute((prev) => {
+        const current = ("page" in prev ? prev.page : undefined) || 1;
+        return current < currentTotalPages ? { ...prev, page: current + 1 } : prev;
+      });
       return;
     }
     if (cmd === "p") {
@@ -369,6 +377,7 @@ function App() {
               onBack={goBack}
               onSelectRow={queueSelectRow}
               page={route.page || 1}
+              onTotalPages={setCurrentTotalPages}
               onSelectRefill={(refillId) => {
                 setQueueSelectRow(null);
                 navigateTo({ view: "REFILL_DETAIL", refillId, fromQueueState: route.state });
@@ -378,6 +387,7 @@ function App() {
           {route.view === "REFILL_DETAIL" && (
             <RefillDetailView
               refillId={route.refillId}
+              fromQueueState={route.fromQueueState}
               onBack={goBack}
               onEdit={() => navigateTo({ view: "EDIT_REFILL", refillId: route.refillId })}
               onUpdate={(updated) => navigateToSection({ view: "QUEUE", state: updated.state })}
@@ -390,6 +400,7 @@ function App() {
               pid={route.pid}
               onBack={goBack}
               page={route.page || 1}
+              onTotalPages={setCurrentTotalPages}
               onDataLoaded={(d) => setCurrentPatientData(d)}
               onFill={(prescription, patient) =>
                 navigateTo({
@@ -430,6 +441,7 @@ function App() {
             <DrugsView
               onBack={goBack}
               page={route.page || 1}
+              onTotalPages={setCurrentTotalPages}
               onSelectDrug={(drugId) => {
                 addNotification(`Drug ID: ${drugId}`, "info");
               }}
@@ -439,6 +451,7 @@ function App() {
             <PatientsView
               onBack={goBack}
               page={route.page || 1}
+              onTotalPages={setCurrentTotalPages}
               onSelectPatient={(patientId) => {
                 navigateTo({ view: "PATIENT", pid: patientId });
               }}
@@ -448,16 +461,18 @@ function App() {
             <StockView
               onBack={goBack}
               page={route.page || 1}
+              onTotalPages={setCurrentTotalPages}
               onSelectStock={(drugId) => {
                 addNotification(`Drug ID: ${drugId}`, "info");
               }}
             />
           )}
-          {route.view === "REFILL_HIST" && <RefillHistView onBack={goBack} page={route.page || 1} />}
+          {route.view === "REFILL_HIST" && <RefillHistView onBack={goBack} page={route.page || 1} onTotalPages={setCurrentTotalPages} />}
           {route.view === "PRESCRIBERS" && (
             <PrescribersView
               onBack={goBack}
               page={route.page || 1}
+              onTotalPages={setCurrentTotalPages}
               onSelectPrescriber={(prescriberId) => {
                 addNotification(`Prescriber ID: ${prescriberId}`, "info");
               }}
@@ -510,9 +525,9 @@ function App() {
               onDone={() => navigateToSection({ view: "STOCK" })}
             />
           )}
-          {route.view === "RTS_HIST" && <RTSHistView onBack={goBack} page={route.page || 1} />}
+          {route.view === "RTS_HIST" && <RTSHistView onBack={goBack} page={route.page || 1} onTotalPages={setCurrentTotalPages} />}
           {route.view === "WORKER_DASHBOARD" && <WorkerDashboardView onBack={goBack} />}
-          {route.view === "AUDIT_LOG" && <AuditLogView onBack={goBack} page={route.page || 1} />}
+          {route.view === "AUDIT_LOG" && <AuditLogView onBack={goBack} page={route.page || 1} onTotalPages={setCurrentTotalPages} />}
           {route.view === "SHIPMENT" && (
             <ShipmentView
               onBack={goBack}
@@ -521,7 +536,7 @@ function App() {
             />
           )}
           {route.view === "SHIPMENT_HIST" && (
-            <ShipmentHistView onBack={goBack} page={route.page || 1} />
+            <ShipmentHistView onBack={goBack} page={route.page || 1} onTotalPages={setCurrentTotalPages} />
           )}
           {route.view === "CREATE_PATIENT" && (
             <NewPatientForm

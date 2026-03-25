@@ -43,9 +43,10 @@ interface PatientProfileProps {
   onFill?: (prescription: PrescriptionRow, patient: PatientData) => void;
   onDataLoaded?: (data: PatientData) => void;
   page?: number;
+  onTotalPages?: (n: number) => void;
 }
 
-export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1 }: PatientProfileProps) {
+export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1, onTotalPages }: PatientProfileProps) {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState<PatientData | null>(null);
   const [error, setError] = useState("");
@@ -68,11 +69,15 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
     };
   }, [pid]);
 
+  const prescriptions = data?.prescriptions ?? [];
+  const total = prescriptions.length;
+
+  useEffect(() => {
+    onTotalPages?.(Math.ceil(total / PAGE_SIZE) || 1);
+  }, [total, onTotalPages]);
+
   if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
   if (!data) return <p>Loading…</p>;
-
-  const prescriptions = data.prescriptions;
-  const total = prescriptions.length;
 
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + PAGE_SIZE, total);
@@ -269,7 +274,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
         </table>
       )}
 
-      {total > PAGE_SIZE && (
+      {total > 0 && (
         <div
           style={{
             color: "var(--text-light)",

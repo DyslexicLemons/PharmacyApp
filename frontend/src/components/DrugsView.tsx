@@ -9,13 +9,14 @@ interface DrugsViewProps {
   onBack?: () => void;
   onSelectDrug?: (id: number) => void;
   page?: number;
+  onTotalPages?: (n: number) => void;
 }
 
 interface DrugWithCost extends Drug {
   cost: number | string;
 }
 
-export default function DrugsView({ onBack, onSelectDrug, page = 1 }: DrugsViewProps) {
+export default function DrugsView({ onBack, onSelectDrug, page = 1, onTotalPages }: DrugsViewProps) {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState<PaginatedResponse<DrugWithCost>>({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,10 @@ export default function DrugsView({ onBack, onSelectDrug, page = 1 }: DrugsViewP
   const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
+
+  useEffect(() => {
+    onTotalPages?.(Math.ceil(total / PAGE_SIZE) || 1);
+  }, [total, onTotalPages]);
 
   return (
     <div className="vstack">
@@ -68,7 +73,7 @@ export default function DrugsView({ onBack, onSelectDrug, page = 1 }: DrugsViewP
           ))}
         </tbody>
       </table>
-      {total > PAGE_SIZE && (
+      {total > 0 && (
         <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
           Showing {startIdx + 1}–{endIdx} of {total}
           {page > 1 && <span> | [p] prev</span>}

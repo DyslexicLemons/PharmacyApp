@@ -32,16 +32,17 @@ interface QueueViewProps {
   onSelectRow?: number | null;
   page?: number;
   onSelectRefill?: (id: number) => void;
+  onTotalPages?: (n: number) => void;
 }
 
-export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, onSelectRefill }: QueueViewProps) {
+export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, onSelectRefill, onTotalPages }: QueueViewProps) {
   const { token } = useContext(AuthContext);
   const [sortKey, setSortKey] = useState("due");
   const [sortDir, setSortDir] = useState("asc");
 
   const { data, isLoading: loading, error: queryError } = useQuery({
     queryKey: ["queue", stateFilter, token],
-    queryFn: () => fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : null, token!),
+    queryFn: () => fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : null, token!, 1000),
     select: (res) => Array.isArray(res) ? res : res.items,
     refetchInterval: 30_000,
     enabled: !!token,
@@ -82,7 +83,13 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
   });
 
   const total = sortedRefills.length;
-  const startIdx = (page - 1) * PAGE_SIZE;
+  const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+  const effectivePage = Math.min(page, totalPages);
+
+  useEffect(() => {
+    onTotalPages?.(totalPages);
+  }, [totalPages, onTotalPages]);
+  const startIdx = (effectivePage - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + PAGE_SIZE, total);
   const pageItems = sortedRefills.slice(startIdx, endIdx);
 
@@ -178,10 +185,10 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
           </tbody>
         </table>
       )}
-      {!loading && total > PAGE_SIZE && (
+      {!loading && total > 0 && (
         <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
           Showing {startIdx + 1}–{endIdx} of {total}
-          {page > 1 && <span> | [p] prev</span>}
+          {effectivePage > 1 && <span> | [p] prev</span>}
           {endIdx < total && <span> | [n] next</span>}
         </div>
       )}
