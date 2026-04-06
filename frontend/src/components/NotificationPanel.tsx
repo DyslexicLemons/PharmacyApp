@@ -70,7 +70,7 @@ export default function NotificationPanel() {
               gap: "10px",
               boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
               opacity: n.fading ? 0 : 1,
-              transition: "opacity 2s ease",
+              transition: "opacity 0.6s ease",
               pointerEvents: "all",
             }}
           >

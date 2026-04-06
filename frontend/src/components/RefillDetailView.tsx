@@ -99,6 +99,9 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
     if (!token) return;
     try {
       const updated = await advanceRx(refillId, {}, token);
+      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
+        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
+      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
       addNotification(`RX# ${updated.prescription.id} advanced to ${updated.state}`, "success");
       if (onUpdate) onUpdate(updated);
@@ -112,6 +115,9 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
     if (!token) return;
     try {
       const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill }, token);
+      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
+        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
+      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
       addNotification(`Rx #${updated.prescription.id} marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`, "success");
       if (onUpdate) onUpdate(updated);
@@ -135,6 +141,9 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
         action: "reject",
         rejection_reason: rejectReason.trim(),
       }, token);
+      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
+        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
+      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
       addNotification(`Rx returned to triage: ${rejectReason.trim()}`, "warning");
       if (onUpdate) onUpdate(updated);
@@ -155,6 +164,9 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
     setShowHoldConfirm(false);
     try {
       const updated = await advanceRx(refillId, { action: "hold" }, token);
+      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
+        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
+      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
       if (holdIsQV2) {
         addNotification("Prescription placed on HOLD. This script has been filled — please return the medication to stock.", "warning");

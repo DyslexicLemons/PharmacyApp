@@ -66,7 +66,7 @@ describe("NotificationPanel", () => {
     const dismissBtn = screen.getAllByTitle("Dismiss")[0];
     await user.click(dismissBtn);
 
-    // After the 300 ms fade timeout the element is removed; we don't await
+    // After the 600 ms fade timeout the element is removed; we don't await
     // timers here — we just verify the click handler fires without errors and
     // the component does not throw.
   });

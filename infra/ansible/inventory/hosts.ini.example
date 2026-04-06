@@ -1,0 +1,23 @@
+# Copy this file to hosts.ini and fill in your server details.
+# hosts.ini is gitignored — never commit real IPs or credentials.
+#
+# Generate a JWT secret with:
+#   python3 -c "import secrets; print(secrets.token_hex(32))"
+
+[pharmacy_servers]
+# Single VM / droplet / bare-metal host:
+# 192.168.1.100 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/id_rsa
+
+# Multiple servers (Ansible will configure each in parallel):
+# 10.0.1.10 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/pharmacy_key
+# 10.0.1.11 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/pharmacy_key
+
+[pharmacy_servers:vars]
+# Sensitive values — override here or pass with: -e "db_password=secret"
+# db_password=CHANGE_ME_strong_password
+# jwt_secret_key=CHANGE_ME_64_char_hex_string
+
+# Optional overrides (defaults are in group_vars/all.yml):
+# repo_url=https://github.com/YOUR_USER/PharmacyApp.git
+# repo_branch=master
+# app_dir=/opt/pharmacy

@@ -566,21 +566,23 @@ function App() {
   );
 }
 
-function QuickCodeBanner({ quickCode, onDismiss }: { quickCode: QuickCode; onDismiss: () => void }) {
-  const [remaining, setRemaining] = useState<number | null>(null);
+const BANNER_DISPLAY_SECS = 10;
 
+function QuickCodeBanner({ quickCode, onDismiss }: { quickCode: QuickCode; onDismiss: () => void }) {
+  const [remaining, setRemaining] = useState<number>(BANNER_DISPLAY_SECS);
+
+  // Auto-dismiss the banner after BANNER_DISPLAY_SECS regardless of code TTL
   useEffect(() => {
-    function tick() {
-      const secs = Math.max(0, Math.round((quickCode.expiresAt - Date.now()) / 1000));
-      setRemaining(secs);
-      if (secs === 0) onDismiss();
-    }
-    tick();
-    const id = setInterval(tick, 1000);
+    const id = setInterval(() => {
+      setRemaining((prev) => {
+        if (prev <= 1) { onDismiss(); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(id);
   }, [quickCode, onDismiss]);
 
-  if (remaining === null || remaining === 0) return null;
+  if (remaining === 0) return null;
 
   return (
     <div
@@ -601,7 +603,7 @@ function QuickCodeBanner({ quickCode, onDismiss }: { quickCode: QuickCode; onDis
           {quickCode.code}
         </span>
         <span style={{ fontSize: "0.75rem", color: "white", marginLeft: 10 }}>
-          (expires in {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")})
+          (closing in {remaining}s)
         </span>
       </div>
       <button
