@@ -1,0 +1,97 @@
+---
+# common role — system hardening for a fresh Ubuntu 22.04 server
+# Installs: ufw (firewall), fail2ban (brute-force protection),
+#           unattended-upgrades (auto security patches)
+# Creates:  a dedicated 'pharmacy' OS user to own the application
+
+- name: Install security packages
+  ansible.builtin.apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+      - curl
+      - git
+    state: present
+
+# ── Firewall (ufw) ────────────────────────────────────────────────────────────
+
+- name: Set ufw default inbound policy to deny
+  community.general.ufw:
+    default: deny
+    direction: incoming
+
+- name: Set ufw default outbound policy to allow
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+
+- name: Allow configured ports through ufw
+  community.general.ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    comment: "{{ item.comment }}"
+  loop: "{{ ufw_allowed_ports }}"
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled
+
+# ── fail2ban ─────────────────────────────────────────────────────────────────
+
+- name: Write fail2ban jail.local (protect SSH)
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.local
+    content: |
+      [DEFAULT]
+      bantime  = 3600
+      findtime = 600
+      maxretry = 5
+
+      [sshd]
+      enabled  = true
+      port     = ssh
+      logpath  = %(sshd_log)s
+      backend  = %(sshd_backend)s
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart fail2ban
+
+- name: Enable and start fail2ban
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+
+# ── Unattended upgrades ───────────────────────────────────────────────────────
+
+- name: Enable automatic security updates
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    owner: root
+    group: root
+    mode: "0644"
+
+# ── App user ─────────────────────────────────────────────────────────────────
+
+- name: Create '{{ app_user }}' system user
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ app_dir }}"
+    create_home: true
+    state: present
+
+- name: Create app directory with correct ownership
+  ansible.builtin.file:
+    path: "{{ app_dir }}"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0750"

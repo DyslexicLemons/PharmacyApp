@@ -1,0 +1,8 @@
+---
+# Triggered when the repo is updated or .env changes.
+# Uses --no-deps so only containers whose config changed are recreated.
+- name: Restart app
+  ansible.builtin.command:
+    cmd: docker compose up -d --build --no-deps
+    chdir: "{{ app_dir }}"
+  become_user: "{{ app_user }}"

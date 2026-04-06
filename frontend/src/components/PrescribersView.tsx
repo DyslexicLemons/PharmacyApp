@@ -28,16 +28,16 @@ export default function PrescribersView({ onBack, onSelectPrescriber, page = 1, 
       .finally(() => setLoading(false));
   }, [token, page]);
 
+  useEffect(() => {
+    onTotalPages?.(Math.ceil(data.total / PAGE_SIZE) || 1);
+  }, [data.total, onTotalPages]);
+
   if (loading) return <p>Loading…</p>;
   if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
 
   const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
-
-  useEffect(() => {
-    onTotalPages?.(Math.ceil(total / PAGE_SIZE) || 1);
-  }, [total, onTotalPages]);
 
   return (
     <div className="vstack">

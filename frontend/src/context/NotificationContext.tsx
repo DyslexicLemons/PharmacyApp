@@ -11,7 +11,7 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 
 const FADE_START_MS = 18000; // start fading at 18s
 const REMOVE_MS = 20000;     // remove at 20s
-const DISMISS_FADE_MS = 300; // fade duration when manually dismissed
+const DISMISS_FADE_MS = 600; // fade duration when manually dismissed
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);

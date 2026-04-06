@@ -1,0 +1,93 @@
+---
+# app role — clones the PharmacyApp repo, writes the .env file,
+# starts all services via Docker Compose, and runs Alembic migrations.
+#
+# Idempotent: re-running this role pulls the latest code and recreates
+# any containers whose image or config changed.
+
+# ── Clone / update repo ───────────────────────────────────────────────────────
+
+- name: Clone or update PharmacyApp repository
+  ansible.builtin.git:
+    repo: "{{ repo_url }}"
+    dest: "{{ app_dir }}"
+    version: "{{ repo_branch }}"
+    force: false          # never discard local .env or uploads
+    update: true
+  become_user: "{{ app_user }}"
+  notify: Restart app
+
+# ── Environment file ──────────────────────────────────────────────────────────
+
+- name: Write .env file from template
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ app_dir }}/.env"
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0600"          # readable only by the app user — contains secrets
+  notify: Restart app
+
+# ── Persistent volumes ────────────────────────────────────────────────────────
+
+- name: Create uploads directory for prescription attachments
+  ansible.builtin.file:
+    path: "{{ app_dir }}/backend/uploads"
+    state: directory
+    owner: "{{ app_user }}"
+    group: "{{ app_user }}"
+    mode: "0750"
+
+# ── Docker Compose ────────────────────────────────────────────────────────────
+
+- name: Pull latest images
+  ansible.builtin.command:
+    cmd: docker compose pull --quiet
+    chdir: "{{ app_dir }}"
+  become_user: "{{ app_user }}"
+  changed_when: false
+
+- name: Build and start all services
+  ansible.builtin.command:
+    cmd: docker compose up -d --build --remove-orphans
+    chdir: "{{ app_dir }}"
+  become_user: "{{ app_user }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stdout or 'Recreated' in compose_up.stdout"
+
+# ── Wait for services to be healthy ──────────────────────────────────────────
+
+- name: Wait for PostgreSQL to accept connections
+  ansible.builtin.command:
+    cmd: docker compose exec -T postgres pg_isready -U postgres
+    chdir: "{{ app_dir }}"
+  become_user: "{{ app_user }}"
+  register: pg_ready
+  retries: 12
+  delay: 5
+  until: pg_ready.rc == 0
+  changed_when: false
+
+- name: Wait for backend API to be healthy
+  ansible.builtin.uri:
+    url: "http://localhost:8000/health"
+    status_code: 200
+  register: health_check
+  retries: 12
+  delay: 5
+  until: health_check.status == 200
+
+# ── Database migrations ───────────────────────────────────────────────────────
+
+- name: Run Alembic migrations
+  ansible.builtin.command:
+    cmd: docker compose exec -T backend alembic upgrade head
+    chdir: "{{ app_dir }}"
+  become_user: "{{ app_user }}"
+  register: migration_result
+  changed_when: "'Running upgrade' in migration_result.stdout"
+
+- name: Show migration output
+  ansible.builtin.debug:
+    var: migration_result.stdout_lines
+  when: migration_result.stdout_lines | length > 0

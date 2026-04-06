@@ -45,16 +45,16 @@ export default function ShipmentHistView({ onBack, page = 1, onTotalPages }: Shi
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
+  useEffect(() => {
+    onTotalPages?.(Math.ceil(data.total / PAGE_SIZE) || 1);
+  }, [data.total, onTotalPages]);
+
   if (loading) return <p>Loading…</p>;
   if (error) return <p style={{ color: "var(--danger)" }}>{error}</p>;
 
   const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
-
-  useEffect(() => {
-    onTotalPages?.(Math.ceil(total / PAGE_SIZE) || 1);
-  }, [total, onTotalPages]);
 
   return (
     <div className="vstack">

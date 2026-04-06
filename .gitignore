@@ -36,3 +36,10 @@ infra/terraform.tfstate
 infra/terraform.tfstate.backup
 infra/terraform.tfvars
 infra/*.tfplan
+
+# Terraform bootstrap — local state is intentional here; lock file is machine-specific
+infra/bootstrap/.terraform/
+infra/bootstrap/.terraform.lock.hcl
+
+# Ansible — inventory contains real IPs and credentials
+infra/ansible/inventory/hosts.ini

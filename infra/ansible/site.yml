@@ -1,0 +1,47 @@
+---
+# PharmacyApp — Master Playbook
+#
+# Brings a fresh Ubuntu 22.04 server from zero to a running PharmacyApp instance
+# using Docker Compose. Designed for VMs, bare-metal, or any SSH-accessible host.
+#
+# Usage:
+#   ansible-playbook site.yml -i inventory/hosts.ini
+#   ansible-playbook site.yml -i inventory/hosts.ini --check   # dry-run
+#   ansible-playbook site.yml -i inventory/hosts.ini --tags docker  # single role
+#
+# Required variables (set in inventory host_vars or pass with -e):
+#   db_password     - PostgreSQL password for the app user
+#   jwt_secret_key  - HS256 signing key (min 32 chars)
+#
+# See group_vars/all.yml for all configurable variables and their defaults.
+
+- name: Bootstrap PharmacyApp server
+  hosts: pharmacy_servers
+  become: true
+
+  pre_tasks:
+    - name: Verify target OS is Ubuntu 22.04
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version is version("22.04", ">=")
+        fail_msg: "This playbook targets Ubuntu 22.04+. Found: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+        success_msg: "OS check passed: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  roles:
+    - role: common
+      tags: common
+    - role: docker
+      tags: docker
+    - role: app
+      tags: app
+
+  post_tasks:
+    - name: Print application URL
+      ansible.builtin.debug:
+        msg: "PharmacyApp is running at http://{{ ansible_host }}"

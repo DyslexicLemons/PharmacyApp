@@ -1,5 +1,6 @@
 import React, { useState, useContext, useEffect, useRef } from "react";
 import { AuthContext } from "@/context/AuthContext";
+import Logo from "@/components/Logo";
 
 interface LoginFormProps {
   isModal?: boolean;
@@ -90,10 +91,8 @@ export default function LoginForm({ isModal = false }: LoginFormProps) {
       style={{ width: 360, padding: "40px 36px", display: "flex", flexDirection: "column", gap: "24px" }}
     >
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--primary)" }}>
-          JoeMed
-        </div>
-        <div style={{ fontSize: "0.85rem", color: "var(--text-light)", marginTop: 4 }}>
+        <Logo size={100} showTagline={false} />
+        <div style={{ fontSize: "0.85rem", color: "var(--text-light)", marginTop: 8 }}>
           Pharmacy Management System
         </div>
       </div>

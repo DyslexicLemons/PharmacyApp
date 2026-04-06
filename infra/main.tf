@@ -8,14 +8,17 @@ terraform {
     }
   }
 
-  # After running `terraform apply` the first time, create an S3 bucket for
-  # state and uncomment this block to migrate state into it.
-  # backend "s3" {
-  #   bucket  = "pharmacy-tf-state-<your-account-id>"
-  #   key     = "pharmacy/terraform.tfstate"
-  #   region  = "us-east-1"
-  #   encrypt = true
-  # }
+  # Remote state — stored in S3, locked via DynamoDB.
+  # The bucket and table are provisioned by infra/bootstrap/ (run that first).
+  # After bootstrap apply, fill in the bucket name from its output and run:
+  #   terraform init   (Terraform will offer to copy local state into S3)
+  backend "s3" {
+    bucket         = "pharmacy-tf-state-070872471837"
+    key            = "pharmacy/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "pharmacy-tf-locks"
+  }
 }
 
 provider "aws" {

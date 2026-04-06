@@ -119,6 +119,7 @@ export default function QueueSidebar() {
               BUCKETS.map((b) => [b.key, 0])
             );
             refills.forEach((r) => counts[bucketKey(r)]++);
+            const capped = refills.length >= LIMIT;
 
             return (
               <div key={q} style={{ borderBottom: "1px solid var(--border)", padding: "8px 14px", background: `${bg}18`, borderLeft: `3px solid ${bg}` }}>
@@ -137,7 +138,7 @@ export default function QueueSidebar() {
                       fontWeight: 700,
                     }}
                   >
-                    {refills.length}
+                    {refills.length}{refills.length >= LIMIT ? "+" : ""}
                   </span>
                 </div>
 
@@ -174,7 +175,7 @@ export default function QueueSidebar() {
                             />
                             {label}
                           </span>
-                          <span style={{ fontWeight: 700, color }}>{count}</span>
+                          <span style={{ fontWeight: 700, color }}>{count}{capped ? "+" : ""}</span>
                         </div>
                       );
                     })}

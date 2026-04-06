@@ -28,9 +28,6 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1, onTota
       .finally(() => setLoading(false));
   }, [token, page]);
 
-  if (loading) return <p>Loading…</p>;
-  if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
-
   const { items, total } = data;
   const startIdx = (page - 1) * PAGE_SIZE;
   const endIdx = Math.min(startIdx + items.length, startIdx + PAGE_SIZE);
@@ -38,6 +35,9 @@ export default function PatientsView({ onBack, onSelectPatient, page = 1, onTota
   useEffect(() => {
     onTotalPages?.(Math.ceil(total / PAGE_SIZE) || 1);
   }, [total, onTotalPages]);
+
+  if (loading) return <p>Loading…</p>;
+  if (error) return <p style={{ color: "#ff7675" }}>{error}</p>;
 
   return (
     <div className="vstack">

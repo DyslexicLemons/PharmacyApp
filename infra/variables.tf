@@ -76,3 +76,9 @@ variable "alert_email" {
   description = "Email address that receives CloudWatch alarm notifications"
   type        = string
 }
+
+variable "budget_limit_usd" {
+  description = "Monthly spend threshold in USD — triggers SNS alert at 80% and 100%."
+  type        = number
+  default     = 50
+}

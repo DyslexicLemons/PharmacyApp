@@ -1,3 +1,5 @@
+import Logo from "@/components/Logo";
+
 interface HomeProps {
   onCommand?: (cmd: string) => void;
 }
@@ -5,7 +7,9 @@ interface HomeProps {
 export default function Home({ onCommand }: HomeProps) {
   return (
     <div className="vstack">
-      <h1>💊 JoeMed</h1>
+      <div style={{ marginBottom: "0.5rem" }}>
+        <Logo size={120} showTagline={true} />
+      </div>
       <p style={{ fontSize: "1.1rem", marginBottom: "2rem", color: "var(--text-light)" }}>
         Your trusted pharmacy management system. Type a command below to get started.
       </p>

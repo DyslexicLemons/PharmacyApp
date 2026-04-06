@@ -1,0 +1,81 @@
+---
+# docker role — installs Docker Engine and the Compose plugin (v2)
+# from Docker Inc.'s official apt repository, NOT the Ubuntu snap/apt package
+# (which lags behind on versions and uses a different binary path).
+#
+# After this role runs:
+#   docker compose version    # Compose v2 plugin
+#   systemctl status docker   # running and enabled
+
+# ── Prerequisites ─────────────────────────────────────────────────────────────
+
+- name: Install apt transport packages required by the Docker repo
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+
+- name: Create /etc/apt/keyrings directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# ── Docker apt repository ─────────────────────────────────────────────────────
+
+- name: Download Docker GPG key
+  ansible.builtin.get_url:
+    url: "{{ docker_gpg_url }}"
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: "{{ docker_apt_repo }}"
+    filename: docker
+    state: present
+  notify: Update apt cache
+
+- name: Flush handlers to refresh apt cache before installing Docker
+  ansible.builtin.meta: flush_handlers
+
+# ── Docker Engine ─────────────────────────────────────────────────────────────
+
+- name: Install Docker Engine and Compose plugin
+  ansible.builtin.apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Enable and start Docker service
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+# ── User permissions ──────────────────────────────────────────────────────────
+
+- name: Add '{{ app_user }}' to the docker group
+  ansible.builtin.user:
+    name: "{{ app_user }}"
+    groups: docker
+    append: true
+
+# ── Smoke test ────────────────────────────────────────────────────────────────
+
+- name: Verify Docker is operational
+  ansible.builtin.command: docker info
+  register: docker_info
+  changed_when: false
+  failed_when: docker_info.rc != 0

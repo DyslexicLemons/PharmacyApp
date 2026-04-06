@@ -1,0 +1,50 @@
+---
+# Shared variables for all pharmacy_servers hosts.
+# Override any of these in inventory/hosts.ini [pharmacy_servers:vars]
+# or per-host in inventory/host_vars/<hostname>.yml.
+# Sensitive values (db_password, jwt_secret_key) MUST be overridden —
+# they have no safe default.
+
+# ── Application ───────────────────────────────────────────────────────────────
+
+# OS user that owns the app directory and runs docker compose
+app_user: pharmacy
+
+# Where the repo is cloned on the remote host
+app_dir: /opt/pharmacy
+
+# Git repository to clone
+repo_url: https://github.com/YOUR_USER/PharmacyApp.git
+repo_branch: master
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+# Used by docker-compose via the .env file
+db_name: pharmacy_db
+db_user: postgres
+
+# REQUIRED — override in hosts.ini or with -e "db_password=..."
+db_password: ~
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+# REQUIRED — generate with: python3 -c "import secrets; print(secrets.token_hex(32))"
+jwt_secret_key: ~
+
+# ── Firewall (ufw) ────────────────────────────────────────────────────────────
+
+ufw_allowed_ports:
+  - { port: 22,  proto: tcp, comment: "SSH" }
+  - { port: 80,  proto: tcp, comment: "HTTP" }
+  - { port: 443, proto: tcp, comment: "HTTPS" }
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+
+# Docker apt repository GPG key URL (official Docker Inc. key)
+docker_gpg_url: https://download.docker.com/linux/ubuntu/gpg
+docker_apt_repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+
+# ── Celery ────────────────────────────────────────────────────────────────────
+
+# Number of concurrent celery worker threads
+celery_concurrency: 2

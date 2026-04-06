@@ -4,7 +4,7 @@ import type { AuthUser, QuickCode } from "@/types";
 
 const TIMEOUT_MS = 5 * 60 * 1000;
 const IDLE_RESET_MS = 30 * 60 * 1000;
-const QUICK_CODE_TTL_MS = 10 * 60 * 1000;
+const QUICK_CODE_TTL_MS = 60 * 60 * 1000;
 
 // Timer IDs live outside the store so that resetTimer (called on every
 // mouse-move / keydown) never triggers a Zustand state update or re-render.
