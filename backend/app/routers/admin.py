@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, func
+from sqlalchemy import and_, case, desc, func
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_admin
@@ -203,9 +203,34 @@ def get_queue_summary(
         .scalar() or 0
     )
 
+    # Priority/due-date breakdown for sidebar queues — one conditional-aggregate query
+    sidebar_states = [RxState.QT, RxState.QV1, RxState.QP, RxState.QV2]
+    breakdown_rows = (
+        db.query(
+            Refill.state,
+            func.sum(case((Refill.due_date < today, 1), else_=0)).label("pastdue"),
+            func.sum(case((and_(Refill.due_date >= today, Refill.priority == Priority.stat), 1), else_=0)).label("stat"),
+            func.sum(case((and_(Refill.due_date >= today, Refill.priority == Priority.high), 1), else_=0)).label("high"),
+            func.sum(case((and_(Refill.due_date >= today, Refill.priority.notin_([Priority.stat, Priority.high])), 1), else_=0)).label("normal"),
+        )
+        .filter(Refill.state.in_(sidebar_states))
+        .group_by(Refill.state)
+        .all()
+    )
+    priority_breakdown = {
+        row.state.value: schemas.QueuePriorityBucket(
+            pastdue=row.pastdue or 0,
+            stat=row.stat or 0,
+            high=row.high or 0,
+            normal=row.normal or 0,
+        )
+        for row in breakdown_rows
+    }
+
     return schemas.QueueSummaryOut(
         generated_at=datetime.now(timezone.utc).isoformat(),
         refills_by_state=counts,
+        priority_breakdown=priority_breakdown,
         total_active=total_active,
         overdue_scheduled=overdue_scheduled,
         expiring_soon_30d=expiring_soon_30d,

@@ -566,9 +566,17 @@ export async function updateSimulationConfig(
   return handleResponse(res);
 }
 
+export interface QueuePriorityBucket {
+  pastdue: number;
+  stat: number;
+  high: number;
+  normal: number;
+}
+
 export interface QueueSummary {
   generated_at: string;
   refills_by_state: Record<string, number>;
+  priority_breakdown: Record<string, QueuePriorityBucket>;
   total_active: number;
   overdue_scheduled: number;
   expiring_soon_30d: number;
