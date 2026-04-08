@@ -45,7 +45,14 @@
       "Bash(docker compose:*)",
       "Bash(.venv/Scripts/python -m pytest tests/ -v --timeout=60)",
       "Bash(.venv/Scripts/python -m pytest tests/ -v -x --tb=short)",
-      "Bash(.venv/Scripts/python -m pytest tests/test_state_machine.py -v -k \"QueueScoped\")"
+      "Bash(.venv/Scripts/python -m pytest tests/test_state_machine.py -v -k \"QueueScoped\")",
+      "Bash(aws ecs:*)",
+      "Bash(aws logs:*)",
+      "Bash(MSYS_NO_PATHCONV=1 aws logs describe-log-streams --log-group-name /ecs/pharmacy-backend --order-by LastEventTime --descending --max-items 1 --query \"logStreams[0].logStreamName\" --output text)",
+      "Bash(MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name /ecs/pharmacy-backend --log-stream-name \"ecs/pharmacy-backend/9a5410b964a84bd484c4c808cb827c97\" --limit 80 --query \"events[*].message\" --output text)",
+      "Bash(MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name /ecs/pharmacy-backend --log-stream-name \"ecs/pharmacy-backend/31ca7e3d9bb0470fb5ab553c803d95d1\" --limit 80 --query \"events[*].message\" --output text)",
+      "Bash(MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name /ecs/pharmacy-backend --log-stream-name \"ecs/pharmacy-backend/6a4c3fa27a714b228e83ab7a5a4d9190\" --limit 80 --query \"events[*].message\" --output text)",
+      "Bash(winget install:*)"
     ]
   }
 }

@@ -62,8 +62,37 @@ logger = logging.getLogger("pharmacy.rx")
 # App lifespan
 # ---------------------------------------------------------------------------
 
+def _ensure_admin_user() -> None:
+    """Create a default admin user if no users exist yet.
+
+    Runs once at startup. Idempotent — skips silently if any user already exists.
+    The default credentials (admin / admin) are intentionally weak; the operator
+    should change the password immediately after the first login.
+    """
+    import bcrypt
+    from .database import SessionLocal
+    from .models import User
+
+    db = SessionLocal()
+    try:
+        if db.query(User).first():
+            return
+        hashed = bcrypt.hashpw(b"admin", bcrypt.gensalt()).decode()
+        db.add(User(username="admin", hashed_password=hashed, is_active=True, is_admin=True, role="admin"))
+        db.commit()
+        logger.warning(
+            "No users found — created default admin account (username=admin, password=admin). "
+            "Change this password immediately."
+        )
+    except Exception as exc:
+        logger.warning("_ensure_admin_user skipped: %s", exc)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
+    _ensure_admin_user()
     init_redis()
     yield
     close_redis()
