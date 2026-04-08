@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, desc, func
+from sqlalchemy import and_, case, desc, func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from pydantic import TypeAdapter
@@ -125,12 +125,14 @@ def _invalidate_queue_for_states(states: set[str]) -> None:
 @router.get("", response_model=schemas.PaginatedResponse[schemas.RefillOut])
 def get_refills(
     state: Optional[str] = None,
-    limit: int = Query(100, le=1000),
+    limit: int = Query(15, le=200),
     offset: int = 0,
+    sort_by: str = Query("due", pattern="^(due|qty|days|cost|priority|state|rx|drug|patient)$"),
+    sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cache_key = f"refills:queue:{state or 'ALL'}:{limit}:{offset}"
+    cache_key = f"refills:queue:{state or 'ALL'}:{limit}:{offset}:{sort_by}:{sort_dir}"
     cached = cache.cache_get(cache_key)
     if cached is not None:
         return cached
@@ -143,12 +145,39 @@ def get_refills(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid state: {state}")
     total = query.count()
+
+    _SORT_COLS = {
+        "due": Refill.due_date,
+        "qty": Refill.quantity,
+        "days": Refill.days_supply,
+        "cost": Refill.total_cost,
+        "state": Refill.state,
+        "rx": Refill.prescription_id,
+    }
+    if sort_by == "priority":
+        order_col = case(
+            (Refill.priority == "Stat", 0),
+            (Refill.priority == "High", 1),
+            (Refill.priority == "Normal", 2),
+            (Refill.priority == "Low", 3),
+            else_=99,
+        )
+    elif sort_by == "drug":
+        order_col = db.query(Drug.drug_name).filter(Drug.id == Refill.drug_id).scalar_subquery()
+    elif sort_by == "patient":
+        order_col = db.query(Patient.last_name).filter(Patient.id == Refill.patient_id).scalar_subquery()
+    else:
+        order_col = _SORT_COLS.get(sort_by, Refill.due_date)
+
+    order_expr = order_col.desc() if sort_dir == "desc" else order_col.asc()
+
     items = (
         query
         .options(
             joinedload(Refill.prescription).joinedload(Prescription.patient),
             joinedload(Refill.prescription).joinedload(Prescription.drug),
         )
+        .order_by(order_expr)
         .offset(offset)
         .limit(limit)
         .all()

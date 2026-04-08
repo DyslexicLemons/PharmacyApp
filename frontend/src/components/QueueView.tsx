@@ -7,24 +7,7 @@ import { AuthContext } from "@/context/AuthContext";
 
 const PAGE_SIZE = 15;
 
-const PRIORITY_ORDER = { stat: 0, high: 1, normal: 2 };
-
 import type { Refill } from "@/types";
-
-function getSortValue(r: Refill, key: string): string | number {
-  switch (key) {
-    case "rx":       return r.prescription?.id ?? 0;
-    case "drug":     return r.drug.drug_name.toLowerCase();
-    case "patient":  return `${r.patient.last_name} ${r.patient.first_name}`.toLowerCase();
-    case "qty":      return r.quantity;
-    case "days":     return r.days_supply;
-    case "cost":     return Number(r.total_cost);
-    case "due":      return r.due_date ? new Date(r.due_date).getTime() : 0;
-    case "priority": return (PRIORITY_ORDER as Record<string, number>)[r.priority ?? ""] ?? 99;
-    case "state":    return r.state;
-    default:         return 0;
-  }
-}
 
 interface QueueViewProps {
   stateFilter?: string;
@@ -41,14 +24,24 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
   const [sortDir, setSortDir] = useState("asc");
 
   const { data, isLoading: loading, error: queryError } = useQuery({
-    queryKey: ["queue", stateFilter, token],
-    queryFn: () => fetchQueue(stateFilter && stateFilter !== "ALL" ? stateFilter : null, token!, 1000),
-    select: (res) => Array.isArray(res) ? res : res.items,
+    queryKey: ["queue", stateFilter, token, page, sortKey, sortDir],
+    queryFn: () => fetchQueue(
+      stateFilter && stateFilter !== "ALL" ? stateFilter : null,
+      token!,
+      PAGE_SIZE,
+      (page - 1) * PAGE_SIZE,
+      sortKey,
+      sortDir,
+    ),
     refetchInterval: 30_000,
     enabled: !!token,
   });
 
-  const refills = data ?? [];
+  const pageItems = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+  const startIdx = (page - 1) * PAGE_SIZE;
+  const endIdx = Math.min(startIdx + pageItems.length, startIdx + PAGE_SIZE);
   const error = queryError?.message ?? "";
 
   const handleSelectRefill = (id: number) => {
@@ -57,13 +50,17 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
 
   // Handle row selection via command bar
   useEffect(() => {
-    if (onSelectRow && refills.length > 0) {
+    if (onSelectRow && pageItems.length > 0) {
       const rowIndex = onSelectRow - 1;
-      if (rowIndex >= 0 && rowIndex < refills.length) {
-        handleSelectRefill(refills[rowIndex].id);
+      if (rowIndex >= 0 && rowIndex < pageItems.length) {
+        handleSelectRefill(pageItems[rowIndex].id);
       }
     }
-  }, [onSelectRow, refills]);
+  }, [onSelectRow, pageItems]);
+
+  useEffect(() => {
+    onTotalPages?.(totalPages);
+  }, [totalPages, onTotalPages]);
 
   const handleSort = (key: string) => {
     if (sortKey === key) {
@@ -73,25 +70,6 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
       setSortDir("asc");
     }
   };
-
-  const sortedRefills = [...refills].sort((a, b) => {
-    const av = getSortValue(a, sortKey);
-    const bv = getSortValue(b, sortKey);
-    if (av < bv) return sortDir === "asc" ? -1 : 1;
-    if (av > bv) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
-
-  const total = sortedRefills.length;
-  const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
-  const effectivePage = Math.min(page, totalPages);
-
-  useEffect(() => {
-    onTotalPages?.(totalPages);
-  }, [totalPages, onTotalPages]);
-  const startIdx = (effectivePage - 1) * PAGE_SIZE;
-  const endIdx = Math.min(startIdx + PAGE_SIZE, total);
-  const pageItems = sortedRefills.slice(startIdx, endIdx);
 
   const SortTh = ({ label, colKey }: { label: string; colKey: string }) => {
     const active = sortKey === colKey;
@@ -188,7 +166,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
       {!loading && total > 0 && (
         <div style={{ color: "var(--text-light)", fontSize: "0.9rem", marginTop: "0.5rem" }}>
           Showing {startIdx + 1}–{endIdx} of {total}
-          {effectivePage > 1 && <span> | [p] prev</span>}
+          {page > 1 && <span> | [p] prev</span>}
           {endIdx < total && <span> | [n] next</span>}
         </div>
       )}
