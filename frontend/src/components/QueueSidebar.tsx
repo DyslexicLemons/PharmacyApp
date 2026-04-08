@@ -1,8 +1,8 @@
 import { useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchQueue, fetchQueueSummary } from "@/api";
+import { fetchQueueSummary } from "@/api";
+import type { QueuePriorityBucket } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
-import type { Refill, PaginatedResponse } from "@/types";
 
 const QUEUES = ["QT", "QV1", "QP", "QV2"] as const;
 type QueueKey = typeof QUEUES[number];
@@ -15,7 +15,7 @@ const QUEUE_COLORS: Record<QueueKey, { bg: string; text: string }> = {
 };
 
 interface Bucket {
-  key: string;
+  key: keyof QueuePriorityBucket;
   label: string;
   color: string;
 }
@@ -27,53 +27,14 @@ const BUCKETS: Bucket[] = [
   { key: "normal", label: "Normal",   color: "#006494" },
 ];
 
-function today(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-type RefillWithDue = Refill & { due_date: string; priority?: string };
-
-function bucketKey(r: RefillWithDue): string {
-  const due = new Date(r.due_date + "T00:00:00");
-  if (due < today()) return "pastdue";
-  const p = r.priority?.toLowerCase();
-  if (p === "stat") return "stat";
-  if (p === "high") return "high";
-  return "normal";
-}
-
-function extractItems(result: PaginatedResponse<Refill> | Refill[]): RefillWithDue[] {
-  if (Array.isArray(result)) return result as RefillWithDue[];
-  return (result.items ?? []) as RefillWithDue[];
-}
-
-type QueueData = Record<QueueKey, RefillWithDue[]>;
-
 export default function QueueSidebar() {
   const { token, authUser } = useContext(AuthContext);
   const isAdmin = authUser?.isAdmin ?? false;
 
-  // Use the same query keys as QueueView so the cache is shared — counts always match.
-  const LIMIT = 1000;
-  const qtQuery  = useQuery({ queryKey: ["queue", "QT",  token], queryFn: () => fetchQueue("QT",  token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
-  const qv1Query = useQuery({ queryKey: ["queue", "QV1", token], queryFn: () => fetchQueue("QV1", token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
-  const qpQuery  = useQuery({ queryKey: ["queue", "QP",  token], queryFn: () => fetchQueue("QP",  token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
-  const qv2Query = useQuery({ queryKey: ["queue", "QV2", token], queryFn: () => fetchQueue("QV2", token!, LIMIT, 0), refetchInterval: 30_000, enabled: !!token });
-
-  const isLoading = qtQuery.isLoading || qv1Query.isLoading || qpQuery.isLoading || qv2Query.isLoading;
-  const data: QueueData | undefined = (!qtQuery.data && !qv1Query.data && !qpQuery.data && !qv2Query.data) ? undefined : {
-    QT:  extractItems(qtQuery.data  ?? []),
-    QV1: extractItems(qv1Query.data ?? []),
-    QP:  extractItems(qpQuery.data  ?? []),
-    QV2: extractItems(qv2Query.data ?? []),
-  };
-
-  const { data: summary } = useQuery({
+  const { data: summary, isLoading } = useQuery({
     queryKey: ["queue-summary", token],
     queryFn: () => fetchQueueSummary(token!),
-    refetchInterval: 60_000,
+    refetchInterval: 30_000,
     enabled: !!token && isAdmin,
   });
 
@@ -112,19 +73,14 @@ export default function QueueSidebar() {
       ) : (
         <div>
           {QUEUES.map((q) => {
-            const refills: RefillWithDue[] = data?.[q] ?? [];
             const { bg, text } = QUEUE_COLORS[q];
-
-            const counts: Record<string, number> = Object.fromEntries(
-              BUCKETS.map((b) => [b.key, 0])
-            );
-            refills.forEach((r) => counts[bucketKey(r)]++);
-            const capped = refills.length >= LIMIT;
+            const total = summary?.refills_by_state?.[q] ?? 0;
+            const breakdown: QueuePriorityBucket = summary?.priority_breakdown?.[q] ?? { pastdue: 0, stat: 0, high: 0, normal: 0 };
 
             return (
               <div key={q} style={{ borderBottom: "1px solid var(--border)", padding: "8px 14px", background: `${bg}18`, borderLeft: `3px solid ${bg}` }}>
                 {/* Queue name + total */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: refills.length > 0 ? 6 : 0 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: total > 0 ? 6 : 0 }}>
                   <span style={{ fontWeight: 700, fontSize: "0.8rem", color: "var(--primary)" }}>
                     {q}
                   </span>
@@ -138,19 +94,19 @@ export default function QueueSidebar() {
                       fontWeight: 700,
                     }}
                   >
-                    {refills.length}{refills.length >= LIMIT ? "+" : ""}
+                    {total}
                   </span>
                 </div>
 
                 {/* Priority breakdown rows */}
-                {refills.length === 0 ? (
+                {total === 0 ? (
                   <div style={{ fontSize: "0.72rem", color: "var(--text-light)", fontStyle: "italic" }}>
                     Empty
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     {BUCKETS.map(({ key, label, color }) => {
-                      const count = counts[key];
+                      const count = breakdown[key];
                       if (count === 0) return null;
                       return (
                         <div
@@ -175,7 +131,7 @@ export default function QueueSidebar() {
                             />
                             {label}
                           </span>
-                          <span style={{ fontWeight: 700, color }}>{count}{capped ? "+" : ""}</span>
+                          <span style={{ fontWeight: 700, color }}>{count}</span>
                         </div>
                       );
                     })}

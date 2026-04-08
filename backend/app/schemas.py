@@ -756,9 +756,17 @@ class QueueStateCounts(BaseModel):
     REJECTED: int = 0
 
 
+class QueuePriorityBucket(BaseModel):
+    pastdue: int = 0
+    stat: int = 0
+    high: int = 0
+    normal: int = 0
+
+
 class QueueSummaryOut(BaseModel):
     generated_at: str
     refills_by_state: QueueStateCounts
+    priority_breakdown: dict[str, QueuePriorityBucket] = {}  # keyed by state (QT, QV1, QP, QV2)
     total_active: int        # QT + QV1 + QP + QV2 + READY + HOLD + SCHEDULED
     overdue_scheduled: int   # SCHEDULED with due_date < today
     expiring_soon_30d: int   # active prescriptions expiring within 30 days
