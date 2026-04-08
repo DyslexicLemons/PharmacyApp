@@ -41,14 +41,27 @@ from app.models import (
 # after, giving every test a clean slate.
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="session")
 def engine():
-    """Create a fresh PostgreSQL engine per test."""
+    """Session-scoped engine — tables are created once and dropped after all tests finish."""
     eng = create_engine(_TEST_DB)
     Base.metadata.create_all(bind=eng)
     yield eng
     Base.metadata.drop_all(bind=eng)
     eng.dispose()
+
+
+@pytest.fixture(autouse=True)
+def clean_db(engine):
+    """Delete all rows before each test so every test starts with a clean slate.
+
+    Uses DELETE (not TRUNCATE) in reverse dependency order to satisfy FK constraints.
+    Much faster than drop_all/create_all per test because DDL only runs once per session.
+    """
+    with engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            conn.execute(table.delete())
+    yield
 
 
 @pytest.fixture(scope="function")
