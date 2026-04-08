@@ -52,7 +52,8 @@
       "Bash(MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name /ecs/pharmacy-backend --log-stream-name \"ecs/pharmacy-backend/9a5410b964a84bd484c4c808cb827c97\" --limit 80 --query \"events[*].message\" --output text)",
       "Bash(MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name /ecs/pharmacy-backend --log-stream-name \"ecs/pharmacy-backend/31ca7e3d9bb0470fb5ab553c803d95d1\" --limit 80 --query \"events[*].message\" --output text)",
       "Bash(MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name /ecs/pharmacy-backend --log-stream-name \"ecs/pharmacy-backend/6a4c3fa27a714b228e83ab7a5a4d9190\" --limit 80 --query \"events[*].message\" --output text)",
-      "Bash(winget install:*)"
+      "Bash(winget install:*)",
+      "Bash(rm \"C:\\\\Users\\\\jmajo\\\\.claude\\\\projects\\\\c--Users-jmajo-VSProjects-PharmacyApp\\\\memory\\\\feedback_tests.md\")"
     ]
   }
 }
