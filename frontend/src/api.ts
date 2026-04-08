@@ -88,10 +88,17 @@ export async function loginWithCode(code: string): Promise<LoginResponse> {
 export async function fetchQueue(
   state: string | null,
   token: string,
-  limit = 100,
+  limit = 15,
   offset = 0,
-): Promise<PaginatedResponse<Refill> | Refill[]> {
-  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  sortBy = "due",
+  sortDir = "asc",
+): Promise<PaginatedResponse<Refill>> {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    sort_by: sortBy,
+    sort_dir: sortDir,
+  });
   if (state && state !== 'ALL') params.set('state', state);
   const res = await fetch(`${V1}/refills?${params}`, { headers: authHeaders(token) });
   return handleResponse(res);

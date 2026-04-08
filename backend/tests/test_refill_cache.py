@@ -68,21 +68,21 @@ class TestQueueCache:
     def test_first_request_populates_cache(self, client, db_session, fake_redis):
         _setup(db_session)
         client.get("/refills")
-        assert fake_redis.get("refills:queue:ALL:100:0") is not None
+        assert fake_redis.get("refills:queue:ALL:15:0:due:asc") is not None
 
     def test_state_filtered_request_populates_scoped_key(self, client, db_session, fake_redis):
         _setup(db_session)
         client.get("/refills?state=QT")
-        assert fake_redis.get("refills:queue:QT:100:0") is not None
+        assert fake_redis.get("refills:queue:QT:15:0:due:asc") is not None
 
     def test_advance_invalidates_queue_cache(self, client, db_session, fake_redis):
         refill = _setup(db_session)
         client.get("/refills")                          # populate cache
-        assert fake_redis.get("refills:queue:ALL:100:0") is not None
+        assert fake_redis.get("refills:queue:ALL:15:0:due:asc") is not None
 
         client.post(f"/refills/{refill.id}/advance", json={})
 
-        assert fake_redis.get("refills:queue:ALL:100:0") is None
+        assert fake_redis.get("refills:queue:ALL:15:0:due:asc") is None
 
     def test_create_manual_invalidates_queue_cache(self, client, db_session, fake_redis):
         from tests.conftest import make_prescriber, make_drug, make_patient
@@ -94,7 +94,7 @@ class TestQueueCache:
         db_session.commit()
 
         client.get("/refills")  # populate
-        assert fake_redis.get("refills:queue:ALL:100:0") is not None
+        assert fake_redis.get("refills:queue:ALL:15:0:due:asc") is not None
 
         client.post("/refills/create_manual", json={
             "patient_id": patient.id,
@@ -108,7 +108,7 @@ class TestQueueCache:
             "instructions": "Take 1 tablet daily",
         })
 
-        assert fake_redis.get("refills:queue:ALL:100:0") is None
+        assert fake_redis.get("refills:queue:ALL:15:0:due:asc") is None
 
 
 # ---------------------------------------------------------------------------
