@@ -18,7 +18,7 @@ const DAW_CODES = {
   9: "Other",
 };
 
-const API = `${(import.meta as any).env?.VITE_API_BASE || 'http://localhost:8000'}/api/v1`;
+const API = '/api/v1';
 
 function parseDueInput(raw: string) {
   const str = raw.trim().toLowerCase();
