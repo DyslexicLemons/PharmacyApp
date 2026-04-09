@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_admin
 from ..database import get_db
 from ..models import (
-    AuditLog, Drug, Patient, Prescription, Prescriber, Priority,
+    AuditLog, Drug, Formulary, InsuranceCompany, Patient, Prescription, Prescriber, Priority,
     Refill, RefillHist, RxState, SimWorker, SimWorkerRole, StationName, SystemConfig, User,
 )
 from .. import schemas
@@ -823,3 +823,82 @@ def generate_test_prescriptions(
         },
         "sold_prescriptions": len(created_refill_hists),
     }
+
+
+# ---------------------------------------------------------------------------
+# Seed insurance companies (idempotent — safe to run in prod)
+# ---------------------------------------------------------------------------
+
+_INSURANCE_SEED = [
+    {"plan_id": "BCBS-PPO-2024", "plan_name": "BlueCross BlueShield PPO", "bin_number": "610339", "pcn": "ADV",   "phone_number": "(800) 521-2227"},
+    {"plan_id": "AETNA-HMO-2024","plan_name": "Aetna Health HMO",         "bin_number": "011219", "pcn": "AETNA", "phone_number": "(800) 872-3862"},
+    {"plan_id": "CIGNA-EPO-2024","plan_name": "Cigna Healthcare EPO",      "bin_number": "610602", "pcn": "CIGNA", "phone_number": "(800) 244-6224"},
+    {"plan_id": "UHC-PPO-2024",  "plan_name": "UnitedHealthcare PPO",      "bin_number": "610494", "pcn": "9999",  "phone_number": "(844) 368-6379"},
+    {"plan_id": "HUM-HMO-2024",  "plan_name": "Humana Gold HMO",           "bin_number": "610373", "pcn": "HUMANA","phone_number": "(800) 833-6917"},
+]
+
+# Tier copay-per-30 by plan_id
+_TIER_COPAYS: dict[str, dict[int, str]] = {
+    "BCBS-PPO-2024":  {1: "10.00", 2: "40.00", 3: "75.00",  4: "150.00"},
+    "AETNA-HMO-2024": {1: "12.00", 2: "45.00", 3: "80.00",  4: "175.00"},
+    "CIGNA-EPO-2024": {1: "8.00",  2: "35.00", 3: "70.00",  4: "150.00"},
+    "UHC-PPO-2024":   {1: "15.00", 2: "50.00", 3: "85.00",  4: "200.00"},
+    "HUM-HMO-2024":   {1: "10.00", 2: "42.00", 3: "78.00",  4: "160.00"},
+}
+
+# drug_id → tier (matches seed.py ordering)
+_DRUG_TIERS = {
+    1: 1, 2: 1, 3: 4, 4: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 2,
+    11: 2, 12: 1, 13: 3, 14: 4, 15: 2, 16: 3, 17: 4, 18: 2, 19: 2, 20: 1,
+}
+
+# plan_id → set of drug_ids that are not covered
+_NOT_COVERED: dict[str, set[int]] = {
+    "AETNA-HMO-2024": {16},
+    "CIGNA-EPO-2024": {3},
+    "UHC-PPO-2024":   {16},
+    "HUM-HMO-2024":   {17},
+}
+
+
+@router.post("/commands/seed_insurance_companies")
+def seed_insurance_companies(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Seed the 5 standard insurance companies and their formularies.
+    Idempotent: skips any plan_id that already exists. Safe to run in prod."""
+    existing_plan_ids = {r[0] for r in db.query(InsuranceCompany.plan_id).all()}
+    drugs = db.query(Drug).all()
+    drug_ids = {d.id for d in drugs}
+
+    added_companies = 0
+    added_formulary = 0
+
+    for spec in _INSURANCE_SEED:
+        if spec["plan_id"] in existing_plan_ids:
+            continue
+        company = InsuranceCompany(**spec)
+        db.add(company)
+        db.flush()  # get company.id
+
+        copay_map = _TIER_COPAYS[spec["plan_id"]]
+        not_covered_set = _NOT_COVERED.get(spec["plan_id"], set())
+
+        for drug_id in sorted(drug_ids):
+            tier = _DRUG_TIERS.get(drug_id, 2)
+            nc = drug_id in not_covered_set
+            copay = copay_map[tier] if not nc else "0.00"
+            db.add(Formulary(
+                insurance_company_id=company.id,
+                drug_id=drug_id,
+                tier=tier,
+                copay_per_30=Decimal(copay),
+                not_covered=nc,
+            ))
+            added_formulary += 1
+
+        added_companies += 1
+
+    db.commit()
+    return {"companies_added": added_companies, "formulary_entries_added": added_formulary}

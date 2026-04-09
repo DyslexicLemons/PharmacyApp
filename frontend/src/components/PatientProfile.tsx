@@ -26,6 +26,14 @@ interface PrescriptionRow {
   latest_refill?: LatestRefill | null;
 }
 
+interface InsuranceSummary {
+  id: number;
+  is_primary: boolean;
+  is_active: boolean;
+  member_id: string;
+  insurance_company: { plan_name: string };
+}
+
 interface PatientData {
   id: number;
   first_name: string;
@@ -35,6 +43,7 @@ interface PatientData {
   city?: string;
   state?: string;
   prescriptions: PrescriptionRow[];
+  insurances?: InsuranceSummary[];
 }
 
 interface PatientProfileProps {
@@ -99,6 +108,16 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
           {(data.city || data.state) && (
             <span>, {[data.city, data.state].filter(Boolean).map(s => s!.toUpperCase()).join(", ")}</span>
           )}
+        </div>
+        <div style={{ marginTop: "0.25rem", fontSize: "0.9rem", color: "var(--text-light)" }}>
+          {(() => {
+            const active = (data.insurances ?? []).filter(i => i.is_active);
+            if (active.length === 0) return "No insurance on file";
+            const primary = active.find(i => i.is_primary);
+            const display = primary ?? active[0];
+            const extra = active.length > 1 ? ` +${active.length - 1} more` : "";
+            return `Insurance: ${display.insurance_company.plan_name} (${display.member_id})${extra}`;
+          })()}
         </div>
       </div>
 

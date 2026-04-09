@@ -129,10 +129,11 @@ export interface Shipment {
 
 export interface InsuranceCompany {
   id: number;
-  name: string;
-  bin: string;
+  plan_id: string;
+  plan_name: string;
+  bin_number: string | null;
   pcn: string | null;
-  phone: string | null;
+  phone_number: string | null;
 }
 
 export interface PatientInsurance {
@@ -296,4 +297,5 @@ export type RouteState =
   | { view: "RTS_LOOKUP"; refillId?: number }
   | { view: "RTS_HIST"; page?: number }
   | { view: "WORKER_DASHBOARD" }
-  | { view: "PROVIDER_INFO" };
+  | { view: "PROVIDER_INFO" }
+  | { view: "EDIT_PATIENT"; pid: number };

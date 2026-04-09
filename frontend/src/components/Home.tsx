@@ -122,6 +122,9 @@ export default function Home({ onCommand }: HomeProps) {
               <li>
                 <code>gen_test</code> – Generate 50 test prescriptions (⚠️ deletes all current data)
               </li>
+              <li>
+                <code>seed_insurance</code> – Seed standard insurance companies &amp; formulary (safe, idempotent)
+              </li>
             </ul>
           </section>
         </div>
@@ -201,7 +204,7 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>&lt;num&gt;</code> – View prescription by row (in Patient profile)
               </li>
               <li>
-                <code>e</code> – Edit refill (in Refill Detail)
+                <code>e</code> – Edit patient (in Patient Profile) or edit refill (in Refill Detail)
               </li>
               <li>
                 <code>a</code> – Approve refill (in Refill Detail)
