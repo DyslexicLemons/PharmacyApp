@@ -37,6 +37,7 @@ const RTSView               = lazy(() => import("@/components/RTSView"));
 const RTSHistView           = lazy(() => import("@/components/RTSHistView"));
 const WorkerDashboardView   = lazy(() => import("@/components/WorkerDashboardView"));
 const ProviderInfoView      = lazy(() => import("@/components/ProviderInfoView"));
+const EditPatientView       = lazy(() => import("@/components/EditPatientView"));
 
 function ViewFallback() {
   return (
@@ -218,10 +219,12 @@ function App() {
       return;
     }
 
-    // Edit the currently viewed refill (only valid from the refill detail view)
+    // Edit the currently viewed refill (refill detail) or patient (patient profile)
     if (cmd === "e") {
       if (route.view === "REFILL_DETAIL") {
         navigateTo({ view: "EDIT_REFILL", refillId: route.refillId });
+      } else if (route.view === "PATIENT") {
+        navigateTo({ view: "EDIT_PATIENT", pid: route.pid });
       }
       return;
     }
@@ -322,6 +325,19 @@ function App() {
           .catch((e: Error) => addNotification(`Error: ${e.message}`, "error"));
       }
     }
+    else if (cmd === "seed_insurance") {
+      if (!authUser?.isAdmin) { addNotification("Access denied: admin only.", "error"); return; }
+      fetch("/api/v1/commands/seed_insurance_companies", { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((result: { companies_added: number; formulary_entries_added: number }) => {
+          if (result.companies_added === 0) {
+            addNotification("Insurance companies already seeded — nothing added.", "info");
+          } else {
+            addNotification(`Seeded ${result.companies_added} insurance companies and ${result.formulary_entries_added} formulary entries.`, "success");
+          }
+        })
+        .catch((e: Error) => addNotification(`Error: ${e.message}`, "error"));
+    }
     else {
       const display = cmd.length > 30 ? cmd.slice(0, 30) + "…" : cmd;
       addNotification(`Unknown command: "${display}"`, "warning");
@@ -412,6 +428,16 @@ function App() {
                   fromPid: route.pid,
                 })
               }
+            />
+          )}
+          {route.view === "EDIT_PATIENT" && (
+            <EditPatientView
+              pid={route.pid}
+              onBack={goBack}
+              onSaved={() => {
+                setCurrentPatientData(null);
+                navigateTo({ view: "PATIENT", pid: route.pid });
+              }}
             />
           )}
           {route.view === "VIEW_PRESCRIPTION" && (

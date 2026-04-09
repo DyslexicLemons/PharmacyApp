@@ -184,6 +184,34 @@ def get_patient_insurance(
     return db.query(PatientInsurance).filter(PatientInsurance.patient_id == pid).all()
 
 
+@router.delete("/{pid}/insurance/{insurance_id}", status_code=204)
+def delete_patient_insurance(
+    pid: int,
+    insurance_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Remove (deactivate) a patient insurance record."""
+    patient = db.get(Patient, pid)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+    ins = db.query(PatientInsurance).filter(
+        PatientInsurance.id == insurance_id,
+        PatientInsurance.patient_id == pid,
+    ).first()
+    if not ins:
+        raise HTTPException(status_code=404, detail="Insurance record not found")
+    ins.is_active = False  # type: ignore[assignment]
+    _write_audit(
+        db, "INSURANCE_REMOVED",
+        entity_type="patient", entity_id=pid,
+        details=f"insurance_id={insurance_id}",
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
+    db.commit()
+
+
 @router.post("/{pid}/insurance", response_model=schemas.PatientInsuranceOut)
 def add_patient_insurance(
     pid: int,

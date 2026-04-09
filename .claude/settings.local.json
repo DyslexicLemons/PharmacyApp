@@ -56,7 +56,17 @@
       "Bash(rm \"C:\\\\Users\\\\jmajo\\\\.claude\\\\projects\\\\c--Users-jmajo-VSProjects-PharmacyApp\\\\memory\\\\feedback_tests.md\")",
       "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(sqlalchemy.__version__\\)\")",
       "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp/backend/app/routers -name \"*.py\" -exec wc -l {} +)",
-      "Bash(.venv/Scripts/python -m pytest tests/ --tb=short)"
+      "Bash(.venv/Scripts/python -m pytest tests/ --tb=short)",
+      "Read(//mnt/c/Users/jmajo/VSProjects/PharmacyApp/**)",
+      "Bash(docker build:*)",
+      "Bash(docker tag:*)",
+      "Bash(docker push:*)",
+      "Bash(python3 -c ':*)",
+      "Read(//usr/**)",
+      "Read(//usr/local/**)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short -q)",
+      "Bash(npm run:*)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_billing.py::TestPatientInsuranceManagement -v)"
     ]
   }
 }

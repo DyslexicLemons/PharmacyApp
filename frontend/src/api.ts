@@ -258,6 +258,18 @@ export async function addPatientInsurance(
   return handleResponse(res);
 }
 
+export async function deletePatientInsurance(
+  patientId: number,
+  insuranceId: number,
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${V1}/patients/${patientId}/insurance/${insuranceId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return handleResponse(res);
+}
+
 // ---------------------------------------------------------------------------
 // Prescriptions
 // ---------------------------------------------------------------------------

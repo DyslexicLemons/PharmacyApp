@@ -441,3 +441,38 @@ class TestPatientInsuranceManagement:
         ins_list = resp.json()
         assert len(ins_list) >= 1
         assert ins_list[0]["member_id"] == "MBR123"
+
+    def test_delete_insurance_deactivates_record(self, client, db_session):
+        """DELETE /patients/{pid}/insurance/{id} sets is_active=False."""
+        db = db_session
+        patient = make_patient(db)
+        insurance = make_insurance(db)
+        pi = make_patient_insurance(db, patient, insurance)
+        db.commit()
+
+        resp = client.delete(f"/patients/{patient.id}/insurance/{pi.id}")
+        assert resp.status_code == 204
+
+        db.expire(pi)
+        assert pi.is_active is False
+
+    def test_delete_insurance_not_found_returns_404(self, client, db_session):
+        """DELETE with a nonexistent insurance_id returns 404."""
+        db = db_session
+        patient = make_patient(db)
+        db.commit()
+
+        resp = client.delete(f"/patients/{patient.id}/insurance/99999")
+        assert resp.status_code == 404
+
+    def test_delete_insurance_wrong_patient_returns_404(self, client, db_session):
+        """DELETE with an insurance_id that belongs to a different patient returns 404."""
+        db = db_session
+        patient_a = make_patient(db)
+        patient_b = make_patient(db)
+        insurance = make_insurance(db)
+        pi = make_patient_insurance(db, patient_a, insurance)
+        db.commit()
+
+        resp = client.delete(f"/patients/{patient_b.id}/insurance/{pi.id}")
+        assert resp.status_code == 404
