@@ -5,9 +5,9 @@ import LoginForm from "@/components/LoginForm";
 import NotificationPanel from "@/components/NotificationPanel";
 import CommandBar from "@/components/CommandBar";
 
-import { searchPatients, generateTestPrescriptions, getPrescription } from "@/api";
+import { searchPatients, generateTestPrescriptions, getPrescription, deletePatient } from "@/api";
 import QueueSidebar from "@/components/QueueSidebar";
-import type { RouteState, QuickCode } from "@/types";
+import type { RouteState } from "@/types";
 
 // Route-level components are lazy-loaded so each view becomes its own chunk.
 // LoginForm and CommandBar stay eager — they are needed before/after any route.
@@ -68,6 +68,7 @@ function App() {
   const [refillKeyCmd, setRefillKeyCmd] = useState<string | null>(null);
   const [shipmentKeyCmd, setShipmentKeyCmd] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(true);
+  const [deletePendingPid, setDeletePendingPid] = useState<number | null>(null);
   const [currentTotalPages, setCurrentTotalPages] = useState(Infinity);
   const cmdBarRef = useRef<{ focus: () => void } | null>(null);
   // Track whether auth has ever been established in this session.
@@ -86,6 +87,7 @@ function App() {
 
   useEffect(() => {
     setCurrentTotalPages(Infinity);
+    if (route.view !== "PATIENT") setDeletePendingPid(null);
   }, [route.view]);
 
   useEffect(() => {
@@ -200,7 +202,32 @@ function App() {
     }
 
     if (cmd === "q") {
-      goBack();
+      if (deletePendingPid !== null) {
+        setDeletePendingPid(null);
+      } else {
+        goBack();
+      }
+      return;
+    }
+
+    // Delete patient — two-step: 'd' arms the confirmation, 'confirm' executes
+    if (cmd === "d") {
+      if (route.view === "PATIENT") {
+        setDeletePendingPid(route.pid);
+      }
+      return;
+    }
+    if (cmd === "confirm") {
+      if (deletePendingPid !== null) {
+        const pidToDelete = deletePendingPid;
+        setDeletePendingPid(null);
+        deletePatient(pidToDelete, token!)
+          .then(() => {
+            addNotification("Patient deleted.", "success");
+            goBack();
+          })
+          .catch((e: Error) => addNotification(e.message, "error"));
+      }
       return;
     }
 
@@ -353,7 +380,7 @@ function App() {
 
   return (
     <div className="container vstack">
-      <NotificationPanel />
+      <NotificationPanel quickCode={isAuthenticated ? quickCode : null} onDismissQuickCode={clearQuickCode} />
       {/* Non-dismissible login modal — shown after session timeout */}
       {showLoginModal && (
         <div
@@ -374,11 +401,6 @@ function App() {
           <LoginForm isModal />
         </div>
       )}
-      {/* Quick code banner — shown after login while a code is active */}
-      {isAuthenticated && quickCode && (
-        <QuickCodeBanner quickCode={quickCode} onDismiss={clearQuickCode} />
-      )}
-
       <div style={{ display: "flex", gap: "16px", height: "calc(100vh - 120px)", alignItems: "stretch" }}>
       <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", flex: 1, minWidth: 0, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px", minHeight: 0 }}>
@@ -420,6 +442,7 @@ function App() {
               page={route.page || 1}
               onTotalPages={setCurrentTotalPages}
               onDataLoaded={(d) => setCurrentPatientData(d)}
+              deletePending={deletePendingPid === route.pid}
               onFill={(prescription, patient) =>
                 navigateTo({
                   view: "FILL_SCRIPT",
@@ -595,53 +618,3 @@ function App() {
   );
 }
 
-const BANNER_DISPLAY_SECS = 10;
-
-function QuickCodeBanner({ quickCode, onDismiss }: { quickCode: QuickCode; onDismiss: () => void }) {
-  const [remaining, setRemaining] = useState<number>(BANNER_DISPLAY_SECS);
-
-  // Auto-dismiss the banner after BANNER_DISPLAY_SECS regardless of code TTL
-  useEffect(() => {
-    const id = setInterval(() => {
-      setRemaining((prev) => {
-        if (prev <= 1) { onDismiss(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [quickCode, onDismiss]);
-
-  if (remaining === 0) return null;
-
-  return (
-    <div
-      style={{
-        background: "rgba(6, 214, 160, 0.1)",
-        border: "1px solid var(--success, #06d6a0)",
-        borderRadius: 8,
-        padding: "10px 16px",
-        display: "flex",
-        alignItems: "center",
-        gap: 16,
-        marginBottom: 8,
-      }}
-    >
-      <div style={{ flex: 1, textAlign: "center" }}>
-        <span style={{ fontSize: "0.8rem", color: "white" }}>Your quick login code: </span>
-        <span style={{ fontSize: "1.3rem", fontWeight: 800, letterSpacing: "0.3em", fontFamily: "monospace", color: "var(--primary)" }}>
-          {quickCode.code}
-        </span>
-        <span style={{ fontSize: "0.75rem", color: "white", marginLeft: 10 }}>
-          (closing in {remaining}s)
-        </span>
-      </div>
-      <button
-        onClick={onDismiss}
-        style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1rem", color: "var(--text-light)", lineHeight: 1 }}
-        title="Dismiss"
-      >
-        ✕
-      </button>
-    </div>
-  );
-}

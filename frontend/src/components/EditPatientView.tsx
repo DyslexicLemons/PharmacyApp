@@ -218,7 +218,7 @@ export default function EditPatientView({ pid, onBack, onSaved }: Props) {
                 style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
               />
             </label>
-            <label>
+            <label style={{ gridColumn: "1 / -1" }}>
               <strong>Address <span style={{ color: "var(--danger)" }}>*</span></strong>
               <input
                 className="input"

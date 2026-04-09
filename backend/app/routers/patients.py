@@ -151,6 +151,63 @@ def get_patient(
     return patient
 
 
+@router.delete("/{pid}", status_code=204)
+def delete_patient(
+    pid: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete a patient and all their records.
+    Blocked if any active refills (in-progress prescriptions) exist.
+    Deletes in dependency order: Refill → RefillHist → Prescription → PatientInsurance → Patient.
+    """
+    from ..models import Prescription, Refill, RefillHist, RxState
+
+    patient = db.get(Patient, pid)
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    # Block deletion if any refills are actively in the workflow
+    ACTIVE_STATES = [
+        RxState.QT, RxState.QV1, RxState.QP, RxState.QV2,
+        RxState.READY, RxState.HOLD, RxState.SCHEDULED,
+    ]
+    active_count = (
+        db.query(Refill)
+        .filter(Refill.patient_id == pid, Refill.state.in_(ACTIVE_STATES))
+        .count()
+    )
+    if active_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Cannot delete patient: {active_count} active prescription(s) in progress. "
+                "Complete or reject all active refills first."
+            ),
+        )
+
+    name = f"{patient.last_name}, {patient.first_name}"
+
+    # Delete child records in dependency order, then the patient itself.
+    # All bulk deletes use synchronize_session=False so the ORM does NOT try
+    # to issue SET-NULL UPDATEs on the already-deleted children when the patient
+    # is removed (which would raise StaleDataError on nullable FK columns).
+    db.query(Refill).filter(Refill.patient_id == pid).delete(synchronize_session=False)
+    db.query(RefillHist).filter(RefillHist.patient_id == pid).delete(synchronize_session=False)
+    db.query(Prescription).filter(Prescription.patient_id == pid).delete(synchronize_session=False)
+    db.query(PatientInsurance).filter(PatientInsurance.patient_id == pid).delete(synchronize_session=False)
+    db.query(Patient).filter(Patient.id == pid).delete(synchronize_session=False)
+
+    _write_audit(
+        db, "PATIENT_DELETED",
+        entity_type="patient", entity_id=pid,
+        details=name,
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
+    db.commit()
+
+
 @router.patch("/{pid}", response_model=schemas.PatientOut)
 def update_patient(
     pid: int,

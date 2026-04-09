@@ -207,6 +207,9 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>e</code> – Edit patient (in Patient Profile) or edit refill (in Refill Detail)
               </li>
               <li>
+                <code>d</code> → <code>confirm</code> – Delete patient (in Patient Profile; blocked if active prescriptions)
+              </li>
+              <li>
                 <code>a</code> – Approve refill (in Refill Detail)
               </li>
               <li>

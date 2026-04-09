@@ -1,5 +1,6 @@
+import { useState, useEffect } from "react";
 import { useNotification } from "@/context/NotificationContext";
-import type { NotificationType } from "@/types";
+import type { NotificationType, QuickCode } from "@/types";
 
 interface TypeStyle {
   background: string;
@@ -35,10 +36,75 @@ const TYPE_STYLES: Record<NotificationType, TypeStyle> = {
   },
 };
 
-export default function NotificationPanel() {
+const BANNER_DISMISS_SECS = 10;
+const BANNER_FADE_MS = 600;
+
+function QuickCodeCard({ quickCode, onDismiss }: { quickCode: QuickCode; onDismiss: () => void }) {
+  const [ttl, setTtl] = useState(() => Math.max(0, Math.round((quickCode.expiresAt - Date.now()) / 1000)));
+  const [fading, setFading] = useState(false);
+
+  const triggerDismiss = () => {
+    setFading(true);
+    setTimeout(onDismiss, BANNER_FADE_MS);
+  };
+
+  // Tick down the credential TTL every second
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTtl(Math.max(0, Math.round((quickCode.expiresAt - Date.now()) / 1000)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [quickCode.expiresAt]);
+
+  // Auto-dismiss the card after BANNER_DISMISS_SECS — no countdown shown for this
+  useEffect(() => {
+    const id = setTimeout(triggerDismiss, BANNER_DISMISS_SECS * 1000);
+    return () => clearTimeout(id);
+  }, [quickCode]);
+
+  return (
+    <div
+      style={{
+        background: "rgba(6, 214, 160, 0.15)",
+        border: "1px solid var(--success, #06d6a0)",
+        borderRadius: "8px",
+        padding: "12px 14px",
+        display: "flex",
+        alignItems: "flex-start",
+        gap: "10px",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
+        pointerEvents: "all",
+        opacity: fading ? 0 : 1,
+        transition: `opacity ${BANNER_FADE_MS}ms ease`,
+      }}
+    >
+      <span style={{ color: "var(--success, #06d6a0)", fontWeight: "bold", fontSize: "1rem", lineHeight: 1.4, flexShrink: 0 }}>
+        🔑
+      </span>
+      <span style={{ flex: 1, fontSize: "0.9rem", color: "#ffffff", lineHeight: 1.5 }}>
+        <div style={{ marginBottom: 4 }}>Quick login code:</div>
+        <div style={{ fontFamily: "monospace", fontSize: "1.3rem", fontWeight: 800, letterSpacing: "0.3em", color: "var(--success, #06d6a0)" }}>
+          {quickCode.code}
+        </div>
+        <div style={{ fontSize: "0.75rem", color: "var(--text-light, #888)", marginTop: 4 }}>
+          Valid for {ttl >= 60 ? `${Math.floor(ttl / 60)}m ${ttl % 60}s` : `${ttl}s`}
+        </div>
+      </span>
+      <button
+        onClick={triggerDismiss}
+        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-light, #888)", fontSize: "0.85rem", lineHeight: 1, padding: "2px", flexShrink: 0 }}
+        title="Dismiss"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+export default function NotificationPanel({ quickCode, onDismissQuickCode }: { quickCode?: QuickCode | null; onDismissQuickCode?: () => void }) {
   const { notifications, removeNotification } = useNotification();
 
-  if (notifications.length === 0) return null;
+  if (notifications.length === 0 && !quickCode) return null;
 
   return (
     <div
@@ -55,6 +121,9 @@ export default function NotificationPanel() {
         pointerEvents: "none",
       }}
     >
+      {quickCode && onDismissQuickCode && (
+        <QuickCodeCard quickCode={quickCode} onDismiss={onDismissQuickCode} />
+      )}
       {notifications.map((n) => {
         const s = TYPE_STYLES[n.type] ?? TYPE_STYLES.info;
         return (
