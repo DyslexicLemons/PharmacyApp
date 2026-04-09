@@ -54,7 +54,8 @@
       "Bash(MSYS_NO_PATHCONV=1 aws logs get-log-events --log-group-name /ecs/pharmacy-backend --log-stream-name \"ecs/pharmacy-backend/6a4c3fa27a714b228e83ab7a5a4d9190\" --limit 80 --query \"events[*].message\" --output text)",
       "Bash(winget install:*)",
       "Bash(rm \"C:\\\\Users\\\\jmajo\\\\.claude\\\\projects\\\\c--Users-jmajo-VSProjects-PharmacyApp\\\\memory\\\\feedback_tests.md\")",
-      "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(sqlalchemy.__version__\\)\")"
+      "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(sqlalchemy.__version__\\)\")",
+      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp/backend/app/routers -name \"*.py\" -exec wc -l {} +)"
     ]
   }
 }

@@ -36,6 +36,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: pharmacy-backend
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -57,9 +58,7 @@ services:
   # ── Celery worker ─────────────────────────────────────────────────────────────
   # Scale freely: docker compose up --scale celery-worker=N
   celery-worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: pharmacy-backend
     restart: unless-stopped
     command: celery -A app.celery_app worker --loglevel=info --concurrency=2
     environment:
@@ -78,9 +77,7 @@ services:
   # MUST remain a single replica — running two Beat instances causes duplicate
   # task dispatch. The Redis lock inside each task is a safety net only.
   celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: pharmacy-backend
     restart: unless-stopped
     command: celery -A app.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
     environment:
