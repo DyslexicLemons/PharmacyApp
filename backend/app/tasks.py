@@ -62,6 +62,23 @@ def _release_lock(key: str) -> None:
     _get_redis().delete(key)
 
 
+def _invalidate_queue_cache() -> None:
+    """Delete all refills:queue:* keys after a bulk state change.
+
+    The queue list endpoint caches results with a 30s TTL.  Background tasks
+    that mutate refill states bypass the router layer and never call
+    _invalidate_queue_for_states, so without this the UI can show stale queue
+    counts and items for up to 30 seconds after a Celery task runs.
+    """
+    try:
+        r = _get_redis()
+        keys = r.keys("refills:queue:*")
+        if keys:
+            r.delete(*keys)
+    except Exception as exc:
+        logger.warning("_invalidate_queue_cache failed: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Tasks
 # ---------------------------------------------------------------------------
@@ -294,6 +311,7 @@ def promote_scheduled_refills(self: Any) -> dict:  # type: ignore[type-arg]
             db.commit()
             total = promoted_qp + promoted_qt
             if total:
+                _invalidate_queue_cache()
                 logger.info(
                     "Auto-promoted %d scheduled refill(s): %d→QP, %d→QT",
                     total, promoted_qp, promoted_qt,
@@ -500,8 +518,8 @@ def simulate_patient_arrivals(self: Any) -> dict:  # type: ignore[type-arg]
             if audit_rows:
                 db.execute(insert(AuditLog), audit_rows)
             db.commit()
-
             if created:
+                _invalidate_queue_cache()
                 logger.info("simulate_patient_arrivals: created %d new prescription(s)", created)
             return {"created": created}
         finally:
@@ -800,8 +818,9 @@ def simulate_technician(self: Any) -> dict:  # type: ignore[type-arg]
             if audit_rows:
                 db.execute(insert(AuditLog), audit_rows)
             db.commit()
-
             total = qt_advanced + qp_advanced + ready_advanced
+            if total:
+                _invalidate_queue_cache()
             if total or traveling:
                 logger.info(
                     "simulate_technician: %d tech(s), advanced %d refill(s) "
@@ -1000,8 +1019,9 @@ def simulate_pharmacist(self: Any) -> dict:  # type: ignore[type-arg]
             if audit_rows:
                 db.execute(insert(AuditLog), audit_rows)
             db.commit()
-
             total = approved_qv1 + rejected_qv1 + approved_qv2 + returned_qv2
+            if total:
+                _invalidate_queue_cache()
             if total or pharm_traveling:
                 logger.info(
                     "simulate_pharmacist: %d pharmacist(s), %d action(s) "
@@ -1109,8 +1129,8 @@ def simulate_patient_pickups(self: Any) -> dict:  # type: ignore[type-arg]
             if audit_rows:
                 db.execute(insert(AuditLog), audit_rows)
             db.commit()
-
             if sold:
+                _invalidate_queue_cache()
                 logger.info("simulate_patient_pickups: sold %d refill(s)", sold)
             return {"sold": sold}
         finally:
