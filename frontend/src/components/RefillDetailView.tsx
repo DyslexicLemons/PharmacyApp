@@ -72,6 +72,8 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
       const err = e as { status?: number; message?: string };
       if (err.status === 409) {
         setStaleQueueMessage(err.message ?? "This prescription has already been advanced to another queue.");
+        queryClient.invalidateQueries({ queryKey: ["queue"] });
+        queryClient.invalidateQueries({ queryKey: ["queue-summary"] });
       } else {
         setError((e as Error).message);
       }
@@ -99,10 +101,8 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
     if (!token) return;
     try {
       const updated = await advanceRx(refillId, {}, token);
-      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
-        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
-      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
+      queryClient.invalidateQueries({ queryKey: ["queue-summary"] });
       addNotification(`RX# ${updated.prescription.id} advanced to ${updated.state}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -115,10 +115,8 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
     if (!token) return;
     try {
       const updated = await advanceRx(refillId, { schedule_next_fill: scheduleNextFill }, token);
-      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
-        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
-      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
+      queryClient.invalidateQueries({ queryKey: ["queue-summary"] });
       addNotification(`Rx #${updated.prescription.id} marked as SOLD${scheduleNextFill ? " — next fill scheduled" : ""}`, "success");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -141,10 +139,8 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
         action: "reject",
         rejection_reason: rejectReason.trim(),
       }, token);
-      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
-        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
-      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
+      queryClient.invalidateQueries({ queryKey: ["queue-summary"] });
       addNotification(`Rx returned to triage: ${rejectReason.trim()}`, "warning");
       if (onUpdate) onUpdate(updated);
       if (onBack) onBack();
@@ -164,10 +160,8 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
     setShowHoldConfirm(false);
     try {
       const updated = await advanceRx(refillId, { action: "hold" }, token);
-      queryClient.setQueriesData<Refill[]>({ queryKey: ["queue"] }, (old) =>
-        Array.isArray(old) ? old.filter((r) => r.id !== refillId) : old
-      );
       queryClient.invalidateQueries({ queryKey: ["queue"] });
+      queryClient.invalidateQueries({ queryKey: ["queue-summary"] });
       if (holdIsQV2) {
         addNotification("Prescription placed on HOLD. This script has been filled — please return the medication to stock.", "warning");
       } else {

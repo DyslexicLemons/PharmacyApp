@@ -36,6 +36,7 @@ const AdminConsoleView      = lazy(() => import("@/components/AdminConsoleView")
 const RTSView               = lazy(() => import("@/components/RTSView"));
 const RTSHistView           = lazy(() => import("@/components/RTSHistView"));
 const WorkerDashboardView   = lazy(() => import("@/components/WorkerDashboardView"));
+const ProviderInfoView      = lazy(() => import("@/components/ProviderInfoView"));
 
 function ViewFallback() {
   return (
@@ -310,6 +311,7 @@ function App() {
       navigateToSection({ view: "ADMIN_CONSOLE" });
     }
     else if (cmd === "workers") navigateToSection({ view: "WORKER_DASHBOARD" });
+    else if (cmd === "info") navigateToSection({ view: "PROVIDER_INFO" });
     else if (cmd === "gen_test") {
       if (confirm("This will DELETE all current prescriptions and refills and generate 50 new test prescriptions. Continue?")) {
         generateTestPrescriptions(token!)
@@ -527,6 +529,7 @@ function App() {
           )}
           {route.view === "RTS_HIST" && <RTSHistView onBack={goBack} page={route.page || 1} onTotalPages={setCurrentTotalPages} />}
           {route.view === "WORKER_DASHBOARD" && <WorkerDashboardView onBack={goBack} />}
+          {route.view === "PROVIDER_INFO" && <ProviderInfoView onBack={goBack} />}
           {route.view === "AUDIT_LOG" && <AuditLogView onBack={goBack} page={route.page || 1} onTotalPages={setCurrentTotalPages} />}
           {route.view === "SHIPMENT" && (
             <ShipmentView

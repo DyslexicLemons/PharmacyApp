@@ -94,6 +94,8 @@ def _ensure_admin_user() -> None:
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     _ensure_admin_user()
     init_redis()
+    from .providers.registry import register_providers_from_env
+    register_providers_from_env()
     yield
     close_redis()
 
@@ -193,6 +195,13 @@ app.include_router(rts.router,           prefix=API_PREFIX)
 @app.get("/")
 def read_root():
     return {"message": "Pharmacy API running. Visit /docs for Swagger UI.", "version": "1.0.0"}
+
+
+@app.get("/api/v1/providers/status")
+def provider_status():
+    """Return the active provider implementations registered at startup."""
+    from .providers.registry import ProviderRegistry
+    return ProviderRegistry.status()
 
 
 @app.get("/health")

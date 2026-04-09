@@ -55,7 +55,8 @@
       "Bash(winget install:*)",
       "Bash(rm \"C:\\\\Users\\\\jmajo\\\\.claude\\\\projects\\\\c--Users-jmajo-VSProjects-PharmacyApp\\\\memory\\\\feedback_tests.md\")",
       "Bash(.venv/Scripts/python -c \"import sqlalchemy; print\\(sqlalchemy.__version__\\)\")",
-      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp/backend/app/routers -name \"*.py\" -exec wc -l {} +)"
+      "Bash(find /c/Users/jmajo/VSProjects/PharmacyApp/backend/app/routers -name \"*.py\" -exec wc -l {} +)",
+      "Bash(.venv/Scripts/python -m pytest tests/ --tb=short)"
     ]
   }
 }

@@ -11,8 +11,63 @@ from ..models import Drug, InventoryShipment, InventoryShipmentItem, ReturnToSto
 from ..utils import _write_audit
 from .. import schemas
 from ..sig_codes import translate_sig
+from ..providers.base import DrugCatalogProvider
+from ..providers.registry import get_drug_catalog
 
 router = APIRouter(tags=["drugs"])
+
+
+@router.get("/drugs/search")
+async def search_drugs(
+    q: str = Query(..., min_length=1, description="Drug name or NDC fragment"),
+    limit: int = Query(20, le=100),
+    current_user: User = Depends(get_current_user),
+    catalog: DrugCatalogProvider = Depends(get_drug_catalog),
+):
+    """Search for drugs via the active DrugCatalogProvider.
+
+    This endpoint is provider-agnostic: swap the registered provider (e.g. FDB,
+    Surescripts) in ProviderRegistry and this endpoint automatically delegates
+    to it without any router changes.
+    """
+    results = await catalog.search(q, limit=limit)
+    return [
+        {
+            "drug_id": r.drug_id,
+            "ndc": r.ndc,
+            "name": r.name,
+            "form": r.form,
+            "strength": r.strength,
+            "manufacturer": r.manufacturer,
+            "unit_cost": str(r.unit_cost),
+            "in_stock": r.in_stock,
+            "quantity_on_hand": r.quantity_on_hand,
+        }
+        for r in results
+    ]
+
+
+@router.get("/drugs/interactions")
+async def check_interactions(
+    ndcs: str = Query(..., description="Comma-separated NDC list"),
+    current_user: User = Depends(get_current_user),
+    catalog: DrugCatalogProvider = Depends(get_drug_catalog),
+):
+    """Check drug–drug interactions for a set of NDCs via the active DrugCatalogProvider.
+
+    Returns an empty list when the active provider does not support interaction checking
+    (e.g. LocalDrugCatalogProvider).  Register a clinical data provider to enable this.
+    """
+    ndc_list = [n.strip() for n in ndcs.split(",") if n.strip()]
+    warnings = await catalog.check_interactions(ndc_list)
+    return [
+        {
+            "severity": w.severity,
+            "description": w.description,
+            "ndcs_involved": w.ndcs_involved,
+        }
+        for w in warnings
+    ]
 
 
 @router.get("/drugs", response_model=schemas.PaginatedResponse[schemas.DrugOut])

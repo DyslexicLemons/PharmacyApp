@@ -1,7 +1,8 @@
 """
-test_health.py — tests for the /health endpoint.
+test_health.py — tests for the /health endpoint and provider status endpoint.
 
-Verifies that the endpoint correctly reflects Postgres and Redis availability.
+Verifies that the endpoint correctly reflects Postgres and Redis availability,
+and that the provider status endpoint reports registered provider names.
 """
 import pytest
 from unittest.mock import patch, MagicMock
@@ -75,3 +76,21 @@ def test_health_redis_down(raw_client):
     assert body["status"] == "degraded"
     assert body["checks"]["postgres"] == "ok"
     assert "error" in body["checks"]["redis"]
+
+
+# ---------------------------------------------------------------------------
+# Provider status endpoint
+# ---------------------------------------------------------------------------
+
+def test_provider_status_returns_registered_providers(raw_client):
+    """GET /api/v1/providers/status reports provider class names after startup."""
+    resp = raw_client.get("/api/v1/providers/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "drug_catalog" in body
+    assert "insurance_gateway" in body
+    # After startup registration the values must be non-null class name strings
+    assert body["drug_catalog"] is not None
+    assert body["insurance_gateway"] is not None
+    assert isinstance(body["drug_catalog"], str)
+    assert isinstance(body["insurance_gateway"], str)

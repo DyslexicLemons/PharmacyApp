@@ -222,6 +222,9 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>?</code> – Toggle this help panel
               </li>
               <li>
+                <code>info</code> – Show active provider info (drug catalog, insurance source)
+              </li>
+              <li>
                 <code>logout</code> – Log out of the session
               </li>
             </ul>

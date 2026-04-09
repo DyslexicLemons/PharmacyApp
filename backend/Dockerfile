@@ -17,6 +17,7 @@ COPY app/ ./app/
 COPY migrations/ ./migrations/
 COPY alembic/ ./alembic/
 COPY alembic.ini .
+COPY seed_data.py .
 
 RUN mkdir -p uploads
 

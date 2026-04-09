@@ -35,6 +35,9 @@ from app.models import (
     Drug, Stock, Prescriber, InsuranceCompany, Formulary,
     PatientInsurance, RxState, Priority, User,
 )
+from app.providers.registry import get_drug_catalog, get_insurance_gateway
+from app.providers.local_drug_catalog import LocalDrugCatalogProvider
+from app.providers.local_insurance import LocalInsuranceGateway
 
 # ---------------------------------------------------------------------------
 # PostgreSQL test engine — creates all tables before each test and drops them
@@ -94,8 +97,27 @@ def client(engine):
         return User(id=None, username="test_user", hashed_password="x",
                     is_active=True, is_admin=True, role="admin")
 
+    # Provider overrides — each call gets a fresh session backed by the test DB.
+    # This mirrors the override_get_db pattern and keeps providers isolated from
+    # the production ProviderRegistry singleton.
+    def override_get_drug_catalog():
+        session = TestSession()
+        try:
+            return LocalDrugCatalogProvider(db=session)
+        finally:
+            session.close()
+
+    def override_get_insurance_gateway():
+        session = TestSession()
+        try:
+            return LocalInsuranceGateway(db=session)
+        finally:
+            session.close()
+
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_drug_catalog] = override_get_drug_catalog
+    app.dependency_overrides[get_insurance_gateway] = override_get_insurance_gateway
     with TestClient(app, base_url="http://testserver/api/v1") as c:
         yield c
     app.dependency_overrides.clear()

@@ -14,11 +14,13 @@ from pydantic import TypeAdapter
 from ..auth import get_current_user, require_pharmacist
 from ..database import get_db
 from ..models import (
-    Drug, Formulary, Patient, Prescription, Prescriber, Priority, Refill,
+    Drug, Formulary, InsuranceCompany, Patient, Prescription, Prescriber, Priority, Refill,
     RefillHist, RxState, PatientInsurance, Stock, SystemConfig, User,
 )
 from .. import cache, schemas
 from ..utils import _int, _mask_patient_id, _parse_priority, _write_audit
+from ..providers.base import InsuranceAdjudicationGateway
+from ..providers.registry import get_insurance_gateway
 import logging
 
 logger = logging.getLogger("pharmacy.rx")
@@ -879,3 +881,115 @@ def create_manual_prescription(
     _invalidate_queue_for_states({initial_state.value})
     db.refresh(refill)
     return {"message": "Prescription created successfully", "RX#": prescription.id, "state": initial_state.value}
+
+
+@router.post("/{rx_id}/adjudicate")
+async def adjudicate_refill(
+    rx_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    gateway: InsuranceAdjudicationGateway = Depends(get_insurance_gateway),
+):
+    """Submit an insurance claim for a refill via the active InsuranceAdjudicationGateway.
+
+    Intended to be called when a refill is at QV2, before the pharmacist advances
+    it to READY.  On success the refill's copay_amount and insurance_paid fields are
+    updated so the QV2 view can display the patient's responsibility.
+
+    This endpoint is provider-agnostic: swap the registered gateway
+    (e.g. ClaimLogic, Change Healthcare) in ProviderRegistry and this endpoint
+    automatically delegates to it without any router changes.
+
+    Returns the claim result regardless of approval so the pharmacist can see
+    rejection codes and take corrective action.
+    """
+    rx = (
+        db.query(Refill)
+        .options(
+            selectinload(Refill.drug),
+            selectinload(Refill.prescription).selectinload(Prescription.prescriber),
+        )
+        .filter(Refill.id == rx_id)
+        .with_for_update(of=Refill)
+        .first()
+    )
+    if not rx:
+        raise HTTPException(status_code=404, detail="Refill not found")
+
+    raw_state = rx.state
+    current_state = raw_state if isinstance(raw_state, RxState) else RxState(str(raw_state))
+    if current_state != RxState.QV2:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Adjudication is only valid in QV2 state (current: {current_state.value})",
+        )
+
+    # Resolve patient insurance
+    patient_ins = (
+        db.query(PatientInsurance)
+        .filter(PatientInsurance.id == rx.insurance_id)
+        .first()
+    ) if rx.insurance_id else (
+        db.query(PatientInsurance)
+        .filter(
+            PatientInsurance.patient_id == rx.patient_id,
+            PatientInsurance.is_primary == True,   # noqa: E712
+            PatientInsurance.is_active == True,    # noqa: E712
+        )
+        .first()
+    )
+
+    if not patient_ins:
+        raise HTTPException(status_code=400, detail="No active insurance on file for this patient")
+
+    company = db.get(InsuranceCompany, patient_ins.insurance_company_id)
+    if not company:
+        raise HTTPException(status_code=400, detail="Insurance company record not found")
+
+    drug = rx.drug
+    ndc = drug.ndc or "" if drug else ""
+    unit_cost = Decimal(str(drug.cost)) if drug and drug.cost else Decimal("0")
+
+    prescriber_npi = ""
+    if rx.prescription and rx.prescription.prescriber:
+        prescriber_npi = rx.prescription.prescriber.npi or ""
+
+    result = await gateway.submit_claim(
+        member_id=patient_ins.member_id or "",
+        group_id=patient_ins.group_number or "",
+        bin_number=company.bin_number or "",
+        pcn=company.pcn or "",
+        ndc=ndc,
+        quantity=_int(rx.quantity),
+        days_supply=_int(rx.days_supply) or 30,
+        prescriber_npi=prescriber_npi,
+        unit_cost=unit_cost,
+    )
+
+    if result.approved:
+        rx.copay_amount = result.amount_due       # type: ignore[assignment]
+        rx.insurance_paid = result.amount_paid    # type: ignore[assignment]
+        _write_audit(
+            db, "CLAIM_ADJUDICATED",
+            entity_type="refill", entity_id=rx_id,
+            prescription_id=rx.prescription_id,
+            details=(
+                f"claim_id={result.claim_id} copay={result.amount_due} "
+                f"insurance_paid={result.amount_paid} provider={type(gateway).__name__}"
+            ),
+            user_id=current_user.id,
+            performed_by=current_user.username,
+        )
+        db.commit()
+        cache.cache_delete(f"refills:id:{rx_id}")
+
+    return {
+        "approved": result.approved,
+        "claim_id": result.claim_id,
+        "amount_due": str(result.amount_due),
+        "amount_paid": str(result.amount_paid),
+        "requires_prior_auth": result.requires_prior_auth,
+        "rejection_code": result.rejection_code,
+        "rejection_reason": result.rejection_reason,
+        "provider": type(gateway).__name__,
+    }

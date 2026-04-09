@@ -295,4 +295,5 @@ export type RouteState =
   | { view: "ADMIN_CONSOLE" }
   | { view: "RTS_LOOKUP"; refillId?: number }
   | { view: "RTS_HIST"; page?: number }
-  | { view: "WORKER_DASHBOARD" };
+  | { view: "WORKER_DASHBOARD" }
+  | { view: "PROVIDER_INFO" };
