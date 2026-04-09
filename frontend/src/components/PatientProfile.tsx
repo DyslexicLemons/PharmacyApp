@@ -53,9 +53,10 @@ interface PatientProfileProps {
   onDataLoaded?: (data: PatientData) => void;
   page?: number;
   onTotalPages?: (n: number) => void;
+  deletePending?: boolean;
 }
 
-export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1, onTotalPages }: PatientProfileProps) {
+export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page = 1, onTotalPages, deletePending }: PatientProfileProps) {
   const { token } = useContext(AuthContext);
   const [data, setData] = useState<PatientData | null>(null);
   const [error, setError] = useState("");
@@ -78,7 +79,14 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
     };
   }, [pid]);
 
-  const prescriptions = data?.prescriptions ?? [];
+  const prescriptions = [...(data?.prescriptions ?? [])].sort((a, b) => {
+    const aDate = a.latest_refill?.completed_date ?? null;
+    const bDate = b.latest_refill?.completed_date ?? null;
+    if (aDate && bDate) return new Date(bDate).getTime() - new Date(aDate).getTime();
+    if (aDate) return -1;
+    if (bDate) return 1;
+    return 0;
+  });
   const total = prescriptions.length;
 
   useEffect(() => {
@@ -306,6 +314,55 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
           {endIdx < total && <span> | [n] next</span>}
         </div>
       )}
+
+      {/* Delete confirmation banner — shown after 'd' is typed */}
+      {deletePending && (
+        <div
+          style={{
+            marginTop: "1.5rem",
+            padding: "0.75rem 1rem",
+            borderRadius: "6px",
+            border: "2px solid var(--danger)",
+            background: "rgba(220, 38, 38, 0.08)",
+            color: "var(--danger)",
+            fontWeight: 600,
+            fontSize: "0.95rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+          }}
+        >
+          <span style={{ fontSize: "1.2rem" }}>⚠</span>
+          <span>
+            PERMANENT DELETE — this will remove the patient and all their history.
+            Type <code style={{ background: "rgba(220,38,38,0.15)", padding: "1px 5px", borderRadius: 3 }}>confirm</code> to proceed,
+            or <code style={{ background: "rgba(220,38,38,0.15)", padding: "1px 5px", borderRadius: 3 }}>q</code> to cancel.
+          </span>
+        </div>
+      )}
+
+      {/* Command hint bar */}
+      <div
+        style={{
+          marginTop: "1.5rem",
+          padding: "0.5rem 0.75rem",
+          borderTop: "1px solid var(--border, #333)",
+          display: "flex",
+          gap: "1.5rem",
+          flexWrap: "wrap",
+          fontSize: "0.82rem",
+          color: "var(--text-light)",
+        }}
+      >
+        <span><code>[e]</code> Edit patient</span>
+        <span style={{ color: deletePending ? "var(--danger)" : undefined, fontWeight: deletePending ? 700 : undefined }}>
+          <code>[d]</code> Delete patient
+        </span>
+        <span><code>[#]</code> View prescription</span>
+        <span><code>[space]</code> New prescription</span>
+        <span><code>[n]</code>/<code>[p]</code> Next/prev page</span>
+        <span><code>[q]</code> Back</span>
+      </div>
     </div>
   );
 }

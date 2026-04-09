@@ -103,7 +103,7 @@ export default function NewPatientForm({ prefillLast, prefillFirst, onCreated, o
             />
           </label>
 
-          <label>
+          <label style={{ gridColumn: "1 / -1" }}>
             <strong>Address <span style={{ color: "var(--danger)" }}>*</span></strong>
             <input
               className="input"
