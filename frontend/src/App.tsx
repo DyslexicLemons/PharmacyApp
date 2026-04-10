@@ -3,6 +3,7 @@ import { AuthContext } from "@/context/AuthContext";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import LoginForm from "@/components/LoginForm";
 import NotificationPanel from "@/components/NotificationPanel";
+import Logo from "@/components/Logo";
 import CommandBar from "@/components/CommandBar";
 
 import { searchPatients, generateTestPrescriptions, getPrescription, deletePatient } from "@/api";
@@ -49,6 +50,92 @@ function ViewFallback() {
 
 const PATIENT_PAGE_SIZE = 15;
 
+interface HintEntry { key: string; label: string; danger?: boolean }
+
+function getViewHints(
+  view: string,
+  deletePendingPid: number | null,
+  totalPages: number,
+  page: number,
+): HintEntry[] {
+  const hasPagination = totalPages > 1 || page > 1;
+  const pageHint: HintEntry = { key: "[n]/[p]", label: "Next/prev page" };
+  const backHint: HintEntry = { key: "[q]", label: "Back" };
+  const hideHint: HintEntry = { key: "[?]", label: "Hide hints" };
+
+  switch (view) {
+    case "PATIENT":
+      return [
+        { key: "[e]", label: "Edit patient" },
+        { key: "[d]", label: "Delete patient", danger: deletePendingPid !== null },
+        { key: "[#]", label: "View prescription" },
+        { key: "[space]", label: "New prescription" },
+        ...(hasPagination ? [pageHint] : []),
+        backHint, hideHint,
+      ];
+    case "QUEUE":
+      return [
+        { key: "[#]", label: "Open refill" },
+        { key: "[qt/qv1/qp/qv2]", label: "Filter by state" },
+        { key: "[ready/hold/rejected]", label: "More state filters" },
+        ...(hasPagination ? [pageHint] : []),
+        backHint, hideHint,
+      ];
+    case "VIEW_PRESCRIPTION":
+      return [
+        { key: "[h]", label: "Hold" },
+        { key: "[i]", label: "Inactivate" },
+        backHint, hideHint,
+      ];
+    case "REFILL_DETAIL":
+      return [
+        { key: "[e]", label: "Edit" },
+        { key: "[a]", label: "Approve" },
+        { key: "[h]", label: "Hold" },
+        backHint, hideHint,
+      ];
+    case "PATIENTS":
+    case "PATIENT_SELECT":
+      return [
+        { key: "[#]", label: "Select patient" },
+        ...(hasPagination ? [pageHint] : []),
+        backHint, hideHint,
+      ];
+    case "SHIPMENT":
+      return [
+        { key: "[f]", label: "Finish shipment" },
+        backHint, hideHint,
+      ];
+    case "STOCK":
+      return [
+        { key: "[rts]", label: "Return to stock" },
+        ...(hasPagination ? [pageHint] : []),
+        backHint, hideHint,
+      ];
+    case "DRUGS":
+    case "REFILL_HIST":
+    case "PRESCRIBERS":
+    case "AUDIT_LOG":
+    case "RTS_HIST":
+    case "SHIPMENT_HIST":
+      return [...(hasPagination ? [pageHint] : []), backHint, hideHint];
+    case "EDIT_REFILL":
+    case "EDIT_PATIENT":
+    case "CREATE_PRESCRIPTION":
+    case "CREATE_PATIENT":
+    case "FILL_SCRIPT":
+    case "REGISTER":
+    case "USER_MANAGEMENT":
+    case "SYSTEM_SETTINGS":
+    case "ADMIN_CONSOLE":
+    case "WORKER_DASHBOARD":
+    case "PROVIDER_INFO":
+      return [{ key: "[q]", label: "Cancel / back" }, hideHint];
+    default:
+      return [backHint, hideHint];
+  }
+}
+
 export default function AppRoot() {
   return (
     <NotificationProvider>
@@ -66,6 +153,7 @@ function App() {
   const [queueSelectRow, setQueueSelectRow] = useState<number | null>(null);
   const [patientSelectRow, setPatientSelectRow] = useState<number | null>(null);
   const [refillKeyCmd, setRefillKeyCmd] = useState<string | null>(null);
+  const [prescriptionKeyCmd, setPrescriptionKeyCmd] = useState<string | null>(null);
   const [shipmentKeyCmd, setShipmentKeyCmd] = useState<string | null>(null);
   const [showHelp, setShowHelp] = useState(true);
   const [deletePendingPid, setDeletePendingPid] = useState<number | null>(null);
@@ -87,7 +175,9 @@ function App() {
 
   useEffect(() => {
     setCurrentTotalPages(Infinity);
-    if (route.view !== "PATIENT") setDeletePendingPid(null);
+    if (route.view !== "PATIENT") {
+      setDeletePendingPid(null);
+    }
   }, [route.view]);
 
   useEffect(() => {
@@ -113,9 +203,25 @@ function App() {
       setRoute(previous);
     } else if (route.view !== "HOME") {
       setRoute({ view: "HOME" });
-      setShowHelp(true);
+    }
+  }
+
+  // After a successful fill, skip VIEW_PRESCRIPTION and return to wherever the
+  // user was before entering the prescription detail (e.g. patient profile or
+  // whatever view was active when they ran an rx<id> command).
+  function onFillSuccess() {
+    const prevRoute = history.length > 0 ? history[history.length - 1] : null;
+    if (prevRoute?.view === "VIEW_PRESCRIPTION") {
+      if (history.length >= 2) {
+        const target = history[history.length - 2];
+        setHistory((prev) => prev.slice(0, -2));
+        setRoute(target);
+      } else {
+        setHistory([]);
+        setRoute({ view: "HOME" });
+      }
     } else {
-      setShowHelp(true);
+      goBack();
     }
   }
 
@@ -263,6 +369,11 @@ function App() {
     }
     if (cmd === "h") {
       if (route.view === "REFILL_DETAIL") setRefillKeyCmd("hold");
+      else if (route.view === "VIEW_PRESCRIPTION") setPrescriptionKeyCmd("hold");
+      return;
+    }
+    if (cmd === "i") {
+      if (route.view === "VIEW_PRESCRIPTION") setPrescriptionKeyCmd("inactivate");
       return;
     }
 
@@ -379,8 +490,7 @@ function App() {
   const showLoginModal = !isAuthenticated;
 
   return (
-    <div className="container vstack">
-      <NotificationPanel quickCode={isAuthenticated ? quickCode : null} onDismissQuickCode={clearQuickCode} />
+    <div className="container vstack" style={{ height: "100vh", gap: 0 }}>
       {/* Non-dismissible login modal — shown after session timeout */}
       {showLoginModal && (
         <div
@@ -401,7 +511,11 @@ function App() {
           <LoginForm isModal />
         </div>
       )}
-      <div style={{ display: "flex", gap: "16px", height: "calc(100vh - 120px)", alignItems: "stretch" }}>
+      {/* Top header */}
+      <div style={{ display: "flex", alignItems: "center", padding: "8px 16px", flexShrink: 0 }}>
+        <Logo size={40} horizontal showTagline={false} />
+      </div>
+      <div style={{ display: "flex", gap: "16px", flex: 1, minHeight: 0, alignItems: "stretch" }}>
       <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", flex: 1, minWidth: 0, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px", minHeight: 0 }}>
           <Suspense fallback={<ViewFallback />}>
@@ -469,6 +583,14 @@ function App() {
               patientName={route.patientName}
               patientId={route.patientId}
               onBack={goBack}
+              onFill={() => navigateTo({
+                view: "FILL_SCRIPT",
+                prescription: route.prescription,
+                patientName: route.patientName,
+                fromPid: route.patientId,
+              })}
+              keyCmd={prescriptionKeyCmd}
+              onKeyCmdHandled={() => setPrescriptionKeyCmd(null)}
             />
           )}
           {route.view === "FILL_SCRIPT" && (
@@ -477,6 +599,7 @@ function App() {
               patientName={route.patientName}
               patientId={route.fromPid}
               onBack={goBack}
+              onSuccess={onFillSuccess}
             />
           )}
           {route.view === "EDIT_REFILL" && (
@@ -573,7 +696,6 @@ function App() {
             <RTSView
               initialRefillId={route.refillId}
               onBack={goBack}
-              onDone={() => navigateToSection({ view: "STOCK" })}
             />
           )}
           {route.view === "RTS_HIST" && <RTSHistView onBack={goBack} page={route.page || 1} onTotalPages={setCurrentTotalPages} />}
@@ -602,18 +724,42 @@ function App() {
           )}
           </Suspense>
         </div>
+        {!showLoginModal && route.view !== "HOME" && showHelp && (() => {
+          const hints = getViewHints(route.view, deletePendingPid, currentTotalPages, ("page" in route ? route.page : undefined) || 1);
+          return (
+            <div
+              style={{
+                padding: "0.5rem 0.75rem",
+                borderTop: "1px solid var(--border, #333)",
+                display: "flex",
+                gap: "1.5rem",
+                flexWrap: "wrap",
+                fontSize: "0.82rem",
+                color: "var(--text-light)",
+              }}
+            >
+              {hints.map((h) => (
+                <span
+                  key={h.key}
+                  style={h.danger ? { color: "var(--danger)", fontWeight: 700 } : undefined}
+                >
+                  <code>{h.key}</code> {h.label}
+                </span>
+              ))}
+            </div>
+          );
+        })()}
         {!showLoginModal && <CommandBar ref={cmdBarRef} onSubmit={handleCommand} />}
       </div>
-      {isAuthenticated && <QueueSidebar />}
+      {/* Right sidebar: queue dashboard + notifications */}
+      {isAuthenticated && (
+        <div style={{ width: "300px", flexShrink: 0, display: "flex", flexDirection: "column", gap: "12px", overflowY: "auto" }}>
+          <QueueSidebar />
+          <NotificationPanel inline quickCode={quickCode} onDismissQuickCode={clearQuickCode} />
+        </div>
+      )}
       </div>
-      <footer>
-        <strong>JoeMed</strong> Pharmacy Management System | API: {(import.meta as unknown as { env: Record<string, string> }).env.VITE_API_BASE || "http://localhost:8000"}
-        {isAuthenticated && authUser && (
-          <span style={{ marginLeft: "1.5rem", color: "var(--text-light)" }}>
-            Logged in as: <strong>{authUser.username}</strong>{authUser.isAdmin ? " (Admin)" : ""}
-          </span>
-        )}
-      </footer>
+
     </div>
   );
 }

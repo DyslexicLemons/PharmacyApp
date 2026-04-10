@@ -89,7 +89,7 @@ class Refill(Base):
     prescription_id = Column(Integer, ForeignKey("prescriptions.id"), index=True)
     patient_id = Column(Integer, ForeignKey("patients.id"), index=True)
     drug_id = Column(Integer, ForeignKey("drugs.id"))
-    due_date = Column(Date)
+    due_date = Column(DateTime(timezone=True), nullable=True)
     quantity = Column(Integer)
     days_supply = Column(Integer)
     total_cost = Column(Numeric(10, 2), nullable=False)

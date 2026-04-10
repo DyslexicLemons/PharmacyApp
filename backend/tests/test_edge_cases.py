@@ -558,7 +558,7 @@ class TestAutoScheduleNextFill:
             RefillModel.state == RxState.SCHEDULED
         ).first()
         expected_due = date.today() + timedelta(days=30)
-        assert scheduled.due_date == expected_due
+        assert scheduled.due_date.astimezone(timezone.utc).date() == expected_due
 
 
 # ===========================================================================
@@ -866,9 +866,10 @@ class TestScheduledPromotion:
 
 class TestNewFillTriage:
     """
-    Verify that triage checks (stock, insurance coverage) are applied whenever
-    a fill is routed to QP — both at manual creation time and when a SCHEDULED
-    refill is manually advanced to QP.
+    Verify triage checks (stock, insurance coverage) on new manual prescriptions
+    and when a SCHEDULED refill is manually advanced to QP.
+
+    New prescriptions enter QV1 if triage passes, or QT if an issue is found.
     """
 
     def _manual_payload(self, patient_id, drug_id, prescriber_id, **kwargs):
@@ -880,13 +881,13 @@ class TestNewFillTriage:
             "days_supply": 30,
             "total_refills": 3,
             "instructions": "Take 1 tablet daily",
-            "initial_state": "QP",
+            "initial_state": "QV1",
         }
         payload.update(kwargs)
         return payload
 
-    def test_create_manual_qp_sufficient_stock_no_insurance_stays_qp(self, client, db_session):
-        """No insurance + sufficient stock → QP (no triage issue)."""
+    def test_create_manual_sufficient_stock_no_insurance_goes_to_qv1(self, client, db_session):
+        """No insurance + sufficient stock → QV1 (triage passes)."""
         db = db_session
         prescriber = make_prescriber(db)
         drug = make_drug(db)  # stock=5000
@@ -898,10 +899,10 @@ class TestNewFillTriage:
             json=self._manual_payload(patient.id, drug.id, prescriber.id),
         )
         assert resp.status_code == 200
-        assert resp.json()["state"] == "QP"
+        assert resp.json()["state"] == "QV1"
 
-    def test_create_manual_qp_insufficient_stock_redirects_to_qt(self, client, db_session):
-        """Insufficient stock → QP request is overridden to QT."""
+    def test_create_manual_insufficient_stock_redirects_to_qt(self, client, db_session):
+        """Insufficient stock → QV1 request is overridden to QT."""
         from app.models import Stock as StockModel
         db = db_session
         prescriber = make_prescriber(db)
@@ -919,7 +920,7 @@ class TestNewFillTriage:
         assert resp.status_code == 200
         assert resp.json()["state"] == "QT"
 
-    def test_create_manual_qp_insurance_not_covered_redirects_to_qt(self, client, db_session):
+    def test_create_manual_insurance_not_covered_redirects_to_qt(self, client, db_session):
         """Patient has insurance but drug is not on formulary → QT."""
         db = db_session
         prescriber = make_prescriber(db)
@@ -937,8 +938,8 @@ class TestNewFillTriage:
         assert resp.status_code == 200
         assert resp.json()["state"] == "QT"
 
-    def test_create_manual_qp_insurance_covers_drug_stays_qp(self, client, db_session):
-        """Patient has active insurance that covers the drug → QP."""
+    def test_create_manual_insurance_covers_drug_goes_to_qv1(self, client, db_session):
+        """Patient has active insurance that covers the drug → QV1."""
         db = db_session
         prescriber = make_prescriber(db)
         drug = make_drug(db, cost=Decimal("1.00"))
@@ -953,7 +954,7 @@ class TestNewFillTriage:
             json=self._manual_payload(patient.id, drug.id, prescriber.id),
         )
         assert resp.status_code == 200
-        assert resp.json()["state"] == "QP"
+        assert resp.json()["state"] == "QV1"
 
     def test_create_manual_scheduled_skips_triage(self, client, db_session):
         """SCHEDULED fills bypass triage — stock/insurance issues are checked at promotion time."""

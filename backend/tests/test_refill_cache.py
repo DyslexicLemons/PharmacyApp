@@ -104,7 +104,7 @@ class TestQueueCache:
             "days_supply": 30,
             "total_refills": 1,
             "priority": "normal",
-            "initial_state": "QP",
+            "initial_state": "QV1",
             "instructions": "Take 1 tablet daily",
         })
 

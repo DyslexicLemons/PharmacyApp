@@ -101,14 +101,18 @@ function QuickCodeCard({ quickCode, onDismiss }: { quickCode: QuickCode; onDismi
   );
 }
 
-export default function NotificationPanel({ quickCode, onDismissQuickCode }: { quickCode?: QuickCode | null; onDismissQuickCode?: () => void }) {
+export default function NotificationPanel({ quickCode, onDismissQuickCode, inline }: { quickCode?: QuickCode | null; onDismissQuickCode?: () => void; inline?: boolean }) {
   const { notifications, removeNotification } = useNotification();
 
   if (notifications.length === 0 && !quickCode) return null;
 
   return (
     <div
-      style={{
+      style={inline ? {
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+      } : {
         position: "fixed",
         left: "16px",
         top: "50%",

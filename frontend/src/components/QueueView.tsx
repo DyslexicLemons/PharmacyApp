@@ -88,10 +88,7 @@ export default function QueueView({ stateFilter, onBack, onSelectRow, page = 1, 
 
   return (
     <div className="vstack">
-      <h2>{stateFilter === "ALL" ? "All Refills" : `Queue: ${stateFilter}`}</h2>
-      <p style={{ color: "var(--text-light)", fontSize: "0.9rem" }}>
-        Click on a row to view details and take action
-      </p>
+      <h2>{stateFilter === "ALL" ? "All Refills" : `${stateFilter}`}</h2>
       {loading ? (
         <p>Loading…</p>
       ) : (

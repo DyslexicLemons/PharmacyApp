@@ -434,7 +434,7 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
                           display: "block", width: "100%", textAlign: "left",
                           padding: "0.5rem 0.75rem", background: "none", border: "none",
                           borderBottom: "1px solid var(--border, #dee2e6)", cursor: "pointer",
-                          color: "inherit",
+                          color: "#ffffff",
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-light)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "none")}
@@ -445,7 +445,7 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
                         }}
                       >
                         <span style={{ fontWeight: 500 }}>{d.drug_name}</span>
-                        <span style={{ fontSize: "0.85rem", color: "var(--text-light)", marginLeft: "0.5rem" }}>
+                        <span style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.65)", marginLeft: "0.5rem" }}>
                           ({d.manufacturer}) — ${Number(d.cost).toFixed(2)}
                         </span>
                         {d.niosh && <span style={{ color: "var(--danger)", fontSize: "0.8rem", marginLeft: "0.5rem" }}>⚠️ NIOSH</span>}
@@ -938,7 +938,7 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
               <>
                 <button
                   className="btn btn-success"
-                  onClick={() => handleSubmit("QP")}
+                  onClick={() => handleSubmit("QV1")}
                   disabled={!form.prescriber_id || !form.quantity || !form.days_supply || !form.instructions.trim()}
                 >
                   Create Prescription

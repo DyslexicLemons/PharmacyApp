@@ -67,7 +67,12 @@
       "Bash(.venv/Scripts/python -m pytest tests/ -v --tb=short -q)",
       "Bash(npm run:*)",
       "Bash(.venv/Scripts/python -m pytest tests/test_billing.py::TestPatientInsuranceManagement -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/test_patients.py::TestPatientDelete::test_delete_allowed_when_only_rejected_refills -v -s)"
+      "Bash(.venv/Scripts/python -m pytest tests/test_patients.py::TestPatientDelete::test_delete_allowed_when_only_rejected_refills -v -s)",
+      "Bash(.venv/Scripts/python -m alembic revision --autogenerate -m \"refill_due_date_datetime\")",
+      "Bash(.venv/Scripts/python -m alembic upgrade head)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_edge_cases.py::TestAutoScheduleNextFill -v --tb=short)",
+      "Bash(.venv/Scripts/python -m pytest tests/ -q)",
+      "Bash(CI=true npm test)"
     ]
   }
 }
