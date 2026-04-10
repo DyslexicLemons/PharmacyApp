@@ -5,17 +5,30 @@ Uses a dedicated PostgreSQL test database (pharmacy_test_db) so tests run
 against the same engine as production.
 Each test gets a fresh schema via function-scoped fixtures (create_all/drop_all).
 
+Parallel execution: when pytest-xdist is active each worker gets its own
+PostgreSQL schema (test_worker0, test_worker1, …) so tests never race on the
+same rows.  Single-process runs use the "public" schema as before.
+
 IMPORTANT: DATABASE_URL must be overridden BEFORE any app module is imported,
 because app/database.py calls create_engine() at module level.
 """
 import os
+
+# Resolve the worker-specific schema when running under pytest-xdist.
+# PYTEST_XDIST_WORKER is set automatically by xdist (gw0, gw1, …).
+_WORKER_ID = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
+_SCHEMA = f"test_{_WORKER_ID}"  # e.g. "test_gw0", "test_gw1"
+
 # Override the DB URL before ANY app import.
 # CI sets TEST_DATABASE_URL to point at the GH Actions Postgres service container.
 # Local dev falls back to the default below.
-_TEST_DB = os.environ.get(
+_TEST_DB_BASE = os.environ.get(
     "TEST_DATABASE_URL",
     "postgresql://postgres:6789@localhost/pharmacy_test_db",
 )
+# Append schema search_path so SQLAlchemy uses the worker-specific schema.
+_SEP = "&" if "?" in _TEST_DB_BASE else "?"
+_TEST_DB = f"{_TEST_DB_BASE}{_SEP}options=-csearch_path%3D{_SCHEMA}"
 os.environ["DATABASE_URL"] = _TEST_DB
 
 import pytest
@@ -23,7 +36,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 # ── App imports (must come AFTER os.environ override above) ──────────────────
@@ -40,18 +53,34 @@ from app.providers.local_drug_catalog import LocalDrugCatalogProvider
 from app.providers.local_insurance import LocalInsuranceGateway
 
 # ---------------------------------------------------------------------------
-# PostgreSQL test engine — creates all tables before each test and drops them
-# after, giving every test a clean slate.
+# PostgreSQL test engine — each xdist worker owns its own schema so parallel
+# runs never conflict.  Tables are created once per session and dropped after.
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="session")
 def engine():
-    """Session-scoped engine — tables are created once and dropped after all tests finish."""
-    eng = create_engine(_TEST_DB)
-    Base.metadata.create_all(bind=eng)
-    yield eng
-    Base.metadata.drop_all(bind=eng)
+    """Session-scoped engine — creates a dedicated schema for this worker."""
+    # Use the base URL (no search_path) for schema DDL so we can target the
+    # right schema explicitly before handing control to SQLAlchemy.
+    eng = create_engine(_TEST_DB_BASE)
+    with eng.begin() as conn:
+        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{_SCHEMA}"'))
+        conn.execute(text(f'SET search_path TO "{_SCHEMA}"'))
     eng.dispose()
+
+    # Worker engine — all queries land in _SCHEMA via the search_path option.
+    worker_eng = create_engine(_TEST_DB)
+    Base.metadata.create_all(bind=worker_eng)
+    yield worker_eng
+
+    Base.metadata.drop_all(bind=worker_eng)
+    worker_eng.dispose()
+
+    # Clean up the schema after the session.
+    cleanup_eng = create_engine(_TEST_DB_BASE)
+    with cleanup_eng.begin() as conn:
+        conn.execute(text(f'DROP SCHEMA IF EXISTS "{_SCHEMA}" CASCADE'))
+    cleanup_eng.dispose()
 
 
 @pytest.fixture(autouse=True)
