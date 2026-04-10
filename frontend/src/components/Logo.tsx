@@ -1,9 +1,42 @@
 interface LogoProps {
   size?: number;
   showTagline?: boolean;
+  horizontal?: boolean;
 }
 
-export default function Logo({ size = 80, showTagline = true }: LogoProps) {
+export default function Logo({ size = 80, showTagline = true, horizontal = false }: LogoProps) {
+  if (horizontal) {
+    const iconSize = size;
+    return (
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <svg
+          width={iconSize}
+          height={iconSize}
+          viewBox="0 0 200 200"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-label="joeMed logo"
+        >
+          <ellipse cx="100" cy="100" rx="88" ry="36" stroke="#1d5fa6" strokeWidth="5" fill="none" />
+          <ellipse cx="100" cy="100" rx="88" ry="36" stroke="#3a9e52" strokeWidth="5" fill="none" transform="rotate(60 100 100)" />
+          <ellipse cx="100" cy="100" rx="88" ry="36" stroke="#3a9e52" strokeWidth="5" fill="none" transform="rotate(120 100 100)" />
+          <circle cx="188" cy="100" r="7" fill="#1a2e5e" />
+          <circle cx="12"  cy="100" r="7" fill="#1a2e5e" />
+          <circle cx="56"  cy="31"  r="7" fill="#1a2e5e" />
+          <circle cx="144" cy="169" r="7" fill="#1a2e5e" />
+          <path d="M100 74 C88 74 78 84 78 100 C78 116 88 126 100 126 L100 74 Z" fill="#1d5fa6" />
+          <path d="M100 74 C112 74 122 84 122 100 C122 116 112 126 100 126 L100 74 Z" fill="#3a9e52" />
+          <line x1="100" y1="74" x2="100" y2="126" stroke="white" strokeWidth="2.5" />
+          <rect x="78" y="74" width="44" height="52" rx="22" fill="none" stroke="white" strokeWidth="1.5" />
+        </svg>
+        <div style={{ lineHeight: 1 }}>
+          <span style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, Arial, sans-serif", fontWeight: 700, fontSize: iconSize * 0.38, color: "#1a2e5e", letterSpacing: "-0.01em" }}>joe</span>
+          <span style={{ fontFamily: "'Inter', 'Segoe UI', system-ui, Arial, sans-serif", fontWeight: 700, fontSize: iconSize * 0.38, color: "#3a9e52", letterSpacing: "-0.01em" }}>Med</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
       <svg

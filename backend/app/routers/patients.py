@@ -351,6 +351,7 @@ def _get_latest_refill_for_prescription(db: Session, prescription_id: int):
     if active_refill:
         state_val = active_refill.state.value if hasattr(active_refill.state, "value") else str(active_refill.state)
         return schemas.LatestRefillOut(
+            id=active_refill.id,
             quantity=_int(active_refill.quantity),
             days_supply=_int(active_refill.days_supply),
             total_cost=Decimal(str(active_refill.total_cost or "0.00")),
@@ -358,6 +359,11 @@ def _get_latest_refill_for_prescription(db: Session, prescription_id: int):
             completed_date=active_refill.completed_date,  # type: ignore[arg-type]
             state=state_val,
             next_pickup=None,
+            due_date=active_refill.due_date,  # type: ignore[arg-type]
+            priority=active_refill.priority,
+            insurance=active_refill.insurance,  # type: ignore[arg-type]
+            copay_amount=Decimal(str(active_refill.copay_amount)) if active_refill.copay_amount is not None else None,
+            insurance_paid=Decimal(str(active_refill.insurance_paid)) if active_refill.insurance_paid is not None else None,
         )
 
     assert latest_hist is not None

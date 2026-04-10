@@ -57,10 +57,11 @@ interface RefillHistoryItem {
   insurance_paid?: number | null;
   copay_amount?: number | null;
   insurance?: { insurance_company?: { plan_name?: string } } | null;
+  state?: string | null;
 }
 
 interface LatestRefill {
-  id: number;
+  id?: number | null;
   state: string;
   priority?: string | null;
   quantity: number;
@@ -72,6 +73,7 @@ interface LatestRefill {
   total_cost?: number | null;
   copay_amount?: number | null;
   insurance_paid?: number | null;
+  insurance?: { insurance_company?: { plan_name?: string } } | null;
 }
 
 interface PrescriptionDetail {
@@ -369,10 +371,13 @@ interface PrescriptionDetailViewProps {
   patientName: string;
   patientId?: number;
   onBack?: () => void;
+  onFill?: () => void;
   onPrescriptionUpdated?: (updated: unknown) => void;
+  keyCmd?: string | null;
+  onKeyCmdHandled?: () => void;
 }
 
-export default function PrescriptionDetailView({ prescription: rawPrescription, patientName, patientId, onBack, onPrescriptionUpdated }: PrescriptionDetailViewProps) {
+export default function PrescriptionDetailView({ prescription: rawPrescription, patientName, patientId, onBack, onFill, onPrescriptionUpdated, keyCmd, onKeyCmdHandled }: PrescriptionDetailViewProps) {
   const prescription = rawPrescription as PrescriptionDetail;
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
@@ -407,17 +412,16 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
   }, [pid, token]);
 
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (isInactive || isExpired) return;
-      if (e.key === "i" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        const tag = (document.activeElement as HTMLElement)?.tagName;
-        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-        setShowInactivate(true);
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [isInactive]);
+    if (!keyCmd) return;
+    const holdableStates = new Set(["QT", "QV1", "QP", "QV2", "SCHEDULED"]);
+    const lr = prescription.latest_refill;
+    if (keyCmd === "hold" && !isInactive && !isExpired && lr && holdableStates.has(lr.state)) {
+      setShowHold(true);
+    } else if (keyCmd === "inactivate" && !isInactive && !isExpired) {
+      setShowInactivate(true);
+    }
+    onKeyCmdHandled?.();
+  }, [keyCmd]);
 
   const handleInactivated = (updated: unknown) => {
     setIsInactive(true);
@@ -443,12 +447,17 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
   };
 
   const HOLDABLE_STATES = new Set(["QT", "QV1", "QP", "QV2", "SCHEDULED"]);
+  const BLOCKING_FILL_STATES = new Set(["QT", "QV1", "QP", "QV2", "READY"]);
 
   const lr = prescription.latest_refill;
+  const canFill = !isInactive && !isExpired && onFill && (!lr || !BLOCKING_FILL_STATES.has(lr.state));
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
 
-  const sortedHistory = [...(prescription.refill_history ?? [])].sort((a, b) => a.id - b.id);
-  const fillCountMap = Object.fromEntries(sortedHistory.map((h, i) => [h.id, i + 1]));
+  // Build fill count across all refills (history + active)
+  const allRefillIds: number[] = [...(prescription.refill_history ?? []).map((h) => h.id)];
+  if (lr?.id != null && !allRefillIds.includes(lr.id)) allRefillIds.push(lr.id);
+  allRefillIds.sort((a, b) => a - b);
+  const fillCountMap = Object.fromEntries(allRefillIds.map((id, i) => [id, i + 1]));
   const activeInsurance = patientInsurance.filter((i) => i.is_active);
 
   const handleInsuranceAdded = (newIns: PatientInsuranceItem) => {
@@ -689,137 +698,97 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
         </div>
       </div>
 
-      {/* Latest Refill */}
-      <div className="card vstack" style={{ gap: "0.5rem" }}>
-        <h3 style={{ margin: 0 }}>Latest Refill</h3>
-        {lr ? (
-          <>
-            <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-              <div><strong>Fill #:</strong> {fillCountMap[lr.id] ?? "—"}</div>
-              <div><strong>State:</strong> <Badge state={lr.state} /></div>
-              <div><strong>Priority:</strong> {lr.priority ?? "—"}</div>
-            </div>
-            <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-              <div><strong>Quantity:</strong> {lr.quantity}</div>
-              <div><strong>Days Supply:</strong> {lr.days_supply}</div>
-              {lr.due_date && (
-                <div>
-                  <strong>Due Date:</strong> {new Date(lr.due_date).toLocaleDateString()}
-                  {lr.state === "SCHEDULED" && new Date(lr.due_date + "T00:00:00") < new Date(new Date().toDateString()) && (
-                    <span style={{
-                      marginLeft: "0.5rem",
-                      padding: "1px 6px",
-                      background: "#ef476f22",
-                      border: "1px solid #ef476f",
-                      borderRadius: 4,
-                      fontSize: "0.75rem",
-                      color: "#ef476f",
-                      fontWeight: 600,
-                    }}>
-                      overdue — pending promotion
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-              {lr.completed_date && (
-                <div><strong>Filled Date:</strong> {new Date(lr.completed_date).toLocaleDateString()}</div>
-              )}
-              {lr.sold_date && (
-                <div><strong>Sold Date:</strong> {new Date(lr.sold_date).toLocaleDateString()}</div>
-              )}
-              {lr.next_pickup && (
-                <div><strong>Next Pickup:</strong> {new Date(lr.next_pickup).toLocaleDateString()}</div>
-              )}
-            </div>
-
-            {/* Billing summary */}
-            <div style={{
-              background: "var(--surface,#f8f9fa)",
-              border: "1px solid var(--border,#dee2e6)",
-              borderRadius: "6px",
-              padding: "0.6rem 1rem",
-              marginTop: "0.25rem",
-            }}>
-              <div style={{ fontWeight: 600, fontSize: "0.85rem", marginBottom: "0.35rem", color: "var(--text-light)" }}>
-                BILLING
-              </div>
-              <div className="hstack" style={{ gap: "2rem", flexWrap: "wrap" }}>
-                {lr.total_cost != null && (
-                  <div>
-                    <span style={{ fontSize: "0.8rem", color: "var(--text-light)" }}>Cash Price</span>
-                    <div style={{ fontWeight: 600, fontSize: "1rem", textDecoration: lr.copay_amount != null ? "line-through" : "none", color: lr.copay_amount != null ? "var(--text-light)" : "inherit" }}>
-                      ${Number(lr.total_cost).toFixed(2)}
-                    </div>
-                  </div>
-                )}
-                {lr.copay_amount != null ? (
-                  <>
-                    <div>
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-light)" }}>Insurance Pays</span>
-                      <div style={{ fontWeight: 600, fontSize: "1rem", color: "var(--success, #27ae60)" }}>
-                        ${Number(lr.insurance_paid).toFixed(2)}
-                      </div>
-                    </div>
-                    <div>
-                      <span style={{ fontSize: "0.8rem", color: "var(--text-light)" }}>Patient Copay</span>
-                      <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--primary)" }}>
-                        ${Number(lr.copay_amount).toFixed(2)}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ color: "var(--text-light)", fontSize: "0.85rem", alignSelf: "center" }}>
-                    Billed as cash — no insurance applied
-                  </div>
-                )}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div style={{ color: "var(--text-light)" }}>No refills on file.</div>
-        )}
-      </div>
-
       {/* Refill History */}
-      <div className="card vstack" style={{ gap: "0.5rem" }}>
-        <h3 style={{ margin: 0 }}>Refill History</h3>
-        {prescription.refill_history && prescription.refill_history.length > 0 ? (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Refill #</th>
-                <th>Qty</th>
-                <th>Days Supply</th>
-                <th>Filled</th>
-                <th>Sold</th>
-                <th>Cash Price</th>
-                <th>Insurance Billed</th>
-                <th>Ins. Paid</th>
-                <th>Copay</th>
-              </tr>
-            </thead>
-            <tbody>
-              {prescription.refill_history.map((h) => (
-                <tr key={h.id}>
-                  <td><strong style={{ color: "var(--primary)" }}>{fillCountMap[h.id]}</strong></td>
-                  <td>{h.quantity}</td>
-                  <td>{h.days_supply}</td>
-                  <td>{h.completed_date ? new Date(h.completed_date).toLocaleDateString() : "—"}</td>
-                  <td>{h.sold_date ? new Date(h.sold_date).toLocaleDateString() : "—"}</td>
-                  <td>${Number(h.total_cost).toFixed(2)}</td>
-                  <td>{h.insurance?.insurance_company?.plan_name ?? "—"}</td>
-                  <td>{h.insurance_paid != null ? "$" + Number(h.insurance_paid).toFixed(2) : "—"}</td>
-                  <td>{h.copay_amount != null ? "$" + Number(h.copay_amount).toFixed(2) : "Cash"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div style={{ color: "var(--text-light)" }}>No refill history on file.</div>
-        )}
-      </div>
+      {(() => {
+        // If latest_refill is an active (in-progress) refill, prepend it as a synthetic row
+        const activeRow: RefillHistoryItem | null =
+          lr && lr.state && lr.state !== "SOLD" && lr.id != null
+            ? {
+                id: lr.id,
+                quantity: lr.quantity,
+                days_supply: lr.days_supply,
+                completed_date: lr.completed_date,
+                sold_date: lr.sold_date,
+                total_cost: lr.total_cost ?? 0,
+                copay_amount: lr.copay_amount,
+                insurance_paid: lr.insurance_paid,
+                insurance: lr.insurance,
+                state: lr.state,
+              }
+            : null;
+
+        const historyRows = prescription.refill_history ?? [];
+        const activeAlreadyInHistory = activeRow != null && historyRows.some((h) => h.id === activeRow.id);
+        const allRows: RefillHistoryItem[] = [
+          ...(activeRow && !activeAlreadyInHistory ? [activeRow] : []),
+          ...historyRows,
+        ];
+
+        const hasFills = allRows.length > 0 || lr != null;
+
+        return (
+          <div className="card vstack" style={{ gap: "0.5rem" }}>
+            <h3 style={{ margin: 0 }}>Refill History</h3>
+            {hasFills ? (
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Fill #</th>
+                    <th>Qty</th>
+                    <th>Days Supply</th>
+                    <th>Cash Price</th>
+                    <th>Cost</th>
+                    <th>Insurance</th>
+                    <th>Filled</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allRows.map((h) => {
+                    const isActive = h.state != null && h.state !== "SOLD";
+                    const planName = h.insurance?.insurance_company?.plan_name ?? null;
+                    const patientCost = h.copay_amount != null ? Number(h.copay_amount) : Number(h.total_cost);
+
+                    return (
+                      <tr key={h.id} style={["QT","QV1","QP","QV2","READY"].includes(h.state ?? "") ? { background: "var(--primary-light, #e8f0fe)", borderLeft: "3px solid var(--primary)" } : undefined}>
+                        <td><strong style={{ color: "var(--primary)" }}>{fillCountMap[h.id] ?? "—"}</strong></td>
+                        <td>{h.quantity}</td>
+                        <td>{h.days_supply}</td>
+                        <td>${Number(h.total_cost).toFixed(2)}</td>
+                        <td style={{ fontWeight: 600 }}>${patientCost.toFixed(2)}</td>
+                        <td>{planName ?? "Cash"}</td>
+                        <td>
+                          {h.completed_date ? new Date(h.completed_date).toLocaleDateString() : "—"}
+                          {isActive && h.state === "SCHEDULED" && lr?.due_date && (
+                            <span style={{ marginLeft: "0.4rem", fontSize: "0.75rem", color: "var(--text-light)" }}>
+                              (due {new Date(lr.due_date).toLocaleString(undefined, {
+                                month: "short", day: "numeric", year: "numeric",
+                                hour: "numeric", minute: "2-digit",
+                              })}
+                              {new Date(lr.due_date) < new Date() && (
+                                <span style={{ color: "#ef476f", fontWeight: 600 }}> — overdue</span>
+                              )})
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {h.sold_date
+                            ? `Sold on ${new Date(h.sold_date).toLocaleDateString()}`
+                            : isActive && h.state
+                              ? <Badge state={h.state} />
+                              : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <div style={{ color: "var(--text-light)" }}>No refills on file.</div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Insurance on File */}
       <div className="card vstack" style={{ gap: "0.75rem" }}>
@@ -895,6 +864,15 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
         <button className="btn" onClick={onBack} style={{ minWidth: "120px" }}>
           ← Back
         </button>
+        {canFill && (
+          <button
+            className="btn btn-primary"
+            style={{ minWidth: "140px" }}
+            onClick={onFill}
+          >
+            Fill Rx
+          </button>
+        )}
         {!isInactive && !isExpired && lr && HOLDABLE_STATES.has(lr.state) && (
           <button
             className="btn"

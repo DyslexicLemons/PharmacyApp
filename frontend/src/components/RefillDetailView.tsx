@@ -420,7 +420,7 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
           display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
         }}>
           <div className="card vstack" style={{ maxWidth: "440px", width: "92%", gap: "1rem", padding: "1.5rem", border: "2px solid var(--danger)" }}>
-            <h3 style={{ margin: 0, color: "var(--danger)" }}>↩ Return to Triage</h3>
+            <h3 style={{ margin: 0, color: "var(--danger)" }}>✕ Reject</h3>
             <p style={{ margin: 0, fontSize: "0.95rem" }}>
               This prescription will be returned to the <strong>QT queue</strong> for the technician to review. A rejection reason is required.
             </p>
@@ -450,7 +450,7 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
                 onClick={handleConfirmReject}
                 disabled={!rejectReason.trim()}
               >
-                Return to Triage
+                Reject
               </button>
             </div>
           </div>
@@ -607,7 +607,7 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
             onClick={handleReject}
             style={{ minWidth: "160px" }}
           >
-            ↩ Return to Triage
+            ✕ Reject
           </button>
         )}
       </div>

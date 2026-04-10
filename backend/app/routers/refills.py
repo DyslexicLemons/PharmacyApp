@@ -1,7 +1,7 @@
 """Refill workflow endpoints — advance, edit, upload, conflict check."""
 
 import random
-from datetime import date as date_type, timedelta
+from datetime import date as date_type, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -479,7 +479,8 @@ def _archive_to_sold(
     logger.info(f"[RX HIST] Refill #{rx.id}: archived to RefillHist (qty={rx_quantity}, drug_id={rx.drug_id})")
 
     if schedule_next_fill:
-        next_due = date_type.today() + timedelta(days=rx_days_supply)
+        next_due_date = date_type.today() + timedelta(days=rx_days_supply)
+        next_due = datetime(next_due_date.year, next_due_date.month, next_due_date.day, tzinfo=timezone.utc)
         scheduled = Refill(
             prescription_id=rx.prescription_id,
             patient_id=rx.patient_id,
@@ -759,7 +760,7 @@ def upload_json_prescription(
         prescription_id=prescription.id,
         patient_id=patient.id,
         drug_id=drug.id,
-        due_date=data.date,
+        due_date=datetime(data.date.year, data.date.month, data.date.day, tzinfo=timezone.utc),
         quantity=data.refill_quantity,
         days_supply=30,
         total_cost=Decimal(str(drug.cost)) * data.refill_quantity,
@@ -794,7 +795,7 @@ def create_manual_prescription(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create manual prescription — goes to QP, HOLD, or SCHEDULED based on input."""
+    """Create manual prescription — goes to QV1, HOLD, or SCHEDULED based on input."""
     patient = db.get(Patient, data.patient_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
@@ -826,12 +827,14 @@ def create_manual_prescription(
     db.add(prescription)
     db.flush()
 
-    state_map = {"QP": RxState.QP, "SCHEDULED": RxState.SCHEDULED, "HOLD": RxState.HOLD}
+    state_map = {"QV1": RxState.QV1, "SCHEDULED": RxState.SCHEDULED, "HOLD": RxState.HOLD}
     initial_state = state_map[data.initial_state]
+    triage_reason: Optional[str] = None
 
-    # For fills starting at QP, run stock and insurance triage before accepting
-    # that state. Any issue (low stock, uncovered drug) redirects to QT.
-    if initial_state == RxState.QP:
+    # For fills entering QV1, run stock and insurance triage first.
+    # Any issue (low stock, uncovered drug) redirects to QT so the
+    # problem is resolved before a pharmacist touches the prescription.
+    if initial_state == RxState.QV1:
         triage_state, triage_reason = _triage_for_new_fill(
             db,
             drug_id=data.drug_id,
@@ -843,14 +846,14 @@ def create_manual_prescription(
             initial_state = RxState.QT
             logger.info(
                 f"[RX TRIAGE] New manual fill for patient {data.patient_id}: "
-                f"QP overridden to QT — {triage_reason}"
+                f"QV1 overridden to QT — {triage_reason}"
             )
 
     refill = Refill(
         prescription_id=prescription.id,
         patient_id=patient.id,
         drug_id=drug.id,
-        due_date=(data.due_date.date() if hasattr(data.due_date, "date") else data.due_date) or date_type.today(),
+        due_date=data.due_date if data.due_date is not None else datetime.now(timezone.utc),
         quantity=data.quantity,
         days_supply=data.days_supply,
         total_cost=Decimal(str(drug.cost)) * data.quantity,

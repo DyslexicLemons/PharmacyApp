@@ -5,7 +5,7 @@ No database or HTTP client required — these test Python logic in isolation.
 """
 import pytest
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import ValidationError
 
@@ -220,7 +220,7 @@ class TestFillScriptRequest:
 
     def test_due_date_set(self):
         req = self._valid(due_date=date(2026, 6, 1))
-        assert req.due_date == date(2026, 6, 1)
+        assert req.due_date == datetime(2026, 6, 1, 0, 0)
 
     def test_large_quantity_accepted_by_schema(self):
         # Schema allows it; business logic in the endpoint blocks overfill
@@ -284,13 +284,13 @@ class TestManualPrescriptionCreate:
             "total_refills": 3,
             "instructions": "Take daily",
             "priority": "normal",
-            "initial_state": "QP",
+            "initial_state": "QV1",
         }
         base.update(overrides)
         return ManualPrescriptionCreate(**base)
 
-    def test_valid_qp_state(self):
-        assert self._valid(initial_state="QP").initial_state == "QP"
+    def test_valid_qv1_state(self):
+        assert self._valid(initial_state="QV1").initial_state == "QV1"
 
     def test_valid_hold_state(self):
         assert self._valid(initial_state="HOLD").initial_state == "HOLD"

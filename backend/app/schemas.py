@@ -387,6 +387,7 @@ class BillingCalculateResponse(BaseModel):
 # ---- Refills / Prescriptions ----
 
 class LatestRefillOut(BaseModel):
+    id: Optional[int] = None
     quantity: int
     days_supply: int
     sold_date: Optional[date] = None
@@ -396,6 +397,9 @@ class LatestRefillOut(BaseModel):
     state: Optional[str] = None
     copay_amount: Optional[Decimal] = None
     insurance_paid: Optional[Decimal] = None
+    due_date: Optional[datetime] = None
+    priority: Optional[str] = None
+    insurance: Optional["PatientInsuranceOut"] = None
 
     class Config:
         from_attributes = True
@@ -510,20 +514,20 @@ class RefillBase(BaseModel):
     prescription_id: int
     patient_id: int
     drug_id: int
-    due_date: date
+    due_date: Optional[datetime] = None
     quantity: int
     days_supply: int
     total_cost: Decimal
     priority: str
     state: str
-    completed_date: date
+    completed_date: Optional[date] = None
 
 class RefillOut(BaseModel):
     id: int
     prescription: PrescriptionOut
     patient: PatientOut
     drug: DrugOut
-    due_date: date
+    due_date: Optional[datetime] = None
     quantity: int
     days_supply: int
     total_cost: Decimal
@@ -628,7 +632,7 @@ class ManualPrescriptionCreate(BaseModel):
     total_refills: int
     daw_code: int = 0
     priority: str = "normal"
-    initial_state: str = "QP"  # "QP", "HOLD", or "SCHEDULED"
+    initial_state: str = "QV1"  # "QV1", "HOLD", or "SCHEDULED"
     date_received: Optional[date] = None  # defaults to today if not provided
     due_date: Optional[datetime] = None
     expiration_date: Optional[date] = None
@@ -657,7 +661,7 @@ class ManualPrescriptionCreate(BaseModel):
     @field_validator("initial_state")
     @classmethod
     def initial_state_must_be_valid(cls, v: str) -> str:
-        allowed = {"QP", "HOLD", "SCHEDULED"}
+        allowed = {"QV1", "HOLD", "SCHEDULED"}
         if v not in allowed:
             raise ValueError(f"initial_state must be one of {sorted(allowed)}")
         return v
@@ -676,7 +680,7 @@ class RefillEditRequest(BaseModel):
     quantity: Optional[int] = None
     days_supply: Optional[int] = None
     priority: Optional[str] = None
-    due_date: Optional[date] = None
+    due_date: Optional[datetime] = None
     instructions: Optional[str] = None
     daw_code: Optional[int] = None
 
@@ -778,7 +782,7 @@ class FillScriptRequest(BaseModel):
     days_supply: int
     priority: str = "normal"
     scheduled: bool = False  # True → SCHEDULED state; False → auto-determine (QT/QV1/QP)
-    due_date: Optional[date] = None
+    due_date: Optional[datetime] = None
     insurance_id: Optional[int] = None  # PatientInsurance.id for billing
 
     @field_validator("quantity")

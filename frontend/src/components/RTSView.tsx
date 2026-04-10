@@ -1,22 +1,22 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
+import { useNotification } from "@/context/NotificationContext";
 import { rtsLookup, rtsLookupByRx, processRTS } from "@/api";
 import type { RTSLookup } from "@/types";
 
 interface RTSViewProps {
   initialRefillId?: number;
   onBack: () => void;
-  onDone: () => void;
 }
 
-export default function RTSView({ initialRefillId, onBack, onDone }: RTSViewProps) {
+export default function RTSView({ initialRefillId, onBack }: RTSViewProps) {
   const { token } = useContext(AuthContext);
+  const { addNotification } = useNotification();
   const [inputId, setInputId] = useState(initialRefillId ? String(initialRefillId) : "");
-  const [lookupMode, setLookupMode] = useState<"refill" | "rx">("refill");
+
   const [lookup, setLookup] = useState<RTSLookup | null>(null);
   const [lookupError, setLookupError] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [done, setDone] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // If we were launched with a specific refill ID, look it up immediately
@@ -48,89 +48,40 @@ export default function RTSView({ initialRefillId, onBack, onDone }: RTSViewProp
     e.preventDefault();
     const id = parseInt(inputId.trim(), 10);
     if (isNaN(id) || id <= 0) {
-      setLookupError(`Please enter a valid ${lookupMode === "rx" ? "Rx" : "refill"} number.`);
+      setLookupError("Please enter a valid Rx number.");
       return;
     }
-    if (lookupMode === "rx") {
-      fetchLookupByRx(id);
-    } else {
-      fetchLookup(id);
-    }
+    fetchLookupByRx(id);
   }
 
   function handleConfirm() {
     if (!lookup) return;
     setProcessing(true);
     processRTS(lookup.refill_id, token!)
-      .then(() => setDone(true))
+      .then(() => {
+        addNotification(`Rx #${inputId} (${lookup.drug_name}) returned to stock and placed on hold.`, "success");
+        setLookup(null);
+        setInputId("");
+        setLookupError("");
+      })
       .catch((e: Error) => setLookupError(e.message))
       .finally(() => setProcessing(false));
-  }
-
-  if (done && lookup) {
-    return (
-      <div className="vstack" style={{ gap: "1.5rem", maxWidth: 480 }}>
-        <h2>Return to Stock</h2>
-        <div
-          style={{
-            background: "rgba(6, 214, 160, 0.1)",
-            border: "1px solid var(--success, #06d6a0)",
-            borderRadius: 8,
-            padding: "1.25rem",
-          }}
-        >
-          <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--success, #06d6a0)", marginBottom: "0.5rem" }}>
-            ✔ Returned to Stock
-          </div>
-          <div><strong>{lookup.drug_name}</strong> — {lookup.quantity} units returned to inventory.</div>
-          <div style={{ color: "var(--text-light)", marginTop: "0.25rem", fontSize: "0.9rem" }}>
-            Refill #{lookup.refill_id} | Patient: {lookup.patient_name}
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "0.75rem" }}>
-          <button className="btn btn-primary" onClick={onDone}>
-            Go to Stock
-          </button>
-          <button className="btn btn-secondary" onClick={onBack}>
-            Back
-          </button>
-        </div>
-      </div>
-    );
   }
 
   return (
     <div className="vstack" style={{ gap: "1.5rem", maxWidth: 520 }}>
       <h2>Return to Stock (RTS)</h2>
       <p style={{ color: "var(--text-light)", margin: 0 }}>
-        Enter the refill number to return a READY prescription to stock inventory.
+        Enter the Rx number to return a READY prescription to stock inventory.
       </p>
 
-      {/* Refill ID lookup form */}
+      {/* Rx ID lookup form */}
       {!lookup && (
         <div className="vstack" style={{ gap: "0.75rem" }}>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button
-              type="button"
-              className={`btn ${lookupMode === "refill" ? "btn-primary" : "btn-secondary"}`}
-              style={{ fontSize: "0.85rem", padding: "0.3rem 0.75rem" }}
-              onClick={() => { setLookupMode("refill"); setInputId(""); setLookupError(""); }}
-            >
-              Refill #
-            </button>
-            <button
-              type="button"
-              className={`btn ${lookupMode === "rx" ? "btn-primary" : "btn-secondary"}`}
-              style={{ fontSize: "0.85rem", padding: "0.3rem 0.75rem" }}
-              onClick={() => { setLookupMode("rx"); setInputId(""); setLookupError(""); }}
-            >
-              Rx #
-            </button>
-          </div>
           <form onSubmit={handleLookupSubmit} style={{ display: "flex", gap: "0.75rem", alignItems: "flex-end" }}>
             <div className="vstack" style={{ gap: "0.25rem", flex: 1 }}>
               <label style={{ fontSize: "0.85rem", color: "var(--text-light)" }}>
-                {lookupMode === "rx" ? "Rx Number (Prescription ID)" : "Refill Number"}
+                Rx Number (Prescription ID)
               </label>
               <input
                 ref={inputRef}
@@ -139,7 +90,7 @@ export default function RTSView({ initialRefillId, onBack, onDone }: RTSViewProp
                 min={1}
                 value={inputId}
                 onChange={(e) => setInputId(e.target.value)}
-                placeholder={lookupMode === "rx" ? "e.g. 1701234" : "e.g. 1042"}
+                placeholder="e.g. 1701234"
                 style={{ fontFamily: "monospace", fontSize: "1.1rem" }}
               />
             </div>
@@ -171,7 +122,7 @@ export default function RTSView({ initialRefillId, onBack, onDone }: RTSViewProp
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <tbody>
                 <tr>
-                  <td style={{ color: "var(--text-light)", paddingBottom: "0.4rem", width: "40%" }}>Refill #</td>
+                  <td style={{ color: "var(--text-light)", paddingBottom: "0.4rem", width: "40%" }}>Rx #</td>
                   <td style={{ fontWeight: 600, fontFamily: "monospace" }}>{lookup.refill_id}</td>
                 </tr>
                 <tr>

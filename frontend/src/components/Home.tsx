@@ -1,5 +1,3 @@
-import Logo from "@/components/Logo";
-
 interface HomeProps {
   onCommand?: (cmd: string) => void;
 }
@@ -7,13 +5,6 @@ interface HomeProps {
 export default function Home({ onCommand }: HomeProps) {
   return (
     <div className="vstack">
-      <div style={{ marginBottom: "0.5rem" }}>
-        <Logo size={120} showTagline={true} />
-      </div>
-      <p style={{ fontSize: "1.1rem", marginBottom: "2rem", color: "var(--text-light)" }}>
-        Your trusted pharmacy management system. Type a command below to get started.
-      </p>
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
         {/* Left Column */}
         <div className="vstack" style={{ gap: "1.5rem" }}>
@@ -70,6 +61,9 @@ export default function Home({ onCommand }: HomeProps) {
               </li>
               <li>
                 <code>prescribers</code> – View all prescribers
+              </li>
+              <li>
+                <code>refill_hist</code> – View fill history
               </li>
             </ul>
           </section>
@@ -131,10 +125,10 @@ export default function Home({ onCommand }: HomeProps) {
 
         {/* Right Column */}
         <div className="vstack" style={{ gap: "1.5rem" }}>
-          {/* Inventory & Catalog */}
+          {/* Inventory, Catalog & Shipments */}
           <section className="card vstack" style={{ padding: "1rem" }}>
             <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              💊 Inventory & Catalog
+              💊 Inventory, Catalog & Shipments
             </h3>
             <ul style={{ margin: 0 }}>
               <li>
@@ -143,15 +137,6 @@ export default function Home({ onCommand }: HomeProps) {
               <li>
                 <code>stock</code> – View current inventory (includes RTS totals)
               </li>
-            </ul>
-          </section>
-
-          {/* Shipments */}
-          <section className="card vstack" style={{ padding: "1rem" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              📦 Shipments
-            </h3>
-            <ul style={{ margin: 0 }}>
               <li>
                 <code>shipment</code> – Receive a new shipment
               </li>
@@ -182,18 +167,6 @@ export default function Home({ onCommand }: HomeProps) {
             </ul>
           </section>
 
-          {/* Reports & History */}
-          <section className="card vstack" style={{ padding: "1rem" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              📊 Reports & History
-            </h3>
-            <ul style={{ margin: 0 }}>
-              <li>
-                <code>refill_hist</code> – View fill history
-              </li>
-            </ul>
-          </section>
-
           {/* Context-Specific Commands */}
           <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(255, 190, 11, 0.08) 0%, rgba(200, 130, 0, 0.08) 100%)" }}>
             <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
@@ -213,7 +186,10 @@ export default function Home({ onCommand }: HomeProps) {
                 <code>a</code> – Approve refill (in Refill Detail)
               </li>
               <li>
-                <code>h</code> – Hold refill (in Refill Detail)
+                <code>h</code> – Hold refill (in Refill Detail or Prescription Detail)
+              </li>
+              <li>
+                <code>i</code> – Inactivate prescription (in Prescription Detail)
               </li>
             </ul>
           </section>

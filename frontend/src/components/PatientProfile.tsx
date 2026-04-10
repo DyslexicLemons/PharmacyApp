@@ -312,6 +312,7 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
           Showing {startIdx + 1}–{endIdx} of {total}
           {page > 1 && <span> | [p] prev</span>}
           {endIdx < total && <span> | [n] next</span>}
+          <span> | [?] commands</span>
         </div>
       )}
 
@@ -341,28 +342,6 @@ export default function PatientProfile({ pid, onBack, onFill, onDataLoaded, page
         </div>
       )}
 
-      {/* Command hint bar */}
-      <div
-        style={{
-          marginTop: "1.5rem",
-          padding: "0.5rem 0.75rem",
-          borderTop: "1px solid var(--border, #333)",
-          display: "flex",
-          gap: "1.5rem",
-          flexWrap: "wrap",
-          fontSize: "0.82rem",
-          color: "var(--text-light)",
-        }}
-      >
-        <span><code>[e]</code> Edit patient</span>
-        <span style={{ color: deletePending ? "var(--danger)" : undefined, fontWeight: deletePending ? 700 : undefined }}>
-          <code>[d]</code> Delete patient
-        </span>
-        <span><code>[#]</code> View prescription</span>
-        <span><code>[space]</code> New prescription</span>
-        <span><code>[n]</code>/<code>[p]</code> Next/prev page</span>
-        <span><code>[q]</code> Back</span>
-      </div>
     </div>
   );
 }
