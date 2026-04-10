@@ -72,7 +72,8 @@
       "Bash(.venv/Scripts/python -m alembic upgrade head)",
       "Bash(.venv/Scripts/python -m pytest tests/test_edge_cases.py::TestAutoScheduleNextFill -v --tb=short)",
       "Bash(.venv/Scripts/python -m pytest tests/ -q)",
-      "Bash(CI=true npm test)"
+      "Bash(CI=true npm test)",
+      "Bash(.venv/Scripts/pip install:*)"
     ]
   }
 }
