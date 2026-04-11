@@ -75,7 +75,8 @@
       "Bash(CI=true npm test)",
       "Bash(.venv/Scripts/pip install:*)",
       "Bash(.venv/Scripts/python -m pytest tests/test_unit.py::TestLatestRefillOutNextPickup tests/test_patients.py::TestGetLatestRefillNextPickup -v)",
-      "Bash(.venv/Scripts/python -m pytest tests/test_queue_summary.py -v -q)"
+      "Bash(.venv/Scripts/python -m pytest tests/test_queue_summary.py -v -q)",
+      "Bash(xargs grep:*)"
     ]
   }
 }

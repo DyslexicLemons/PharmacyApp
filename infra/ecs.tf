@@ -4,14 +4,35 @@ resource "aws_ecs_cluster" "main" {
 
   setting {
     name  = "containerInsights"
-    value = "enabled"
+    value = "disabled"
+  }
+}
+
+# Associate FARGATE and FARGATE_SPOT capacity providers with the cluster.
+# The default strategy prefers Spot (cheaper); falls back to On-Demand if
+# Spot capacity is unavailable in the region.
+resource "aws_ecs_cluster_capacity_providers" "main" {
+  cluster_name = aws_ecs_cluster.main.name
+
+  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+
+  default_capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 4
+    base              = 0
+  }
+
+  default_capacity_provider_strategy {
+    capacity_provider = "FARGATE"
+    weight            = 1
+    base              = 0
   }
 }
 
 # ── CloudWatch Log Group ──────────────────────────────────────────────────────
 resource "aws_cloudwatch_log_group" "backend" {
   name              = "/ecs/${var.project_name}-backend"
-  retention_in_days = 30
+  retention_in_days = 7
 }
 
 # ── ECS Task Definition ───────────────────────────────────────────────────────
@@ -70,7 +91,20 @@ resource "aws_ecs_service" "backend" {
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.backend.arn
   desired_count   = var.backend_desired_count
-  launch_type     = "FARGATE"
+
+  # Use FARGATE_SPOT (up to 70% cheaper) with On-Demand as fallback.
+  # Remove launch_type when using capacity_provider_strategy.
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE_SPOT"
+    weight            = 4
+    base              = 0
+  }
+
+  capacity_provider_strategy {
+    capacity_provider = "FARGATE"
+    weight            = 1
+    base              = 0
+  }
 
   # Allow in-place deployments without downtime
   deployment_minimum_healthy_percent = 100
