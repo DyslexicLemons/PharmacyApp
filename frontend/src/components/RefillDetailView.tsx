@@ -47,7 +47,7 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
   const [rejectReason, setRejectReason] = useState("");
   const [staleQueueMessage, setStaleQueueMessage] = useState<string | null>(null);
 
-  const { lockError } = usePrescriptionLock(refill?.prescription?.id);
+  const { lockError, lockPending } = usePrescriptionLock(refill?.prescription?.id);
 
   useEffect(() => {
     fetchRefillDetails();
@@ -181,7 +181,7 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
     staleQueueMessage !== null ||
     (refill !== null && fromQueueState && fromQueueState !== "ALL" && refill.state !== fromQueueState);
 
-  if (loading) return <div className="vstack"><p>Loading...</p></div>;
+  if (loading || lockPending) return <div className="vstack"><p>Loading...</p></div>;
   if (error) return <div className="vstack"><p style={{ color: "var(--danger)" }}>{error}</p></div>;
   if (isStaleQueue) {
     const staleDetail = staleQueueMessage

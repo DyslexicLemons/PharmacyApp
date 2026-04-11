@@ -454,6 +454,46 @@ def _adjust_prescription_quantity(
     )
 
 
+def _adjust_stock(
+    db: Session,
+    rx: Refill,
+    current_state: RxState,
+    new_state: RxState,
+    rx_quantity: int,
+) -> None:
+    """Decrement stock when a fill crosses into QV2 (QP → QV2), or return it on reversal (QV2 → QP).
+
+    Stock is committed at the QP→QV2 boundary — the moment physical preparation begins.
+    If the pharmacist sends the fill back to QP from QV2 the units are returned to stock.
+    """
+    going_to_qv2 = current_state == RxState.QP and new_state == RxState.QV2
+    returning_from_qv2 = current_state == RxState.QV2 and new_state == RxState.QP
+
+    if not (going_to_qv2 or returning_from_qv2):
+        return
+
+    stock = (
+        db.query(Stock)
+        .filter(Stock.drug_id == rx.drug_id)
+        .with_for_update(of=Stock)
+        .first()
+    )
+    if not stock:
+        logger.warning(f"[STOCK] No stock record for drug_id={rx.drug_id}; skipping adjustment")
+        return
+
+    stock_before = _int(stock.quantity)
+    if going_to_qv2:
+        stock.quantity = max(0, stock_before - rx_quantity)  # type: ignore[assignment]
+    else:
+        stock.quantity = stock_before + rx_quantity  # type: ignore[assignment]
+
+    logger.info(
+        f"[STOCK] Drug #{rx.drug_id}: quantity {stock_before} → {stock.quantity} "
+        f"(state {current_state.value} → {new_state.value}, qty={rx_quantity})"
+    )
+
+
 def _archive_to_sold(
     db: Session,
     rx: Refill,
@@ -566,6 +606,7 @@ def advance_refill(
     rx_days_supply = _int(rx.days_supply)
 
     _adjust_prescription_quantity(db, rx, current_state, new_state, rx_quantity)
+    _adjust_stock(db, rx, current_state, new_state, rx_quantity)
 
     rx.state = new_state  # type: ignore[assignment]
 
