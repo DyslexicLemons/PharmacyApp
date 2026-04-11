@@ -1,11 +1,9 @@
 name: Deploy to AWS
 
-# Triggered only on pushes to master after CI passes
+# Deployment disabled — trigger manually only to re-enable automatic deploys,
+# restore the workflow_run trigger below.
 on:
-  workflow_run:
-    workflows: [CI]
-    branches: [master]
-    types: [completed]
+  workflow_dispatch:
 
 env:
   AWS_REGION: us-east-1
@@ -19,8 +17,6 @@ jobs:
   deploy-backend:
     name: Backend → ECS Fargate
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-
     steps:
       - uses: actions/checkout@v4
 
@@ -79,7 +75,6 @@ jobs:
   deploy-frontend:
     name: Frontend → S3 + CloudFront
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - uses: actions/checkout@v4
