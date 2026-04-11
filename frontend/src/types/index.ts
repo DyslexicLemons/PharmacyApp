@@ -213,6 +213,7 @@ export interface User {
   id: number;
   username: string;
   is_admin: boolean;
+  role: "admin" | "pharmacist" | "technician";
 }
 
 // ---------------------------------------------------------------------------
@@ -299,3 +300,38 @@ export type RouteState =
   | { view: "WORKER_DASHBOARD" }
   | { view: "PROVIDER_INFO" }
   | { view: "EDIT_PATIENT"; pid: number };
+
+// ---------------------------------------------------------------------------
+// Dashboard analytics
+// ---------------------------------------------------------------------------
+
+export interface DashboardStateSummary { state: string; count: number }
+export interface DashboardDailyThroughput { date: string; count: number; revenue: number }
+export interface DashboardTopDrug { drug_name: string; dispense_count: number; total_revenue: number }
+export interface DashboardPriorityBreakdown { priority: string; count: number }
+export interface DashboardInsuranceSplit {
+  insured: number;
+  uninsured: number;
+  insured_revenue: number;
+  uninsured_revenue: number;
+}
+export interface DashboardStats {
+  total_patients: number;
+  total_active_prescriptions: number;
+  total_active_refills: number;
+  total_fills_completed: number;
+  queue_states: DashboardStateSummary[];
+  daily_throughput: DashboardDailyThroughput[];
+  top_drugs: DashboardTopDrug[];
+  priority_breakdown: DashboardPriorityBreakdown[];
+  total_revenue: number;
+  total_insurance_paid: number;
+  total_copay_collected: number;
+  insurance_split: DashboardInsuranceSplit;
+  total_rejected: number;
+  rejection_rate_pct: number;
+  overdue_active_refills: number;
+  late_fills_in_range: number;
+  fills_with_due_date_in_range: number;
+  late_fill_rate_pct: number;
+}

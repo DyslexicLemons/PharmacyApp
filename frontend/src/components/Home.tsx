@@ -1,8 +1,8 @@
 interface HomeProps {
-  onCommand?: (cmd: string) => void;
+  isAdmin?: boolean;
 }
 
-export default function Home({ onCommand }: HomeProps) {
+export default function Home({ isAdmin }: HomeProps) {
   return (
     <div className="vstack">
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem" }}>
@@ -65,6 +65,15 @@ export default function Home({ onCommand }: HomeProps) {
               <li>
                 <code>refill_hist</code> – View fill history
               </li>
+              <li>
+                <code>f</code> – Fill Rx (when viewing a prescription)
+              </li>
+              <li>
+                <code>h</code> – Hold Rx (when viewing a prescription)
+              </li>
+              <li>
+                <code>i</code> – Inactivate Rx (when viewing a prescription)
+              </li>
             </ul>
           </section>
 
@@ -89,7 +98,69 @@ export default function Home({ onCommand }: HomeProps) {
             </ul>
           </section>
 
+        </div>
+
+        {/* Right Column */}
+        <div className="vstack" style={{ gap: "1.5rem" }}>
+          {/* Inventory, Catalog & Shipments */}
+          <section className="card vstack" style={{ padding: "1rem" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              💊 Inventory, Catalog & Shipments
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>drugs</code> – View drug catalog
+              </li>
+              <li>
+                <code>stock</code> – View current inventory (includes RTS totals)
+              </li>
+              <li>
+                <code>shipment</code> – process a new drug inventory shipment
+              </li>
+              <li>
+                <code>shipment_hist</code> – View drug shipment history
+              </li>
+            </ul>
+          </section>
+
+          {/* Return to Stock */}
+          <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(255, 190, 11, 0.08) 0%, rgba(200, 100, 0, 0.08) 100%)" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              ↩ Return to Stock
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>rts</code> – Return a READY prescription to stock
+              </li>
+              <li>
+                <code>rts&lt;id&gt;</code> – RTS a specific refill (e.g., <code>rts1042</code>)
+              </li>
+              <li>
+                <code>rts_hist</code> – View all return-to-stock history
+              </li>
+            </ul>
+          </section>
+
+          {/* System */}
+          <section className="card vstack" style={{ padding: "1rem" }}>
+            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
+              🖥️ System
+            </h3>
+            <ul style={{ margin: 0 }}>
+              <li>
+                <code>?</code> – Toggle this help panel
+              </li>
+              <li>
+                <code>info</code> – Show active provider info (drug catalog, insurance source)
+              </li>
+              <li>
+                <code>logout</code> – Log out of the session
+              </li>
+            </ul>
+          </section>
+
           {/* Admin Commands */}
+          {isAdmin && (
           <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(220, 20, 60, 0.1) 0%, rgba(178, 34, 34, 0.1) 100%)" }}>
             <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
               ⚙️ Admin Commands
@@ -121,96 +192,7 @@ export default function Home({ onCommand }: HomeProps) {
               </li>
             </ul>
           </section>
-        </div>
-
-        {/* Right Column */}
-        <div className="vstack" style={{ gap: "1.5rem" }}>
-          {/* Inventory, Catalog & Shipments */}
-          <section className="card vstack" style={{ padding: "1rem" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              💊 Inventory, Catalog & Shipments
-            </h3>
-            <ul style={{ margin: 0 }}>
-              <li>
-                <code>drugs</code> – View drug catalog
-              </li>
-              <li>
-                <code>stock</code> – View current inventory (includes RTS totals)
-              </li>
-              <li>
-                <code>shipment</code> – Receive a new shipment
-              </li>
-              <li>
-                <code>shipment_hist</code> – View shipment history
-              </li>
-              <li>
-                <code>f</code> / <code>finished</code> – Finish current shipment (in Shipment view)
-              </li>
-            </ul>
-          </section>
-
-          {/* Return to Stock */}
-          <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(255, 190, 11, 0.08) 0%, rgba(200, 100, 0, 0.08) 100%)" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              ↩ Return to Stock
-            </h3>
-            <ul style={{ margin: 0 }}>
-              <li>
-                <code>rts</code> – Return a READY prescription to stock
-              </li>
-              <li>
-                <code>rts&lt;id&gt;</code> – RTS a specific refill (e.g., <code>rts1042</code>)
-              </li>
-              <li>
-                <code>rts_hist</code> – View all return-to-stock history
-              </li>
-            </ul>
-          </section>
-
-          {/* Context-Specific Commands */}
-          <section className="card vstack" style={{ padding: "1rem", background: "linear-gradient(135deg, rgba(255, 190, 11, 0.08) 0%, rgba(200, 130, 0, 0.08) 100%)" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              🔍 Context Commands
-            </h3>
-            <ul style={{ margin: 0 }}>
-              <li>
-                <code>&lt;num&gt;</code> – View prescription by row (in Patient profile)
-              </li>
-              <li>
-                <code>e</code> – Edit patient (in Patient Profile) or edit refill (in Refill Detail)
-              </li>
-              <li>
-                <code>d</code> → <code>confirm</code> – Delete patient (in Patient Profile; blocked if active prescriptions)
-              </li>
-              <li>
-                <code>a</code> – Approve refill (in Refill Detail)
-              </li>
-              <li>
-                <code>h</code> – Hold refill (in Refill Detail or Prescription Detail)
-              </li>
-              <li>
-                <code>i</code> – Inactivate prescription (in Prescription Detail)
-              </li>
-            </ul>
-          </section>
-
-          {/* System */}
-          <section className="card vstack" style={{ padding: "1rem" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "0.75rem", paddingBottom: "0.5rem" }}>
-              🖥️ System
-            </h3>
-            <ul style={{ margin: 0 }}>
-              <li>
-                <code>?</code> – Toggle this help panel
-              </li>
-              <li>
-                <code>info</code> – Show active provider info (drug catalog, insurance source)
-              </li>
-              <li>
-                <code>logout</code> – Log out of the session
-              </li>
-            </ul>
-          </section>
+          )}
         </div>
       </div>
     </div>

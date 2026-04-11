@@ -10,6 +10,8 @@ Covers:
 - DELETE /patients/{pid} happy path, cascade, active-refill block, audit log
 """
 import pytest
+from datetime import date, datetime, timezone, timedelta
+from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
@@ -17,6 +19,7 @@ from app.main import app
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import AuditLog, Patient, Prescription, Refill, RefillHist, PatientInsurance, RxState, User
+from app.routers.patients import _get_latest_refill_for_prescription
 from tests.conftest import (
     make_patient, make_drug, make_prescriber, make_prescription,
     make_refill, make_insurance, make_patient_insurance,
@@ -236,3 +239,102 @@ class TestPatientDelete:
         resp = client.delete(f"/patients/{patient.id}")
         assert resp.status_code == 204
         db_session.expunge_all()  # prevent stale ORM references from causing teardown errors
+
+
+# ---------------------------------------------------------------------------
+# _get_latest_refill_for_prescription — next_pickup date type regression
+# ---------------------------------------------------------------------------
+
+class TestGetLatestRefillNextPickup:
+    """
+    Regression tests for the bug where next_pickup was computed as a timezone-aware
+    datetime (from RefillHist.sold_date + timedelta) instead of a plain date,
+    causing a Pydantic ValidationError on LatestRefillOut.
+    """
+
+    def _make_hist(self, db, rx, drug, patient, sold_date, days_supply=30):
+        hist = RefillHist(
+            prescription_id=rx.id,
+            patient_id=patient.id,
+            drug_id=drug.id,
+            quantity=30,
+            days_supply=days_supply,
+            total_cost=Decimal("15.00"),
+            sold_date=sold_date,
+            completed_date=sold_date,
+        )
+        db.add(hist)
+        db.flush()
+        return hist
+
+    def test_next_pickup_is_date_not_datetime(self, db_session):
+        """next_pickup must be a date even when sold_date is a tz-aware datetime."""
+        drug = make_drug(db_session)
+        prescriber = make_prescriber(db_session)
+        patient = make_patient(db_session)
+        rx = make_prescription(db_session, patient, drug, prescriber)
+        # Simulate a sold_date with a non-midnight time (as stored in prod)
+        sold_dt = datetime(2026, 3, 1, 14, 23, 45, tzinfo=timezone.utc)
+        self._make_hist(db_session, rx, drug, patient, sold_date=sold_dt, days_supply=30)
+        db_session.commit()
+
+        result = _get_latest_refill_for_prescription(db_session, rx.id)
+
+        assert result is not None
+        assert isinstance(result.next_pickup, date)
+        assert not isinstance(result.next_pickup, datetime)  # date, not datetime subclass
+
+    def test_next_pickup_value_is_correct(self, db_session):
+        """next_pickup = sold_date + days_supply, rounded to calendar date."""
+        drug = make_drug(db_session)
+        prescriber = make_prescriber(db_session)
+        patient = make_patient(db_session)
+        rx = make_prescription(db_session, patient, drug, prescriber)
+        sold_dt = datetime(2026, 3, 1, 14, 23, 45, tzinfo=timezone.utc)
+        self._make_hist(db_session, rx, drug, patient, sold_date=sold_dt, days_supply=30)
+        db_session.commit()
+
+        result = _get_latest_refill_for_prescription(db_session, rx.id)
+
+        assert result.next_pickup == date(2026, 3, 31)
+
+    def test_next_pickup_none_when_no_sold_date(self, db_session):
+        """If sold_date is NULL, next_pickup should be None (not raise)."""
+        drug = make_drug(db_session)
+        prescriber = make_prescriber(db_session)
+        patient = make_patient(db_session)
+        rx = make_prescription(db_session, patient, drug, prescriber)
+        self._make_hist(db_session, rx, drug, patient, sold_date=None, days_supply=30)
+        db_session.commit()
+
+        result = _get_latest_refill_for_prescription(db_session, rx.id)
+
+        assert result is not None
+        assert result.next_pickup is None
+
+    def test_returns_none_when_no_refills(self, db_session):
+        """No active refills and no history → None."""
+        drug = make_drug(db_session)
+        prescriber = make_prescriber(db_session)
+        patient = make_patient(db_session)
+        rx = make_prescription(db_session, patient, drug, prescriber)
+        db_session.commit()
+
+        result = _get_latest_refill_for_prescription(db_session, rx.id)
+
+        assert result is None
+
+    def test_active_refill_returns_state_not_next_pickup(self, db_session):
+        """When an active (non-SOLD) refill exists, state is set and next_pickup is None."""
+        drug = make_drug(db_session)
+        prescriber = make_prescriber(db_session)
+        patient = make_patient(db_session)
+        rx = make_prescription(db_session, patient, drug, prescriber)
+        make_refill(db_session, rx, drug, patient, state=RxState.QT)
+        db_session.commit()
+
+        result = _get_latest_refill_for_prescription(db_session, rx.id)
+
+        assert result is not None
+        assert result.state == "QT"
+        assert result.next_pickup is None

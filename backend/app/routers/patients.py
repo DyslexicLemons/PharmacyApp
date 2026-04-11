@@ -138,7 +138,7 @@ def get_patient(
         if latest_refill:
             prescription.latest_refill = latest_refill  # type: ignore[attr-defined]
             if hasattr(latest_refill, "sold_date") and latest_refill.sold_date:
-                prescription.next_pickup = latest_refill.sold_date + timedelta(latest_refill.days_supply)  # type: ignore[attr-defined]
+                prescription.next_pickup = (latest_refill.sold_date + timedelta(days=latest_refill.days_supply)).date()  # type: ignore[attr-defined]
             else:
                 prescription.next_pickup = latest_refill.state  # type: ignore[attr-defined]
 
@@ -370,7 +370,7 @@ def _get_latest_refill_for_prescription(db: Session, prescription_id: int):
     from datetime import date as date_type
     days_supply = _int(latest_hist.days_supply)
     sold_date = latest_hist.sold_date
-    next_pickup = sold_date + timedelta(days=days_supply) if sold_date and days_supply else None
+    next_pickup = (sold_date + timedelta(days=days_supply)).date() if sold_date and days_supply else None
     return schemas.LatestRefillOut(
         quantity=_int(latest_hist.quantity),
         days_supply=days_supply,

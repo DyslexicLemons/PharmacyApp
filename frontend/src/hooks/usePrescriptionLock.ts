@@ -20,12 +20,16 @@ const HEARTBEAT_MS = 60_000; // refresh the 5-minute TTL every 60 s
 export function usePrescriptionLock(prescriptionId: number | null | undefined) {
   const { token } = useContext(AuthContext);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [lockPending, setLockPending] = useState(true);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Track whether we successfully acquired the lock so we only release if we own it.
   const ownedRef = useRef(false);
 
   useEffect(() => {
-    if (!prescriptionId || !token) return;
+    if (!prescriptionId || !token) {
+      setLockPending(false);
+      return;
+    }
 
     let cancelled = false;
 
@@ -35,6 +39,7 @@ export function usePrescriptionLock(prescriptionId: number | null | undefined) {
           if (cancelled) return;
           ownedRef.current = true;
           setLockError(null);
+          setLockPending(false);
           // Start heartbeat
           heartbeatRef.current = setInterval(() => {
             lockPrescription(prescriptionId, token).catch(() => {});
@@ -46,6 +51,7 @@ export function usePrescriptionLock(prescriptionId: number | null | undefined) {
             setLockError(err.message);
           }
           // Other errors (network, 404) — fail open, don't block the user
+          setLockPending(false);
         });
 
     acquire();
@@ -63,5 +69,5 @@ export function usePrescriptionLock(prescriptionId: number | null | undefined) {
     };
   }, [prescriptionId, token]);
 
-  return { lockError };
+  return { lockError, lockPending };
 }

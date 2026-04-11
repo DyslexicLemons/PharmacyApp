@@ -5,11 +5,12 @@ No database or HTTP client required — these test Python logic in isolation.
 """
 import pytest
 from decimal import Decimal
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from pydantic import ValidationError
 
 from app.schemas import (
+    LatestRefillOut,
     FillScriptRequest,
     PrescriptionCreate,
     ManualPrescriptionCreate,
@@ -528,3 +529,39 @@ class TestPatientCreate:
                 dob="not-a-date",  # type: ignore
                 address="z",
             )
+
+
+# ===========================================================================
+# LatestRefillOut schema — next_pickup must be date, not datetime
+# ===========================================================================
+
+def _base_refill_out(**overrides):
+    base = dict(quantity=30, days_supply=30, total_cost=Decimal("15.00"))
+    base.update(overrides)
+    return base
+
+
+class TestLatestRefillOutNextPickup:
+    def test_plain_date_accepted(self):
+        out = LatestRefillOut(**_base_refill_out(next_pickup=date(2026, 6, 15)))
+        assert out.next_pickup == date(2026, 6, 15)
+
+    def test_none_accepted(self):
+        out = LatestRefillOut(**_base_refill_out(next_pickup=None))
+        assert out.next_pickup is None
+
+    def test_tz_aware_datetime_with_nonzero_time_rejected(self):
+        # This is the exact type stored in RefillHist.sold_date — a timezone-aware
+        # datetime. Without calling .date() on it, Pydantic 2 raises a validation
+        # error because the time component is non-zero.
+        tz_datetime = datetime(2026, 6, 15, 14, 30, 0, tzinfo=timezone.utc)
+        with pytest.raises(ValidationError, match="date_from_datetime_inexact"):
+            LatestRefillOut(**_base_refill_out(next_pickup=tz_datetime))
+
+    def test_tz_aware_datetime_midnight_accepted(self):
+        # Midnight UTC is accepted by Pydantic as an exact date — but relying on
+        # this is fragile (sold_date is rarely exactly midnight). The fix calls
+        # .date() explicitly; this test documents the boundary.
+        midnight = datetime(2026, 6, 15, 0, 0, 0, tzinfo=timezone.utc)
+        out = LatestRefillOut(**_base_refill_out(next_pickup=midnight))
+        assert out.next_pickup == date(2026, 6, 15)

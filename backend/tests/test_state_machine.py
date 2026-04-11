@@ -7,7 +7,7 @@ with branching for HOLD and REJECTED.
 """
 import pytest
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime, timezone
 
 from app.models import RxState, Priority, RefillHist
 from tests.conftest import (
@@ -110,7 +110,7 @@ class TestReadyStateSideEffects:
         resp = advance(client, refill.id)
         assert resp.status_code == 200
         body = resp.json()
-        assert body["completed_date"] == str(date.today())
+        assert body["completed_date"].startswith(date.today().isoformat())
 
     def test_advancing_to_ready_assigns_bin_number(self, client, db_session):
         """A random bin number (1-100) is assigned when refill becomes READY."""
@@ -137,7 +137,7 @@ class TestSoldStateSideEffects:
             RefillHist.prescription_id == prescription.id
         ).first()
         assert hist is not None
-        assert hist.sold_date == date.today()
+        assert hist.sold_date.date() == date.today()
         assert hist.quantity == refill.quantity
 
     def test_sold_archives_correct_cost(self, client, db_session):

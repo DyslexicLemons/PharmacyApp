@@ -484,13 +484,13 @@ export async function getUsers(token: string): Promise<User[]> {
 }
 
 export async function createUser(
-  data: { username: string; password: string; is_admin: boolean },
+  data: { username: string; password: string; role: "admin" | "pharmacist" | "technician" },
   token: string,
 ): Promise<User> {
   const res = await fetch(`${V1}/users`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify(data),
+    body: JSON.stringify({ ...data, is_admin: data.role === "admin" }),
   });
   return handleResponse(res);
 }
@@ -716,5 +716,10 @@ export async function getRTSHistory(
   offset = 0,
 ): Promise<PaginatedResponse<import('@/types').ReturnToStock>> {
   const res = await fetch(`${V1}/rts?limit=${limit}&offset=${offset}`, { headers: authHeaders(token) });
+  return handleResponse(res);
+}
+
+export async function fetchDashboardStats(token: string): Promise<import('@/types').DashboardStats> {
+  const res = await fetch(`${V1}/dashboard/stats`, { headers: authHeaders(token) });
   return handleResponse(res);
 }

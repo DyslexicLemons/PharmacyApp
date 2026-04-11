@@ -35,7 +35,7 @@ export default function QueueSidebar() {
     queryKey: ["queue-summary", token],
     queryFn: () => fetchQueueSummary(token!),
     refetchInterval: 30_000,
-    enabled: !!token && isAdmin,
+    enabled: !!token,
   });
 
   return (
