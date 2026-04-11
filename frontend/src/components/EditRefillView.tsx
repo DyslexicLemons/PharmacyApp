@@ -34,7 +34,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }: EditRefill
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [prescriptionId, setPrescriptionId] = useState<number | null>(null);
-  const { lockError } = usePrescriptionLock(prescriptionId);
+  const { lockError, lockPending } = usePrescriptionLock(prescriptionId);
 
   // Form fields
   const [quantity, setQuantity] = useState("");
@@ -92,7 +92,7 @@ export default function EditRefillView({ refillId, onBack, onSaved }: EditRefill
     }
   };
 
-  if (loading) return <div className="vstack"><p>Loading...</p></div>;
+  if (loading || lockPending) return <div className="vstack"><p>Loading...</p></div>;
   if (error && !refill) return <div className="vstack"><p style={{ color: "var(--danger)" }}>{error}</p></div>;
   if (!refill) return <div className="vstack"><p>Refill not found</p></div>;
 

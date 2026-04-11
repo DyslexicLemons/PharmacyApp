@@ -1,4 +1,5 @@
 import { useState, useContext, useRef, useEffect, lazy, Suspense } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { AuthContext } from "@/context/AuthContext";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import LoginForm from "@/components/LoginForm";
@@ -148,6 +149,7 @@ export default function AppRoot() {
 function App() {
   const { isAuthenticated, shouldResetToHome, clearHomeReset, authUser, quickCode, clearQuickCode, token, logout } = useContext(AuthContext);
   const { addNotification } = useNotification();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<"workflow" | "dashboard">("workflow");
   const [route, setRoute] = useState<RouteState>({ view: "HOME" });
   const [history, setHistory] = useState<RouteState[]>([]);
@@ -184,6 +186,12 @@ function App() {
 
   useEffect(() => {
     cmdBarRef.current?.focus();
+  }, [route]);
+
+  useEffect(() => {
+    if (route.view === "QUEUE") {
+      queryClient.invalidateQueries({ queryKey: ["queue-summary"] });
+    }
   }, [route]);
 
   // Drill-down navigation: pushes current route to history so `q` can go back

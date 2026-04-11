@@ -71,8 +71,12 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
   const [drugs, setDrugs] = useState<Drug[]>([]);
   const [prescribers, setPrescribers] = useState<Prescriber[]>([]);
   const [conflict, setConflict] = useState<{ has_conflict: boolean; active_refills: { id: number; state: string; due_date: string; quantity: number }[]; recent_fills: { id: number; sold_date: string; days_supply: number; quantity: number }[]; message?: string } | null>(null);
-  const [dueInput, setDueInput] = useState("");
-  const [dueDisplay, setDueDisplay] = useState("");
+  const defaultDueDate = (() => {
+    const d = new Date(Date.now() + 60 * 60 * 1000);
+    return { iso: d.toISOString(), display: formatDueDisplay(d) };
+  })();
+  const [dueInput, setDueInput] = useState("1h");
+  const [dueDisplay, setDueDisplay] = useState(defaultDueDate.display);
   const [scheduleMode, setScheduleMode] = useState("now"); // "now" | "scheduled"
   const [scheduleDays, setScheduleDays] = useState("");
   const [scheduledDateDisplay, setScheduledDateDisplay] = useState("");
@@ -121,11 +125,11 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
     prescriber_id: "",
     quantity: "",
     days_supply: "",
-    total_refills: "1",
+    total_refills: "0",
     daw_code: 0,
     priority: "normal",
     date_received: today,
-    due_date: "",
+    due_date: defaultDueDate.iso,
     expiration_date: defaultExpiration,
     instructions: "",
   });
@@ -242,7 +246,7 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
           prescriber_id: parseInt(form.prescriber_id),
           quantity: parseInt(form.quantity),
           days_supply: parseInt(form.days_supply),
-          total_refills: parseInt(form.total_refills),
+          total_refills: parseInt(form.total_refills) + 1,
           daw_code: form.daw_code,
           priority: form.priority,
           initial_state: initialState,
@@ -256,7 +260,11 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
 
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.detail || "Failed to create prescription");
+        const detail = error.detail;
+        const msg = Array.isArray(detail)
+          ? (detail as { msg?: string }[]).map((d) => d.msg ?? JSON.stringify(d)).join('; ')
+          : (detail as string | undefined) || "Failed to create prescription";
+        throw new Error(msg);
       }
 
       const result = await res.json();
@@ -607,15 +615,18 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
             </label>
 
             <label>
-              <strong>Total Refills</strong>
+              <strong>Additional Refills</strong>
               <input
                 type="number"
                 name="total_refills"
                 value={form.total_refills}
                 onChange={handleChange}
-                min="1"
+                min="0"
                 style={{ width: "100%", padding: "0.5rem", marginTop: "0.25rem" }}
               />
+              <div style={{ fontSize: "0.78rem", color: "var(--text-light)", marginTop: "0.25rem" }}>
+                0 = this fill only &nbsp;·&nbsp; 1 = this fill + 1 more refill
+              </div>
             </label>
           </div>
 
@@ -749,7 +760,10 @@ export default function PrescriptionForm({ onBack, patientId }: { onBack?: () =>
                     setScheduleMode("now");
                     setScheduledDateDisplay("");
                     setScheduleDays("");
-                    setForm(f => ({ ...f, due_date: "" }));
+                    const d = new Date(Date.now() + 60 * 60 * 1000);
+                    setDueInput("1h");
+                    setDueDisplay(formatDueDisplay(d));
+                    setForm(f => ({ ...f, due_date: d.toISOString() }));
                   }}
                 />
                 Fill Now

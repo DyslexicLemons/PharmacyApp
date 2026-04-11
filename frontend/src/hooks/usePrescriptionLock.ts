@@ -32,6 +32,7 @@ export function usePrescriptionLock(prescriptionId: number | null | undefined) {
     }
 
     let cancelled = false;
+    setLockPending(true);
 
     const acquire = () =>
       lockPrescription(prescriptionId, token)

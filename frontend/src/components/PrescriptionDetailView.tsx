@@ -421,7 +421,7 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
       setShowInactivate(true);
     } else if (keyCmd === "fill") {
       const blockingFillStates = new Set(["QT", "QV1", "QP", "QV2", "READY"]);
-      if (!isInactive && !isExpired && onFill && (!lr || !blockingFillStates.has(lr.state))) {
+      if (!isInactive && !isExpired && onFill && prescription.remaining_quantity > 0 && (!lr || !blockingFillStates.has(lr.state))) {
         onFill();
       }
     }
@@ -455,7 +455,8 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
   const BLOCKING_FILL_STATES = new Set(["QT", "QV1", "QP", "QV2", "READY"]);
 
   const lr = prescription.latest_refill;
-  const canFill = !isInactive && !isExpired && onFill && (!lr || !BLOCKING_FILL_STATES.has(lr.state));
+  const hasRemainingQty = prescription.remaining_quantity > 0;
+  const canFill = !isInactive && !isExpired && onFill && hasRemainingQty && (!lr || !BLOCKING_FILL_STATES.has(lr.state));
   const prescriber = prescribers.find((p) => p.id === prescription.prescriber_id);
 
   // Build fill count across all refills (history + active)
@@ -884,6 +885,19 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
           >
             Fill Rx
           </button>
+        )}
+        {!isInactive && !isExpired && !hasRemainingQty && (!lr || !BLOCKING_FILL_STATES.has(lr.state)) && (
+          <div style={{
+            padding: "0.5rem 1rem",
+            background: "rgba(239,68,68,0.1)",
+            border: "1px solid var(--danger)",
+            borderRadius: "6px",
+            color: "var(--danger)",
+            fontWeight: 600,
+            fontSize: "0.9rem",
+          }}>
+            No remaining refills
+          </div>
         )}
         {!isInactive && !isExpired && lr && HOLDABLE_STATES.has(lr.state) && (
           <button

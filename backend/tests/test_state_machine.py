@@ -9,7 +9,7 @@ import pytest
 from decimal import Decimal
 from datetime import date, datetime, timezone
 
-from app.models import RxState, Priority, RefillHist
+from app.models import RxState, Priority, RefillHist, Stock
 from tests.conftest import (
     make_prescriber, make_drug, make_patient,
     make_prescription, make_refill,
@@ -529,6 +529,86 @@ class TestEditQuantityAccounting:
         prescription, refill = setup_refill(db, RxState.HOLD, quantity=30, remaining_qty=10)
         resp = edit(client, refill.id, quantity=20)
         assert resp.status_code == 200
+
+
+# ===========================================================================
+# STOCK DECREMENT — QP → QV2 boundary
+# ===========================================================================
+
+class TestStockDecrement:
+    def test_qp_to_qv2_decrements_stock(self, client, db_session):
+        """Advancing QP → QV2 must deduct the fill quantity from Stock."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QP)
+        db.commit()
+
+        stock_before = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+
+        resp = advance(client, refill.id)
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "QV2"
+
+        db.refresh(db.query(Stock).filter(Stock.drug_id == drug.id).first())
+        stock_after = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+        assert stock_after == stock_before - 30
+
+    def test_qv2_to_ready_does_not_change_stock_again(self, client, db_session):
+        """QV2 → READY must not alter stock a second time (already decremented at QP→QV2)."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QV2)
+        db.commit()
+
+        stock_before = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+
+        resp = advance(client, refill.id)  # QV2 → READY
+        assert resp.status_code == 200
+        assert resp.json()["state"] == "READY"
+
+        stock_after = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+        assert stock_after == stock_before  # no change
+
+    def test_other_transitions_do_not_touch_stock(self, client, db_session):
+        """Transitions that don't cross the QP↔QV2 boundary must not change Stock."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QT)
+        db.commit()
+
+        stock_before = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+
+        advance(client, refill.id)  # QT → QV1
+
+        stock_after = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+        assert stock_after == stock_before
+
+    def test_full_workflow_stock_decremented_once(self, client, db_session):
+        """Full QT→SOLD path: stock is decremented exactly once (at QP→QV2)."""
+        db = db_session
+        prescriber = make_prescriber(db)
+        drug = make_drug(db)
+        patient = make_patient(db)
+        prescription = make_prescription(db, patient, drug, prescriber, 90, 60)
+        refill = make_refill(db, prescription, drug, patient, quantity=30, state=RxState.QT)
+        db.commit()
+
+        stock_before = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+
+        for _ in range(5):  # QT→QV1→QP→QV2→READY→SOLD
+            advance(client, refill.id)
+
+        stock_after = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
+        assert stock_after == stock_before - 30
 
 
 # ===========================================================================

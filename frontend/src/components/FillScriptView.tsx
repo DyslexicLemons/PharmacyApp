@@ -121,7 +121,7 @@ export default function FillScriptView({ prescription: rawPrescription, patientN
   const prescription = rawPrescription as unknown as PrescriptionWithRuntime;
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
-  const { lockError } = usePrescriptionLock(prescription.id);
+  const { lockError, lockPending } = usePrescriptionLock(prescription.id);
   const [prescribers, setPrescribers] = useState<Prescriber[]>([]);
   const [patientInsurance, setPatientInsurance] = useState<PatientInsuranceItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -131,15 +131,25 @@ export default function FillScriptView({ prescription: rawPrescription, patientN
   const [billing, setBilling] = useState<BillingResult | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
 
-  const [dueTimeInput, setDueTimeInput] = useState("");
-  const [dueTimeDisplay, setDueTimeDisplay] = useState("");
-
   const lr = prescription.latest_refill;
   const fillType = getFillType(prescription);
 
   const isScheduled = fillType === "schedule_refill";
   const recommendedDate = isScheduled ? nextPickupDate(prescription) : "";
   const early = isScheduled ? daysEarly(prescription) : 0;
+
+  const defaultFillTime = useMemo(() => {
+    const oneHour = new Date(Date.now() + 60 * 60 * 1000);
+    return { hours: oneHour.getHours(), minutes: oneHour.getMinutes() };
+  }, []);
+
+  const [dueTimeInput, setDueTimeInput] = useState(!isScheduled ? "1h" : "");
+  const [dueTimeDisplay, setDueTimeDisplay] = useState(
+    !isScheduled ? formatTimeDisplay(defaultFillTime.hours, defaultFillTime.minutes) : ""
+  );
+  const [resolvedTime, setResolvedTime] = useState<{ hours: number; minutes: number } | null>(
+    !isScheduled ? defaultFillTime : null
+  );
 
   const [showEarlyModal, setShowEarlyModal] = useState(isScheduled);
 
@@ -212,6 +222,7 @@ export default function FillScriptView({ prescription: rawPrescription, patientN
       if (willBeScheduled) {
         setDueTimeInput("");
         setDueTimeDisplay("");
+        setResolvedTime(null);
       }
       return;
     }
@@ -258,8 +269,15 @@ export default function FillScriptView({ prescription: rawPrescription, patientN
     try {
       let dueDateTime: string | null = null;
       if (form.due_date) {
-        const timeParsed = !isScheduledDate && dueTimeInput.trim() ? parseDueTimeInput(dueTimeInput) : null;
-        if (timeParsed) {
+        let timeParsed = resolvedTime;
+        if (!timeParsed && !isScheduledDate && dueTimeInput.trim()) {
+          timeParsed = parseDueTimeInput(dueTimeInput);
+        }
+        if (!timeParsed && !isScheduledDate) {
+          const oneHour = new Date(Date.now() + 60 * 60 * 1000);
+          timeParsed = { hours: oneHour.getHours(), minutes: oneHour.getMinutes() };
+        }
+        if (timeParsed && !isScheduledDate) {
           const combined = new Date(form.due_date + "T00:00:00");
           combined.setHours(timeParsed.hours, timeParsed.minutes, 0, 0);
           dueDateTime = combined.toISOString();
@@ -301,6 +319,8 @@ export default function FillScriptView({ prescription: rawPrescription, patientN
       : null;
 
   const activeInsurance = patientInsurance.filter(i => i.is_active);
+
+  if (lockPending) return null;
 
   if (lockError) {
     return (
@@ -455,6 +475,7 @@ export default function FillScriptView({ prescription: rawPrescription, patientN
                     onChange={(e) => {
                       const raw = e.target.value;
                       setDueTimeInput(raw);
+                      setResolvedTime(null);
                       if (!raw.trim()) {
                         setDueTimeDisplay("");
                         return;
@@ -466,15 +487,29 @@ export default function FillScriptView({ prescription: rawPrescription, patientN
                         setDueTimeDisplay("Invalid (e.g. 30m, 2h)");
                       }
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const parsed = parseDueTimeInput(dueTimeInput);
+                        if (parsed) {
+                          const display = formatTimeDisplay(parsed.hours, parsed.minutes);
+                          setResolvedTime(parsed);
+                          setDueTimeInput(display);
+                          setDueTimeDisplay("✓ Set");
+                        }
+                      }
+                    }}
                     style={{ width: "120px", padding: "0.5rem" }}
                   />
                   {dueTimeDisplay && (
                     <span style={{
                       fontSize: "0.9rem",
-                      color: dueTimeDisplay.startsWith("Invalid") ? "var(--danger)" : "var(--success, #06d6a0)",
+                      color: resolvedTime || dueTimeDisplay === "✓ Set"
+                        ? "var(--success, #06d6a0)"
+                        : dueTimeDisplay.startsWith("Invalid") ? "var(--danger)" : "var(--success, #06d6a0)",
                       fontWeight: 500,
                     }}>
-                      {dueTimeDisplay.startsWith("Invalid") ? dueTimeDisplay : `→ ${dueTimeDisplay}`}
+                      {dueTimeDisplay.startsWith("Invalid") ? dueTimeDisplay : dueTimeDisplay === "✓ Set" ? "✓ Set" : `→ ${dueTimeDisplay}`}
                     </span>
                   )}
                 </div>

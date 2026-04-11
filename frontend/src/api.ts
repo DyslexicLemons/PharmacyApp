@@ -44,8 +44,16 @@ async function handleResponse<T>(res: Response): Promise<T> {
     throw new ApiError(401, 'Session expired — please log in again');
   }
   if (!res.ok) {
-    const error = await res.json().catch(() => ({})) as { detail?: string };
-    throw new ApiError(res.status, error.detail || `HTTP ${res.status}`);
+    const error = await res.json().catch(() => ({})) as { detail?: unknown };
+    let detailMsg: string;
+    if (Array.isArray(error.detail)) {
+      detailMsg = (error.detail as { msg?: string }[])
+        .map((d) => d.msg ?? JSON.stringify(d))
+        .join('; ');
+    } else {
+      detailMsg = (error.detail as string | undefined) || `HTTP ${res.status}`;
+    }
+    throw new ApiError(res.status, detailMsg);
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
