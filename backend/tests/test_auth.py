@@ -94,6 +94,40 @@ def _seed_user(engine, username="target_user") -> tuple[int, int]:
 # Tests
 # ---------------------------------------------------------------------------
 
+class TestLoginWithCode:
+    def test_login_with_code_does_not_generate_new_quick_code(self, engine):
+        """Logging in via quick code must not mint a fresh quick code."""
+        Session = sessionmaker(bind=engine)
+        s = Session()
+        import bcrypt
+        hashed = bcrypt.hashpw(b"pass", bcrypt.gensalt()).decode()
+        user = User(username="code_login_user", hashed_password=hashed, is_active=True, is_admin=False)
+        s.add(user)
+        s.flush()
+        user_id = user.id
+        qc = QuickCode(
+            code="XYZ",
+            user_id=user_id,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+            used=False,
+        )
+        s.add(qc)
+        s.commit()
+        s.close()
+
+        from unittest.mock import patch
+        with patch("app.routers.auth.cache.consume_quick_code", return_value=user_id), \
+             patch("app.routers.auth.cache.store_quick_code", return_value=True) as mock_store:
+            with TestClient(app, base_url="http://testserver/api/v1") as client:
+                resp = client.post("/login/code", json={"code": "XYZ"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data.get("quick_code") is None
+        mock_store.assert_not_called()
+
+
 class TestDisableUser:
     def test_disable_user_marks_inactive_and_invalidates_quick_codes(self, admin_client, engine):
         client, _ = admin_client

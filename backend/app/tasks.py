@@ -572,7 +572,7 @@ def simulate_technician(self: Any) -> dict:  # type: ignore[type-arg]
             qt_count = db.query(func.count(Refill.id)).filter(Refill.state == RxState.QT).scalar() or 0
             qp_count = db.query(func.count(Refill.id)).filter(Refill.state == RxState.QP).scalar() or 0
             ready_count = db.query(func.count(Refill.id)).filter(
-                Refill.state == RxState.READY, Refill.completed_date <= today,
+                Refill.state == RxState.READY, Refill.completed_date <= now,
             ).scalar() or 0
 
             # Track IDs already claimed this cycle so workers at the same station
@@ -730,7 +730,7 @@ def simulate_technician(self: Any) -> dict:  # type: ignore[type-arg]
                     # Dispense READY → SOLD at the pickup window.
                     ready_filter = db.query(Refill.id).filter(
                         Refill.state == RxState.READY,
-                        Refill.completed_date <= today,
+                        Refill.completed_date <= now,
                     )
                     if claimed_ids:
                         ready_filter = ready_filter.filter(~Refill.id.in_(claimed_ids))
@@ -751,8 +751,8 @@ def simulate_technician(self: Any) -> dict:  # type: ignore[type-arg]
                                 drug_id=rx.drug_id,
                                 quantity=_int(rx.quantity),
                                 days_supply=_int(rx.days_supply),
-                                completed_date=rx.completed_date or today,
-                                sold_date=today,
+                                completed_date=rx.completed_date or now,
+                                sold_date=now,
                                 total_cost=Decimal(str(rx.total_cost)),
                                 insurance_id=rx.insurance_id,
                                 copay_amount=(
@@ -980,7 +980,7 @@ def simulate_pharmacist(self: Any) -> dict:  # type: ignore[type-arg]
                                 returned_qv2 += 1
                             else:
                                 rx.state = RxState.READY  # type: ignore[assignment]
-                                rx.completed_date = date.today()  # type: ignore[assignment]
+                                rx.completed_date = datetime.now(timezone.utc)  # type: ignore[assignment]
                                 rx.bin_number = _sim_assign_bin(db, bin_count)  # type: ignore[assignment]
                                 detail = f"{label} [verify_2]: QV2 → READY (bin {rx.bin_number})"
                                 approved_qv2 += 1
@@ -1074,7 +1074,7 @@ def simulate_patient_pickups(self: Any) -> dict:  # type: ignore[type-arg]
                 db.query(Refill.id)
                 .filter(
                     Refill.state == RxState.READY,
-                    Refill.completed_date <= today,
+                    Refill.completed_date <= now,
                 )
                 .with_for_update(skip_locked=True)
                 .limit(_SIM_BATCH)
@@ -1098,8 +1098,8 @@ def simulate_patient_pickups(self: Any) -> dict:  # type: ignore[type-arg]
                     drug_id=rx.drug_id,
                     quantity=rx_quantity,
                     days_supply=rx_days_supply,
-                    completed_date=rx.completed_date or today,
-                    sold_date=today,
+                    completed_date=rx.completed_date or now,
+                    sold_date=now,
                     total_cost=Decimal(str(rx.total_cost)),
                     insurance_id=rx.insurance_id,
                     copay_amount=(

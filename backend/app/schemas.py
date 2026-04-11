@@ -38,7 +38,7 @@ class LoginResponse(BaseModel):
     username: str
     is_admin: bool
     role: str
-    quick_code: str
+    quick_code: str | None = None
     access_token: str
     token_type: str = "bearer"
 
@@ -390,9 +390,9 @@ class LatestRefillOut(BaseModel):
     id: Optional[int] = None
     quantity: int
     days_supply: int
-    sold_date: Optional[date] = None
+    sold_date: Optional[datetime] = None
     total_cost: Decimal
-    completed_date: Optional[date] = None
+    completed_date: Optional[datetime] = None
     next_pickup: Optional[date] = None
     state: Optional[str] = None
     copay_amount: Optional[Decimal] = None
@@ -409,8 +409,8 @@ class RefillHistSimpleOut(BaseModel):
     id: int
     quantity: int
     days_supply: int
-    completed_date: Optional[date] = None
-    sold_date: Optional[date] = None
+    completed_date: Optional[datetime] = None
+    sold_date: Optional[datetime] = None
     total_cost: Decimal
     copay_amount: Optional[Decimal] = None
     insurance_paid: Optional[Decimal] = None
@@ -520,7 +520,7 @@ class RefillBase(BaseModel):
     total_cost: Decimal
     priority: str
     state: str
-    completed_date: Optional[date] = None
+    completed_date: Optional[datetime] = None
 
 class RefillOut(BaseModel):
     id: int
@@ -533,7 +533,7 @@ class RefillOut(BaseModel):
     total_cost: Decimal
     priority: str
     state: str
-    completed_date: Optional[date] = None
+    completed_date: Optional[datetime] = None
     bin_number: Optional[int] = None
     rejected_by: Optional[str] = None
     rejection_reason: Optional[str] = None
@@ -556,8 +556,8 @@ class RefillHistBase(BaseModel):
     quantity: int
     days_supply: int
     total_cost: Decimal
-    completed_date: date
-    sold_date: date
+    completed_date: datetime
+    sold_date: datetime
 
 class RefillHistOut(BaseModel):
     id: int
@@ -567,8 +567,8 @@ class RefillHistOut(BaseModel):
     quantity: int
     days_supply: int
     total_cost: Decimal
-    completed_date: date
-    sold_date: Optional[date] = None
+    completed_date: datetime
+    sold_date: Optional[datetime] = None
     copay_amount: Optional[Decimal] = None
     insurance_paid: Optional[Decimal] = None
     insurance: Optional[PatientInsuranceOut] = None
@@ -814,7 +814,7 @@ class RTSLookupOut(BaseModel):
     quantity: int
     patient_name: str
     bin_number: Optional[int] = None
-    completed_date: Optional[date] = None
+    completed_date: Optional[datetime] = None
 
 
 class ReturnToStockOut(BaseModel):

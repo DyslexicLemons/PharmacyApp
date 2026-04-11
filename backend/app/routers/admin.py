@@ -159,9 +159,9 @@ def get_audit_log(
 @router.get("/queue-summary", response_model=schemas.QueueSummaryOut)
 def get_queue_summary(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_user),
 ):
-    """Live queue depth and operational signals. Admin-only."""
+    """Live queue depth and operational signals."""
     from datetime import datetime, timezone
 
     # Refill counts by state — one GROUP BY query

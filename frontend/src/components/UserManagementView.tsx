@@ -15,7 +15,7 @@ export default function UserManagementView({ onBack }: UserManagementViewProps) 
 
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newIsAdmin, setNewIsAdmin] = useState(false);
+  const [newRole, setNewRole] = useState<"admin" | "pharmacist" | "technician">("technician");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState("");
   const [createSuccess, setCreateSuccess] = useState("");
@@ -35,13 +35,13 @@ export default function UserManagementView({ onBack }: UserManagementViewProps) 
     if (!token) { setCreateError("Not authenticated."); setCreating(false); return; }
     try {
       const created = await createUser(
-        { username: newUsername, password: newPassword, is_admin: newIsAdmin },
+        { username: newUsername, password: newPassword, role: newRole },
         token
       );
-      setUsers((prev) => [...prev, { id: created.id, username: created.username, is_admin: created.is_admin }]);
+      setUsers((prev) => [...prev, { id: created.id, username: created.username, is_admin: created.is_admin, role: created.role }]);
       setNewUsername("");
       setNewPassword("");
-      setNewIsAdmin(false);
+      setNewRole("technician");
       setCreateSuccess(`User "${created.username}" created successfully.`);
     } catch (err) {
       setCreateError((err as Error).message);
@@ -71,8 +71,8 @@ export default function UserManagementView({ onBack }: UserManagementViewProps) 
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.username}</td>
-                <td style={{ color: u.is_admin ? "var(--primary)" : "var(--text-light)" }}>
-                  {u.is_admin ? "Admin" : "User"}
+                <td style={{ color: u.role === "admin" ? "var(--primary)" : "var(--text-light)", textTransform: "capitalize" }}>
+                  {u.role ?? (u.is_admin ? "Admin" : "Technician")}
                 </td>
               </tr>
             ))}
@@ -109,15 +109,22 @@ export default function UserManagementView({ onBack }: UserManagementViewProps) 
               />
             </div>
           </div>
-          <label className="hstack" style={{ gap: "0.5rem", alignItems: "center", cursor: "pointer", width: "fit-content" }}>
-            <input
-              type="checkbox"
-              checked={newIsAdmin}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewIsAdmin(e.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-            <span style={{ fontSize: "0.9rem" }}>Grant admin privileges</span>
-          </label>
+          <div className="vstack" style={{ gap: "0.3rem", width: "fit-content" }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-light)" }}>
+              User Type
+            </label>
+            <select
+              className="input"
+              value={newRole}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setNewRole(e.target.value as "admin" | "pharmacist" | "technician")
+              }
+            >
+              <option value="technician">Technician</option>
+              <option value="pharmacist">Pharmacist</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
           {createError && (
             <div style={{ color: "var(--danger)", fontSize: "0.85rem" }}>{createError}</div>
           )}

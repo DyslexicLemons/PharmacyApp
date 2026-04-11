@@ -72,7 +72,7 @@ def check_refill_conflict(
         )
     ).all()
 
-    ninety_days_ago = date_type.today() - timedelta(days=90)
+    ninety_days_ago = datetime.now(timezone.utc) - timedelta(days=90)
     recent_fills = db.query(RefillHist).filter(
         and_(
             RefillHist.patient_id == patient_id,
@@ -410,7 +410,7 @@ def _apply_state_entry_effects(
         rx.rejection_reason = payload.rejection_reason                          # type: ignore[assignment]
         rx.rejection_date = date_type.today()                                   # type: ignore[assignment]
     elif new_state == RxState.READY:
-        rx.completed_date = date_type.today()                          # type: ignore[assignment]
+        rx.completed_date = datetime.now(timezone.utc)                 # type: ignore[assignment]
         rx.bin_number = _assign_bin(db)                                # type: ignore[assignment]
 
 
@@ -468,8 +468,8 @@ def _archive_to_sold(
         drug_id=rx.drug_id,
         quantity=rx_quantity,
         days_supply=rx_days_supply,
-        completed_date=rx.completed_date or date_type.today(),
-        sold_date=date_type.today(),
+        completed_date=rx.completed_date or datetime.now(timezone.utc),
+        sold_date=datetime.now(timezone.utc),
         total_cost=Decimal(str(rx.total_cost)),
         insurance_id=rx.insurance_id,
         copay_amount=Decimal(str(rx.copay_amount)) if rx.copay_amount is not None else None,

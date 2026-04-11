@@ -95,7 +95,7 @@ class Refill(Base):
     total_cost = Column(Numeric(10, 2), nullable=False)
     priority = Column(Enum(Priority, values_callable=lambda x: [e.value for e in x]), default=Priority.normal)
     state = Column(Enum(RxState), default=RxState.QT, index=True)
-    completed_date = Column(Date)
+    completed_date = Column(DateTime(timezone=True))
 
     # Workflow fields
     bin_number = Column(Integer, nullable=True)
@@ -138,8 +138,8 @@ class RefillHist(Base):
     drug_id = Column(Integer, ForeignKey("drugs.id"))
     quantity = Column(Integer)
     days_supply = Column(Integer)
-    completed_date = Column(Date)
-    sold_date = Column(Date)
+    completed_date = Column(DateTime(timezone=True))
+    sold_date = Column(DateTime(timezone=True))
     total_cost = Column(Numeric(10, 2), nullable=False)
 
     # Billing fields

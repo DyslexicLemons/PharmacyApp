@@ -141,7 +141,7 @@ def test_queue_summary_expiring_soon(client, db_session):
     assert resp.json()["expiring_soon_30d"] == 1
 
 
-def test_queue_summary_requires_admin(non_admin_client):
-    """Non-admin users receive 403."""
+def test_queue_summary_accessible_to_non_admin(non_admin_client):
+    """Non-admin users can access queue summary."""
     resp = non_admin_client.get("/queue-summary")
-    assert resp.status_code == 403
+    assert resp.status_code == 200

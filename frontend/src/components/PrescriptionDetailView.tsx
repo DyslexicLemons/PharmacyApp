@@ -381,7 +381,7 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
   const prescription = rawPrescription as PrescriptionDetail;
   const { token } = useContext(AuthContext);
   const { addNotification } = useNotification();
-  const { lockError } = usePrescriptionLock(prescription.id);
+  const { lockError, lockPending } = usePrescriptionLock(prescription.id);
   const [prescribers, setPrescribers] = useState<PrescriberDetail[]>([]);
   const [patientInsurance, setPatientInsurance] = useState<PatientInsuranceItem[]>([]);
   const [allCompanies, setAllCompanies] = useState<InsuranceCompanyDetail[]>([]);
@@ -419,6 +419,11 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
       setShowHold(true);
     } else if (keyCmd === "inactivate" && !isInactive && !isExpired) {
       setShowInactivate(true);
+    } else if (keyCmd === "fill") {
+      const blockingFillStates = new Set(["QT", "QV1", "QP", "QV2", "READY"]);
+      if (!isInactive && !isExpired && onFill && (!lr || !blockingFillStates.has(lr.state))) {
+        onFill();
+      }
     }
     onKeyCmdHandled?.();
   }, [keyCmd]);
@@ -510,11 +515,18 @@ export default function PrescriptionDetailView({ prescription: rawPrescription, 
     }
   };
 
+  if (lockPending) {
+    return null;
+  }
+
   if (lockError) {
     return (
       <div className="vstack" style={{ alignItems: "center", justifyContent: "center", padding: "3rem", gap: "1rem" }}>
         <span style={{ fontSize: "2rem" }}>🔒</span>
-        <p style={{ fontWeight: 600, textAlign: "center" }}>{lockError}</p>
+        <p style={{ fontWeight: 600, textAlign: "center", margin: 0 }}>
+          Rx #{prescription.id} — {prescription.drug?.drug_name}
+        </p>
+        <p style={{ textAlign: "center", margin: 0 }}>{lockError}</p>
         <button className="btn" onClick={onBack}>Go Back</button>
       </div>
     );

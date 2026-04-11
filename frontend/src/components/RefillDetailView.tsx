@@ -4,6 +4,7 @@ import { advanceRx, getStock, getRefill } from "@/api";
 import { AuthContext } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 import { useQueryClient } from "@tanstack/react-query";
+import { usePrescriptionLock } from "@/hooks/usePrescriptionLock";
 import type { Refill } from "@/types";
 import { APPROVABLE_STATES, HOLDABLE_STATES, REJECTABLE_STATES, EDITABLE_STATES } from "@/types";
 
@@ -45,6 +46,8 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [staleQueueMessage, setStaleQueueMessage] = useState<string | null>(null);
+
+  const { lockError } = usePrescriptionLock(refill?.prescription?.id);
 
   useEffect(() => {
     fetchRefillDetails();
@@ -203,6 +206,16 @@ export default function RefillDetailView({ refillId, fromQueueState, onBack, onU
       </div>
     );
   }
+  if (lockError) {
+    return (
+      <div className="vstack" style={{ alignItems: "center", justifyContent: "center", padding: "3rem", gap: "1rem" }}>
+        <span style={{ fontSize: "2rem" }}>🔒</span>
+        <p style={{ fontWeight: 600, textAlign: "center" }}>{lockError}</p>
+        <button className="btn" onClick={onBack}>Go Back</button>
+      </div>
+    );
+  }
+
   if (!refill) return <div className="vstack"><p>Refill not found</p></div>;
 
   const canApprove = APPROVABLE_STATES.includes(refill.state);

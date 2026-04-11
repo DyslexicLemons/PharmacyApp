@@ -39,6 +39,7 @@ const RTSHistView           = lazy(() => import("@/components/RTSHistView"));
 const WorkerDashboardView   = lazy(() => import("@/components/WorkerDashboardView"));
 const ProviderInfoView      = lazy(() => import("@/components/ProviderInfoView"));
 const EditPatientView       = lazy(() => import("@/components/EditPatientView"));
+const DashboardView         = lazy(() => import("@/components/DashboardView"));
 
 function ViewFallback() {
   return (
@@ -147,6 +148,7 @@ export default function AppRoot() {
 function App() {
   const { isAuthenticated, shouldResetToHome, clearHomeReset, authUser, quickCode, clearQuickCode, token, logout } = useContext(AuthContext);
   const { addNotification } = useNotification();
+  const [activeTab, setActiveTab] = useState<"workflow" | "dashboard">("workflow");
   const [route, setRoute] = useState<RouteState>({ view: "HOME" });
   const [history, setHistory] = useState<RouteState[]>([]);
   const [currentPatientData, setCurrentPatientData] = useState<{ id: number; first_name: string; last_name: string; prescriptions: unknown[] } | null>(null);
@@ -376,6 +378,10 @@ function App() {
       if (route.view === "VIEW_PRESCRIPTION") setPrescriptionKeyCmd("inactivate");
       return;
     }
+    if (cmd === "f") {
+      if (route.view === "VIEW_PRESCRIPTION") setPrescriptionKeyCmd("fill");
+      return;
+    }
 
     // Queue state commands — section navigation (clears history)
     if (["qt", "qv1", "qp", "qv2", "ready", "hold", "rejected"].includes(cmd)) {
@@ -511,20 +517,46 @@ function App() {
           <LoginForm isModal />
         </div>
       )}
-      {/* Top header */}
-      <div style={{ display: "flex", alignItems: "center", padding: "8px 16px", flexShrink: 0 }}>
+      {/* Top header with tab navigation */}
+      <div style={{ display: "flex", alignItems: "center", padding: "8px 16px", flexShrink: 0, gap: "24px" }}>
         <Logo size={40} horizontal showTagline={false} />
+        {isAuthenticated && (
+          <nav style={{ display: "flex", gap: "2px", background: "rgba(255,255,255,0.1)", borderRadius: "8px", padding: "3px" }}>
+            {(["workflow", "dashboard"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: "5px 18px",
+                  borderRadius: "6px",
+                  border: "none",
+                  cursor: "pointer",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  transition: "all 0.15s ease",
+                  background: activeTab === tab ? "rgba(255,255,255,0.95)" : "transparent",
+                  color: activeTab === tab ? "var(--primary)" : "rgba(255,255,255,0.8)",
+                  boxShadow: activeTab === tab ? "0 1px 4px rgba(0,0,0,0.15)" : "none",
+                }}
+              >
+                {tab === "workflow" ? "RX Workflow" : "Dashboard"}
+              </button>
+            ))}
+          </nav>
+        )}
       </div>
       <div style={{ display: "flex", gap: "16px", flex: 1, minHeight: 0, alignItems: "stretch" }}>
       <div className="card" style={{ padding: 0, display: "flex", flexDirection: "column", flex: 1, minWidth: 0, overflow: "hidden" }}>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px", minHeight: 0 }}>
           <Suspense fallback={<ViewFallback />}>
-          {route.view === "HOME" && showHelp && <Home onCommand={handleCommand} />}
-          {route.view === "HOME" && !showHelp && (
+          {activeTab === "dashboard" && <DashboardView />}
+          {activeTab === "workflow" && route.view === "HOME" && showHelp && <Home isAdmin={authUser?.isAdmin} />}
+          {activeTab === "workflow" && route.view === "HOME" && !showHelp && (
             <div style={{ color: "var(--text-light)", textAlign: "center", paddingTop: "2rem" }}>
               Type <strong>?</strong> to show help
             </div>
           )}
+          {activeTab === "workflow" && (<>
           {route.view === "QUEUE" && (
             <QueueView
               stateFilter={route.state}
@@ -722,6 +754,7 @@ function App() {
               }}
             />
           )}
+          </>)}
           </Suspense>
         </div>
         {!showLoginModal && route.view !== "HOME" && showHelp && (() => {

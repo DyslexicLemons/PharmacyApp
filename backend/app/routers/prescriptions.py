@@ -3,7 +3,7 @@
 import mimetypes
 import os
 import uuid
-from datetime import date as date_type, timedelta
+from datetime import date as date_type, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -87,7 +87,7 @@ def get_prescription(
     prescription.latest_refill = _get_latest_refill_for_prescription(db, prescription_id)  # type: ignore[attr-defined]
     prescription.refill_history = sorted(  # type: ignore[assignment]
         prescription.refill_history,
-        key=lambda r: r.sold_date or r.completed_date or date_type.min,
+        key=lambda r: r.sold_date or r.completed_date or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
     prescription.picture_url = _build_picture_url(request, prescription.picture_path)  # type: ignore[attr-defined]
@@ -423,7 +423,7 @@ def hold_prescription(
     prescription.latest_refill = _get_latest_refill_for_prescription(db, prescription_id)  # type: ignore[attr-defined]
     prescription.refill_history = sorted(  # type: ignore[assignment]
         prescription.refill_history,
-        key=lambda r: r.sold_date or r.completed_date or date_type.min,
+        key=lambda r: r.sold_date or r.completed_date or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
     prescription.picture_url = _build_picture_url(request, prescription.picture_path)  # type: ignore[attr-defined]
@@ -472,7 +472,7 @@ def inactivate_prescription(
     prescription.latest_refill = _get_latest_refill_for_prescription(db, prescription_id)  # type: ignore[attr-defined]
     prescription.refill_history = sorted(  # type: ignore[assignment]
         prescription.refill_history,
-        key=lambda r: r.sold_date or r.completed_date or date_type.min,
+        key=lambda r: r.sold_date or r.completed_date or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )
     prescription.picture_url = _build_picture_url(request, prescription.picture_path)  # type: ignore[attr-defined]

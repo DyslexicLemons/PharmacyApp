@@ -112,14 +112,12 @@ def login_with_code(request: Request, payload: schemas.CodeLoginRequest, db: Ses
     if not user:
         raise HTTPException(status_code=401, detail="Invalid or expired code")
 
-    new_code = _create_quick_code(user.id, db)
     token = create_access_token(user)
     return schemas.LoginResponse(
         success=True,
         username=user.username,
         is_admin=user.is_admin,
         role=user.role,
-        quick_code=new_code,
         access_token=token,
     )
 
