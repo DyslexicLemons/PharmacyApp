@@ -151,10 +151,11 @@ class TestProcessRTS:
         refill = make_refill(db_session, prescription, drug, patient, quantity=30, state=RxState.QT)
         db_session.commit()
 
+        _advance_to_ready(client, refill.id)
+
+        db_session.expire_all()
         stock_before = db_session.query(Stock).filter(Stock.drug_id == drug.id).first()
         qty_before = stock_before.quantity
-
-        _advance_to_ready(client, refill.id)
 
         resp = client.post("/rts", json={"refill_id": refill.id})
         assert resp.status_code == 201
