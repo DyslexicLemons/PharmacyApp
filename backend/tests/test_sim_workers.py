@@ -101,7 +101,8 @@ class TestSimStockAdjustment:
 
         stock_before = db.query(Stock).filter(Stock.drug_id == drug.id).first().quantity
 
-        with patch("app.tasks._acquire_lock", return_value=True):
+        with patch("app.tasks._acquire_lock", return_value=True), \
+             patch("app.tasks._release_lock"):
             result = simulate_technician()
 
         assert result["qp_to_qv2"] == 1
@@ -128,6 +129,7 @@ class TestSimStockAdjustment:
 
         # Force the ~10% "sent back for re-check" branch instead of approval to READY.
         with patch("app.tasks._acquire_lock", return_value=True), \
+             patch("app.tasks._release_lock"), \
              patch("app.tasks.random.random", return_value=0.01):
             result = simulate_pharmacist()
 
