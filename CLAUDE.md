@@ -74,13 +74,15 @@ The refill workflow uses a strict state machine defined in `backend/app/routers/
 **Valid transitions (`TRANSITIONS` dict):**
 ```
 QT       → [QV1, HOLD]
-QV1      → [QP, HOLD, REJECTED]
+QV1      → [QP, HOLD, QT]      # QT via reject action only
 QP       → [QV2, HOLD]
 QV2      → [READY, QP, HOLD]
-HOLD     → [QP, REJECTED]
-SCHEDULED→ [QP, HOLD, REJECTED]
+HOLD     → [QP]
+SCHEDULED→ [QP, QT, HOLD]
 READY    → [SOLD]
 ```
+
+Rejecting a refill is only allowed from `QV1` (`action == "reject"`, requires `rejection_reason`) and routes it back to `QT` with `rejected_by` / `rejection_reason` / `rejection_date` recorded — it does not move to a separate `REJECTED` state. `RxState.REJECTED` still exists on the enum but is legacy: no code path in `TRANSITIONS` can enter it anymore. It's only used by demo-data seeding (`seed.py`, `routers/admin.py`) and historical dashboard counts (`routers/dashboard.py`).
 
 Always validate against `TRANSITIONS` before changing a refill's state. Never bypass it.
 

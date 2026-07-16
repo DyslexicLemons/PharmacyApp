@@ -159,6 +159,22 @@ def cache_delete_pattern(pattern: str) -> None:
 _LOCK_TTL = 300  # seconds — 5 minutes; clients must heartbeat every ~60 s
 
 
+class PrescriptionLockUnavailable(RuntimeError):
+    """Raised when a Redis client that was up goes on to fail mid-operation.
+
+    The view lock is the only guard against two users editing the same
+    prescription at once, so — unlike the query cache and quick-code storage,
+    where staleness beats an outage — it must fail closed (a visible error)
+    rather than silently granting the lock during a Redis blip.
+
+    This does NOT cover the "Redis never reachable this run" case (_client is
+    None from the start): that's the same degraded fallback mode the rest of
+    the app already runs in for caching/quick-codes, so the lock degrades the
+    same way rather than being the one feature that hard-fails on a dev/CI box
+    without Redis.
+    """
+
+
 def acquire_prescription_lock(
     prescription_id: int, user_id: int, username: str
 ) -> "tuple[bool, str | None]":
@@ -167,7 +183,11 @@ def acquire_prescription_lock(
 
     Returns (True, None)  — lock acquired or already owned by this user (TTL refreshed).
     Returns (False, name) — held by a different user; *name* is their username.
-    Returns (True, None)  — Redis unavailable; fail open so the app stays usable.
+    Returns (True, None)  — Redis was never reachable this run; fail open so the
+                             app stays usable without Redis (same as caching/quick-codes).
+
+    Raises PrescriptionLockUnavailable if an established Redis connection fails
+    mid-operation — that must fail closed, not open (see class docstring).
     """
     if _client is None:
         return True, None
@@ -188,12 +208,19 @@ def acquire_prescription_lock(
             return True, None
         return False, data.get("username", "another user")
     except Exception as exc:
-        logger.warning("acquire_prescription_lock failed for rx:%s: %s", prescription_id, exc)
-        return True, None  # fail open
+        logger.error("acquire_prescription_lock failed for rx:%s: %s", prescription_id, exc)
+        raise PrescriptionLockUnavailable(
+            f"Lock service unavailable for prescription {prescription_id}"
+        ) from exc
 
 
 def release_prescription_lock(prescription_id: int, user_id: int) -> None:
-    """Release a prescription lock only if it is owned by *user_id*."""
+    """Release a prescription lock only if it is owned by *user_id*.
+
+    Unlike acquire/check, this stays fail-open on a Redis error: a lock that
+    fails to release just sits until its TTL expires (a UX inconvenience),
+    not a data-integrity risk, so there's nothing worth failing closed for.
+    """
     if _client is None:
         return
     key = f"rx:lock:{prescription_id}"
@@ -208,7 +235,12 @@ def release_prescription_lock(prescription_id: int, user_id: int) -> None:
 
 
 def get_prescription_lock(prescription_id: int) -> "dict | None":
-    """Return lock info dict (user_id, username) or None if not locked / Redis unavailable."""
+    """Return lock info dict (user_id, username) or None if not locked.
+
+    Returns None if Redis was never reachable this run (fallback mode).
+    Raises PrescriptionLockUnavailable if an established connection fails
+    mid-operation — see PrescriptionLockUnavailable for why this fails closed.
+    """
     if _client is None:
         return None
     key = f"rx:lock:{prescription_id}"
@@ -216,14 +248,20 @@ def get_prescription_lock(prescription_id: int) -> "dict | None":
         existing = _client.get(key)
         return json.loads(existing) if existing else None
     except Exception as exc:
-        logger.warning("get_prescription_lock failed for rx:%s: %s", prescription_id, exc)
-        return None
+        logger.error("get_prescription_lock failed for rx:%s: %s", prescription_id, exc)
+        raise PrescriptionLockUnavailable(
+            f"Lock service unavailable for prescription {prescription_id}"
+        ) from exc
 
 
 def check_prescription_locked_by_other(prescription_id: int, user_id: int) -> "str | None":
     """
     Returns the locker's username if this prescription is locked by someone other
-    than *user_id*, otherwise None (including when Redis is unavailable).
+    than *user_id*, otherwise None.
+
+    Raises PrescriptionLockUnavailable if an established Redis connection fails
+    mid-check — callers must not treat that as "unlocked" (see
+    PrescriptionLockUnavailable).
     """
     data = get_prescription_lock(prescription_id)
     if data and data.get("user_id") != user_id:

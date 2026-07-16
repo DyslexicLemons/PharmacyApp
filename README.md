@@ -122,6 +122,7 @@ All variables are documented in [backend/.env.example](backend/.env.example). Ke
 | `UPLOAD_DIR` | Directory for prescription image uploads |
 | `LOG_SALT` | Salt for hashing sensitive values in audit logs |
 | `LOG_RX_DEBUG` | Set `true` to enable verbose prescription logging |
+| `ALB_TRUSTED_CIDR` | VPC CIDR of the ALB — when set, the rate limiter reads the real client IP from `X-Forwarded-For` instead of the TCP peer. Leave unset in local dev |
 
 Never commit `.env` files. In production, secrets come from AWS Secrets Manager.
 
@@ -194,12 +195,15 @@ make dev
 
 ## Refill Workflow
 
-Refills move through a state machine:
+Refills move through a state machine (see `TRANSITIONS` in [backend/app/routers/refills.py](backend/app/routers/refills.py)):
 
 ```
 QT → QV1 → QP → QV2 → READY → SOLD
-          ↘ HOLD ↙
-          REJECTED
+      |
+      └─ reject → back to QT (reason required)
+
+QT, QV1, QP, QV2, and SCHEDULED can all move to HOLD; HOLD only ever returns to QP.
+SCHEDULED otherwise resolves to QP (or QT if stock/insurance checks fail).
 ```
 
 | State | Meaning |
@@ -210,9 +214,11 @@ QT → QV1 → QP → QV2 → READY → SOLD
 | `QV2` | Pharmacist verification #2 |
 | `READY` | Ready for pickup |
 | `SOLD` | Dispensed to patient |
-| `HOLD` | On hold |
+| `HOLD` | On hold — can only return to `QP` |
 | `SCHEDULED` | Scheduled for future fill |
-| `REJECTED` | Rejected — requires reason |
+| `REJECTED` | Legacy/reporting-only state. No longer reachable through the normal workflow — rejecting at `QV1` now routes the refill back to `QT` with `rejected_by` / `rejection_reason` recorded, instead of moving it to a separate terminal state. Kept for historical data, dashboard counts, and demo-data seeding. |
+
+Rejection is only allowed from `QV1` and requires a `rejection_reason`.
 
 ---
 
@@ -236,3 +242,21 @@ make infra-apply
 
 The frontend deploys to S3 + CloudFront. The backend and workers run as ECS services.
 See [aws/](aws/) for AWS CLI setup if needed.
+
+For VM/bare-metal provisioning instead of ECS, an Ansible playbook is available (see [infra/ansible/](infra/ansible/)):
+
+```bash
+# Copy and fill in your inventory first
+cp infra/ansible/inventory/hosts.ini.example infra/ansible/inventory/hosts.ini
+
+# Dry run
+make ansible-check
+
+# Provision and deploy to all hosts in the inventory
+make ansible-deploy
+
+# Run a single role
+make ansible-deploy-tag TAG=docker
+```
+
+Inventory defaults to `infra/ansible/inventory/hosts.ini`; override with `INVENTORY=path make ansible-deploy`.

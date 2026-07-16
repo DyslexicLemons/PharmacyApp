@@ -27,6 +27,7 @@ from .models import (
     Refill, RefillHist, RxState, SimWorker, SimWorkerRole, StationName, Stock, SystemConfig,
 )
 from .utils import _int, _write_audit
+from .workflow import adjust_stock, apply_ready_entry, apply_rejection
 
 # If new pricing differs from stored billing by more than this fraction, route to QT.
 _PRICE_CHANGE_THRESHOLD = Decimal("0.20")
@@ -405,21 +406,6 @@ def _sim_get_config(db: "SessionLocal") -> "SystemConfig | None":  # type: ignor
     return db.query(SystemConfig).filter(SystemConfig.id == 1).first()
 
 
-def _sim_assign_bin(db: "SessionLocal", bin_count: int) -> int:  # type: ignore[name-defined]
-    """Weighted bin assignment — same algorithm as the router's _assign_bin."""
-    rows = (
-        db.query(Refill.bin_number, func.count(Refill.id).label("cnt"))
-        .filter(Refill.state == RxState.READY, Refill.bin_number.isnot(None))
-        .group_by(Refill.bin_number)
-        .all()
-    )
-    counts: dict[int, int] = {int(row.bin_number): row.cnt for row in rows}
-    bins = list(range(1, bin_count + 1))
-    max_count = max(counts.values(), default=0)
-    weights = [max_count - counts.get(b, 0) + 1 for b in bins]
-    return random.choices(bins, weights=weights, k=1)[0]
-
-
 # ---------------------------------------------------------------------------
 # Simulation tasks
 # ---------------------------------------------------------------------------
@@ -673,6 +659,7 @@ def simulate_technician(self: Any) -> dict:  # type: ignore[type-arg]
                     if qp_batch:
                         claimed_ids.update(_int(rx.id) for rx in qp_batch)
                         for rx in qp_batch:
+                            adjust_stock(db, rx, RxState.QP, RxState.QV2, _int(rx.quantity))
                             rx.state = RxState.QV2  # type: ignore[assignment]
                             audit_rows.append({
                                 "timestamp": now,
@@ -872,7 +859,6 @@ def simulate_pharmacist(self: Any) -> dict:  # type: ignore[type-arg]
                 return {"skipped": True, "reason": "no active pharmacists"}
 
             reject_rate = _int(cfg.sim_reject_rate) / 100.0
-            bin_count = _int(cfg.bin_count) or 100
             now = datetime.now(timezone.utc)
             audit_rows: list[dict] = []
             approved_qv1 = 0
@@ -917,10 +903,7 @@ def simulate_pharmacist(self: Any) -> dict:  # type: ignore[type-arg]
                             if random.random() < reject_rate:
                                 reason = random.choice(_SIM_REJECTION_REASONS)
                                 rx.state = RxState.QT  # type: ignore[assignment]
-                                rx.rejected_by = label  # type: ignore[assignment]
-                                rx.rejection_reason = reason  # type: ignore[assignment]
-                                rx.rejection_date = date.today()  # type: ignore[assignment]
-                                rx.triage_reason = f"Pharmacist rejected: {reason}"  # type: ignore[assignment]
+                                apply_rejection(rx, reason, label)
                                 detail = f"{label} [verify_1]: QV1 → QT (rejected — {reason})"
                                 rejected_qv1 += 1
                             else:
@@ -975,13 +958,13 @@ def simulate_pharmacist(self: Any) -> dict:  # type: ignore[type-arg]
                         pharm_claimed_ids.update(_int(rx.id) for rx in qv2_batch)
                         for rx in qv2_batch:
                             if random.random() < 0.10:
+                                adjust_stock(db, rx, RxState.QV2, RxState.QP, _int(rx.quantity))
                                 rx.state = RxState.QP  # type: ignore[assignment]
                                 detail = f"{label} [verify_2]: QV2 → QP (sent back for re-check)"
                                 returned_qv2 += 1
                             else:
                                 rx.state = RxState.READY  # type: ignore[assignment]
-                                rx.completed_date = datetime.now(timezone.utc)  # type: ignore[assignment]
-                                rx.bin_number = _sim_assign_bin(db, bin_count)  # type: ignore[assignment]
+                                apply_ready_entry(db, rx)
                                 detail = f"{label} [verify_2]: QV2 → READY (bin {rx.bin_number})"
                                 approved_qv2 += 1
                             audit_rows.append({

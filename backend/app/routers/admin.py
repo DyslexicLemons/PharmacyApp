@@ -507,6 +507,7 @@ def generate_prescriptions_command(
     RANDOM distributes across all states proportionally.
     Admin-only.
     """
+    from ..utils import _write_audit
     valid_states = {s.value for s in RxState}
     state_arg = body.state.upper()
     if state_arg != "RANDOM" and state_arg not in valid_states:
@@ -605,8 +606,8 @@ def generate_prescriptions_command(
                 source=random.choice(["manual", "external"]),
             )
             if state == RxState.READY:
-                from .refills import _assign_bin
-                refill.bin_number = _assign_bin(db)  # type: ignore[assignment]
+                from ..workflow import assign_bin
+                refill.bin_number = assign_bin(db)  # type: ignore[assignment]
                 refill.completed_date = date_type.today() - timedelta(days=random.randint(0, 5))  # type: ignore[assignment]
             elif state == RxState.REJECTED:
                 refill.rejected_by = f"PharmD {random.choice(['Smith', 'Jones', 'Brown', 'Davis'])}"  # type: ignore[assignment]
@@ -623,6 +624,14 @@ def generate_prescriptions_command(
             if state != RxState.REJECTED:
                 prescription.remaining_quantity = max(0, _int(prescription.remaining_quantity) - quantity)  # type: ignore[assignment]
 
+    _write_audit(
+        db,
+        action="PRESCRIPTIONS_GENERATED",
+        entity_type="prescription",
+        details=f"count={created_prescriptions}; refills={created_refills}; sold={created_hists}; state={state_arg}",
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
     db.commit()
     return {
         "prescriptions_created": created_prescriptions,
@@ -638,12 +647,21 @@ def clear_prescriptions(
     current_user: User = Depends(require_admin),
 ):
     """Delete ALL refills, refill history, and prescriptions. Admin-only. Destructive."""
+    from ..utils import _write_audit
     refill_count = db.query(Refill).count()
     hist_count = db.query(RefillHist).count()
     rx_count = db.query(Prescription).count()
     db.query(Refill).delete()
     db.query(RefillHist).delete()
     db.query(Prescription).delete()
+    _write_audit(
+        db,
+        action="PRESCRIPTIONS_CLEARED",
+        entity_type="prescription",
+        details=f"refills_deleted={refill_count}; refill_history_deleted={hist_count}; prescriptions_deleted={rx_count}",
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
     db.commit()
     return {
         "refills_deleted": refill_count,
@@ -666,6 +684,10 @@ def generate_test_prescriptions(
     Removes ALL existing prescriptions and refills first.
     WARNING: destructive — admin-only, for development use.
     """
+    from ..utils import _write_audit
+    cleared_refills = db.query(Refill).count()
+    cleared_hists = db.query(RefillHist).count()
+    cleared_rx = db.query(Prescription).count()
     db.query(Refill).delete()
     db.query(RefillHist).delete()
     db.query(Prescription).delete()
@@ -792,8 +814,8 @@ def generate_test_prescriptions(
                 source=random.choice(["manual", "external"]),
             )
             if state == RxState.READY:
-                from .refills import _assign_bin
-                refill.bin_number = _assign_bin(db)  # type: ignore[assignment]
+                from ..workflow import assign_bin
+                refill.bin_number = assign_bin(db)  # type: ignore[assignment]
                 refill.completed_date = date_type.today() - timedelta(days=random.randint(0, 5))  # type: ignore[assignment]
             elif state == RxState.REJECTED:
                 refill.rejected_by = f"PharmD {random.choice(['Smith', 'Jones', 'Brown', 'Davis'])}"  # type: ignore[assignment]
@@ -810,6 +832,18 @@ def generate_test_prescriptions(
             if state != RxState.REJECTED:
                 prescription.remaining_quantity = max(0, _int(prescription.remaining_quantity) - quantity)  # type: ignore[assignment]
 
+    _write_audit(
+        db,
+        action="TEST_PRESCRIPTIONS_GENERATED",
+        entity_type="prescription",
+        details=(
+            f"cleared_refills={cleared_refills}; cleared_refill_history={cleared_hists}; "
+            f"cleared_prescriptions={cleared_rx}; prescriptions_created={len(created_prescriptions)}; "
+            f"refills_created={len(created_refills)}; sold={len(created_refill_hists)}"
+        ),
+        user_id=current_user.id,
+        performed_by=current_user.username,
+    )
     db.commit()
 
     return {

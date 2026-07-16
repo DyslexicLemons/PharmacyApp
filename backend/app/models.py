@@ -36,7 +36,11 @@ class RxState(str, enum.Enum):
     READY = "READY" # Ready for Pickup (with bin assignment)
     HOLD = "HOLD" # On Hold
     SCHEDULED = "SCHEDULED" # Scheduled for future fill
-    REJECTED = "REJECTED" # Rejected/Failed Verification
+    REJECTED = "REJECTED" # Legacy state: no transition in refills.TRANSITIONS can enter it anymore.
+                           # QV1 rejections route back to QT (rejected_by/reason/date recorded on Refill)
+                           # instead of landing here. Still referenced by seed.py/admin.py demo data
+                           # generation and historical dashboard counts. Not a bug — don't "fix" it
+                           # by wiring a transition into REJECTED.
     SOLD = "SOLD"
     RTS = "RTS"  # Returned to Stock
 

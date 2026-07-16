@@ -25,7 +25,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from .cache import close_redis, init_redis
+from .cache import PrescriptionLockUnavailable, close_redis, init_redis
 from .routers import admin, auth, billing, dashboard, drugs, insurance, patients, prescriptions, prescribers, refills, rts
 
 # ---------------------------------------------------------------------------
@@ -66,10 +66,12 @@ def _ensure_admin_user() -> None:
     """Create a default admin user if no users exist yet.
 
     Runs once at startup. Idempotent — skips silently if any user already exists.
-    The default credentials (admin / admin) are intentionally weak; the operator
-    should change the password immediately after the first login.
+    The password is randomly generated and printed to the log exactly once —
+    there is no static default to leave unrotated. The operator must read it
+    from the startup log and change it after the first login.
     """
     import bcrypt
+    import secrets
     from .database import SessionLocal
     from .models import User
 
@@ -77,12 +79,14 @@ def _ensure_admin_user() -> None:
     try:
         if db.query(User).first():
             return
-        hashed = bcrypt.hashpw(b"admin", bcrypt.gensalt()).decode()
+        password = secrets.token_urlsafe(18)
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         db.add(User(username="admin", hashed_password=hashed, is_active=True, is_admin=True, role="admin"))
         db.commit()
         logger.warning(
-            "No users found — created default admin account (username=admin, password=admin). "
-            "Change this password immediately."
+            "No users found — created default admin account (username=admin, password=%s). "
+            "This password is shown only once — change it immediately after first login.",
+            password,
         )
     except Exception as exc:
         logger.warning("_ensure_admin_user skipped: %s", exc)
@@ -164,6 +168,20 @@ async def correlation_id_middleware(request: Request, call_next):
         _request_id_var.reset(token)
     response.headers["X-Request-ID"] = request_id
     return response
+
+
+# Prescription lock service outage — fail closed with a visible 503 rather
+# than letting the concurrency guard silently disappear (see
+# PrescriptionLockUnavailable in cache.py for why).
+@app.exception_handler(PrescriptionLockUnavailable)
+async def prescription_lock_unavailable_handler(
+    request: Request, exc: PrescriptionLockUnavailable
+) -> JSONResponse:
+    logger.error("Prescription lock service unavailable on %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Prescription locking is temporarily unavailable. Please try again shortly."},
+    )
 
 
 # Global exception handler — hides internal details from clients
