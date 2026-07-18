@@ -152,6 +152,17 @@ def cache_delete_pattern(pattern: str) -> None:
         logger.warning("cache_delete_pattern failed for %s: %s", pattern, exc)
 
 
+def invalidate_queue_for_states(states: "set[str]") -> None:
+    """Invalidate refill queue cache keys only for the affected states (plus ALL).
+
+    More targeted than nuking refills:queue:* — a QT→QV1 transition only
+    affects pharmacists watching the QT or QV1 filtered views, not every
+    cached page variant. Shared by refills.py and eprescribe.py.
+    """
+    for state in states | {"ALL"}:
+        cache_delete_pattern(f"refills:queue:{state}:*")
+
+
 # ---------------------------------------------------------------------------
 # Prescription view locks
 # ---------------------------------------------------------------------------

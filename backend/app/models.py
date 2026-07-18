@@ -269,6 +269,23 @@ class QuickCode(Base):
     user = relationship("User")
 
 
+class ERxClient(Base):
+    """An external clinic system authorized to submit prescriptions via the eRx API."""
+    __tablename__ = "erx_clients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    client_id = Column(String, unique=True, index=True, nullable=False)
+    hashed_client_secret = Column(String, nullable=False)
+    clinic_name = Column(String, nullable=False)
+    contact_email = Column(String, nullable=True)
+    contact_phone = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class InventoryShipment(Base):
     """Header record for a drug inventory shipment/receiving event."""
     __tablename__ = "inventory_shipments"

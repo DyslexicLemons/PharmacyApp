@@ -622,6 +622,116 @@ class JSONPrescriptionUpload(BaseModel):
         return _validate_priority(v)
 
 
+# ---- External e-prescribing (NCPDP-SCRIPT-inspired NewRx intake) ----
+
+class ERxPatient(BaseModel):
+    first_name: str
+    last_name: str
+    dob: date
+
+
+class ERxPrescriber(BaseModel):
+    """address/phone_number are required (not Optional) even though only used when
+    auto-creating a new Prescriber row: PrescriberOut declares both as required,
+    non-null strings for display, so a null-address prescriber would 500 on read."""
+    npi: int
+    first_name: str
+    last_name: str
+    address: str
+    phone_number: str
+    specialty: Optional[str] = None
+
+    @field_validator("npi")
+    @classmethod
+    def npi_must_be_10_digits(cls, v: int) -> int:
+        if not (1_000_000_000 <= v <= 9_999_999_999):
+            raise ValueError("npi must be a 10-digit National Provider Identifier")
+        return v
+
+
+class ERxMedication(BaseModel):
+    drug_name: str
+    manufacturer: str
+
+
+class ERxSig(BaseModel):
+    directions: str
+
+
+class NewRxRequest(BaseModel):
+    """External NewRx submission — NCPDP-SCRIPT-inspired shape, JSON instead of XML."""
+    patient: ERxPatient
+    prescriber: ERxPrescriber
+    medication: ERxMedication
+    sig: ERxSig
+    quantity: int
+    refills: int
+    daw_code: int = 0
+    written_date: date
+    priority: str = "normal"
+
+    @field_validator("quantity")
+    @classmethod
+    def quantity_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("quantity", v)
+
+    @field_validator("refills")
+    @classmethod
+    def refills_must_be_positive(cls, v: int) -> int:
+        return _validate_positive_int("refills", v)
+
+    @field_validator("priority")
+    @classmethod
+    def priority_must_be_valid(cls, v: str) -> str:
+        return _validate_priority(v)
+
+
+class NewRxResponse(BaseModel):
+    message: str
+    refill_id: int
+    prescription_id: int
+    state: str
+
+
+class ClientTokenRequest(BaseModel):
+    grant_type: str = "client_credentials"
+    client_id: str
+    client_secret: str
+
+
+class ClientTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+
+class ERxClientCreate(BaseModel):
+    clinic_name: str
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+
+
+class ERxClientCreated(BaseModel):
+    id: int
+    client_id: str
+    client_secret: str
+    clinic_name: str
+
+
+class ERxClientOut(BaseModel):
+    id: int
+    client_id: str
+    clinic_name: str
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    last_used_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ManualPrescriptionCreate(BaseModel):
     """Schema for manual prescription entry that goes to QP, HOLD, or SCHEDULED"""
     patient_id: int

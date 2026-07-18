@@ -118,17 +118,6 @@ _QUEUE_CACHE_TTL = 30   # seconds — short because staff actively works the que
 _REFILL_CACHE_TTL = 60  # seconds
 
 
-def _invalidate_queue_for_states(states: set[str]) -> None:
-    """Invalidate queue cache keys only for the affected states (plus ALL).
-
-    More targeted than nuking refills:queue:* — a QT→QV1 transition only
-    affects pharmacists watching the QT or QV1 filtered views, not every
-    cached page variant.
-    """
-    for state in states | {"ALL"}:
-        cache.cache_delete_pattern(f"refills:queue:{state}:*")
-
-
 @router.get("", response_model=schemas.PaginatedResponse[schemas.RefillOut])
 def get_refills(
     state: Optional[str] = None,
@@ -500,7 +489,7 @@ def advance_refill(
     )
     db.commit()
     cache.cache_delete(f"refills:id:{rx_id}")
-    _invalidate_queue_for_states({current_state.value, new_state.value})
+    cache.invalidate_queue_for_states({current_state.value, new_state.value})
     db.refresh(rx)
     return rx
 
@@ -606,7 +595,7 @@ def edit_refill(
     )
     db.commit()
     cache.cache_delete(f"refills:id:{rx_id}")
-    _invalidate_queue_for_states({old_state_str, new_state.value})
+    cache.invalidate_queue_for_states({old_state_str, new_state.value})
     db.refresh(rx)
     return rx
 
@@ -694,7 +683,7 @@ def upload_json_prescription(
         performed_by=current_user.username,
     )
     db.commit()
-    _invalidate_queue_for_states({"QT"})
+    cache.invalidate_queue_for_states({"QT"})
     db.refresh(refill)
     return {"message": "Prescription uploaded successfully", "refill_id": refill.id, "state": "QT"}
 
@@ -791,7 +780,7 @@ def create_manual_prescription(
         performed_by=current_user.username,
     )
     db.commit()
-    _invalidate_queue_for_states({initial_state.value})
+    cache.invalidate_queue_for_states({initial_state.value})
     db.refresh(refill)
     return {"message": "Prescription created successfully", "RX#": prescription.id, "state": initial_state.value}
 

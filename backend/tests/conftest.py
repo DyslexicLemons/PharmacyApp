@@ -46,8 +46,9 @@ from app.database import Base, get_db
 from app.models import (
     Patient, Prescription, Refill, RefillHist,
     Drug, Stock, Prescriber, InsuranceCompany, Formulary,
-    PatientInsurance, RxState, Priority, User,
+    PatientInsurance, RxState, Priority, User, ERxClient,
 )
+from app.routers.auth import _hash_password
 from app.providers.registry import get_drug_catalog, get_insurance_gateway
 from app.providers.local_drug_catalog import LocalDrugCatalogProvider
 from app.providers.local_insurance import LocalInsuranceGateway
@@ -311,6 +312,25 @@ def make_patient_insurance(
     db.add(pi)
     db.flush()
     return pi
+
+
+def make_erx_client(
+    db,
+    clinic_name="Test Clinic",
+    is_active=True,
+    client_id="clinic_test0000",
+    client_secret="test-client-secret",
+) -> "tuple[ERxClient, str]":
+    """Seed an ERxClient row. Returns (row, plaintext_secret) since the hash is one-way."""
+    c = ERxClient(
+        client_id=client_id,
+        hashed_client_secret=_hash_password(client_secret),
+        clinic_name=clinic_name,
+        is_active=is_active,
+    )
+    db.add(c)
+    db.flush()
+    return c, client_secret
 
 
 # ---------------------------------------------------------------------------
